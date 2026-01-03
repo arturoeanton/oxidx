@@ -1,0 +1,14 @@
+[package]
+name = "oxidx_std"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+oxidx_core = { path = "../oxidx_core" } # Depende del core
+
+# Re-export dependencies from oxidx_core that we use
+glam = { workspace = true }
+wgpu = { workspace = true }
+winit = { workspace = true }
+log = "0.4"
+rand = "0.9.2"

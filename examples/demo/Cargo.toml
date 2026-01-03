@@ -1,0 +1,12 @@
+[package]
+name = "demo"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "demo"
+path = "src/main.rs"
+
+[dependencies]
+oxidx_core = { path = "../../oxidx_core" }
+oxidx_std = { path = "../../oxidx_std" }

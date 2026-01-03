@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = [
+    "oxidx_core",
+    "oxidx_std",
+    "oxidx_codegen",
+    "oxidx_derive",
+    "oxidx_cli",
+    "oxidx_editor",
+    "examples/demo",
+    "examples/showcase",
+]
+
+# Definimos versiones globales para que no haya conflictos
+[workspace.dependencies]
+winit = "0.29"
+wgpu = "0.19"
+serde = { version = "1.0", features = ["derive"] }
+anyhow = "1.0"
+glam = "0.25"                                      # Matemáticas para vectores (x, y, width, height)

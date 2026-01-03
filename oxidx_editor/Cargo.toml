@@ -1,0 +1,19 @@
+[package]
+name = "oxidx_editor"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "oxidx-editor"
+path = "src/main.rs"
+
+[dependencies]
+# Consume tu propio framework
+oxidx_core = { path = "../oxidx_core" }
+oxidx_std = { path = "../oxidx_std" }
+oxidx_codegen = { path = "../oxidx_codegen" } # Para previsualizar código generado
+
+# Utilidades de UI de escritorio
+rfd = "0.12"                 # Native File Dialogs (Abrir/Guardar archivos)
+serde = { workspace = true }
+serde_json = "1.0"

@@ -1,0 +1,17 @@
+[package]
+name = "oxidx_cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "oxidx"
+path = "src/main.rs"
+
+[dependencies]
+oxidx_codegen = { path = "../oxidx_codegen" } # Usa la lógica de generación
+clap = { version = "4.4", features = [
+    "derive",
+] } # Parseo de argumentos de terminal
+cargo_metadata = "0.18" # Para leer el Cargo.toml del usuario y ver dependencias
+anyhow = "1.0"
+colored = "2.0" # Para logs bonitos en consola

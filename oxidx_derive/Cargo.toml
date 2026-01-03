@@ -1,0 +1,12 @@
+[package]
+name = "oxidx_derive"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+proc-macro = true # <--- IMPORTANTE: Esto le dice a Rust que es una macro
+
+[dependencies]
+syn = { version = "2.0", features = ["full"] } # Parsea el código Rust
+quote = "1.0"                                  # Genera código Rust
+proc-macro2 = "1.0"
