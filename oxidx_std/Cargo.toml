@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-oxidx_core = { path = "../oxidx_core" } # Depende del core
+oxidx_core = { path = "../oxidx_core" }
+oxidx_derive = { path = "../oxidx_derive" }
 
 # Re-export dependencies from oxidx_core that we use
 glam = { workspace = true }

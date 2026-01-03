@@ -187,6 +187,15 @@ pub fn run_with_config<C: OxidXComponent + 'static>(mut component: C, config: Ap
     // Current window size for layout
     let mut window_size = Vec2::new(config.width as f32, config.height as f32);
 
+    // Initial layout pass to ensure bounds are correct for first frame events
+    // This fixes the issue where components at (0,0) (default) don't receive events until first redraw.
+    component.layout(Rect::new(
+        0.0,
+        0.0,
+        config.width as f32,
+        config.height as f32,
+    ));
+
     // Run the event loop
     event_loop
         .run(move |event, elwt| {
@@ -317,7 +326,7 @@ fn process_window_event<C: OxidXComponent>(
                             }
                         }
 
-                        component.on_event(
+                        let handled = component.on_event(
                             &OxidXEvent::MouseDown {
                                 button: mouse_button,
                                 position: input.mouse_position,
@@ -325,6 +334,13 @@ fn process_window_event<C: OxidXComponent>(
                             },
                             ctx,
                         );
+
+                        // Debug log for click handling
+                        if matches!(state, ElementState::Pressed) {
+                            if handled {
+                                // log::debug!("MouseDown Handled");
+                            }
+                        }
                     } else {
                         // Clicked outside - lose focus
                         // Note: Only if we are managing global focus here?

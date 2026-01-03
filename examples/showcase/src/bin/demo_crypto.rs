@@ -94,7 +94,9 @@ impl OxidXComponent for HeatmapGrid {
         );
     }
 
-    fn on_event(&mut self, _event: &OxidXEvent, _ctx: &mut OxidXContext) {}
+    fn on_event(&mut self, _event: &OxidXEvent, _ctx: &mut OxidXContext) -> bool {
+        false
+    }
     fn bounds(&self) -> Rect {
         self.bounds
     }

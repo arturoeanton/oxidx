@@ -153,10 +153,36 @@ impl OxidXComponent for VStack {
         }
     }
 
-    fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) {
-        // Forward events to children
-        for child in &mut self.children {
-            child.on_event(event, ctx);
+    fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
+        // Strict dispatch: only send mouse events to child if hit
+        match event {
+            OxidXEvent::MouseDown { position, .. }
+            | OxidXEvent::MouseUp { position, .. }
+            | OxidXEvent::Click { position, .. }
+            | OxidXEvent::MouseMove { position, .. } => {
+                for child in &mut self.children {
+                    if child.bounds().contains(*position) {
+                        if child.on_event(event, ctx) {
+                            if matches!(
+                                event,
+                                OxidXEvent::MouseDown { .. } | OxidXEvent::Click { .. }
+                            ) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                false
+            }
+            _ => {
+                let mut handled = false;
+                for child in &mut self.children {
+                    if child.on_event(event, ctx) {
+                        handled = true;
+                    }
+                }
+                handled
+            }
         }
     }
 
@@ -314,9 +340,35 @@ impl OxidXComponent for HStack {
         }
     }
 
-    fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) {
-        for child in &mut self.children {
-            child.on_event(event, ctx);
+    fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
+        match event {
+            OxidXEvent::MouseDown { position, .. }
+            | OxidXEvent::MouseUp { position, .. }
+            | OxidXEvent::Click { position, .. }
+            | OxidXEvent::MouseMove { position, .. } => {
+                for child in &mut self.children {
+                    if child.bounds().contains(*position) {
+                        if child.on_event(event, ctx) {
+                            if matches!(
+                                event,
+                                OxidXEvent::MouseDown { .. } | OxidXEvent::Click { .. }
+                            ) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                false
+            }
+            _ => {
+                let mut handled = false;
+                for child in &mut self.children {
+                    if child.on_event(event, ctx) {
+                        handled = true;
+                    }
+                }
+                handled
+            }
         }
     }
 
@@ -437,10 +489,37 @@ impl OxidXComponent for ZStack {
         }
     }
 
-    fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) {
+    fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
         // Events go to children in reverse order (top first)
-        for child in self.children.iter_mut().rev() {
-            child.on_event(event, ctx);
+        // Strict Hit-Testing for ZStack
+        match event {
+            OxidXEvent::MouseDown { position, .. }
+            | OxidXEvent::MouseUp { position, .. }
+            | OxidXEvent::Click { position, .. }
+            | OxidXEvent::MouseMove { position, .. } => {
+                for child in self.children.iter_mut().rev() {
+                    if child.bounds().contains(*position) {
+                        if child.on_event(event, ctx) {
+                            if matches!(
+                                event,
+                                OxidXEvent::MouseDown { .. } | OxidXEvent::Click { .. }
+                            ) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                false
+            }
+            _ => {
+                let mut handled = false;
+                for child in self.children.iter_mut().rev() {
+                    if child.on_event(event, ctx) {
+                        handled = true;
+                    }
+                }
+                handled
+            }
         }
     }
 

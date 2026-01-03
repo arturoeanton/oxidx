@@ -8,10 +8,11 @@ name = "oxidx"
 path = "src/main.rs"
 
 [dependencies]
-oxidx_codegen = { path = "../oxidx_codegen" } # Usa la lógica de generación
-clap = { version = "4.4", features = [
-    "derive",
-] } # Parseo de argumentos de terminal
-cargo_metadata = "0.18" # Para leer el Cargo.toml del usuario y ver dependencias
+clap = { version = "4.4", features = ["derive"] }
 anyhow = "1.0"
-colored = "2.0" # Para logs bonitos en consola
+oxidx_codegen = { path = "../oxidx_codegen" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+notify = "6.1"
+notify-debouncer-mini = "0.4"
+chrono = "0.4"

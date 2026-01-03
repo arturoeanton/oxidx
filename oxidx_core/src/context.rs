@@ -1,11 +1,12 @@
 //! # OxidX Context
 //!
 //! Manages the WGPU rendering context including device, queue, and surface.
-//! The Renderer handles all pipeline and buffer management.
+//! Also provides access to OS integration (clipboard, cursor).
 
 use crate::renderer::Renderer;
 use std::sync::Arc;
 use thiserror::Error;
+use winit::window::{CursorIcon, Window};
 
 /// Errors that can occur during context initialization.
 #[derive(Error, Debug)]
@@ -21,7 +22,7 @@ pub enum ContextError {
 }
 
 /// The main WGPU context for OxidX.
-/// Holds core GPU resources. Rendering is handled by the Renderer.
+/// Holds core GPU resources plus OS integration (clipboard, cursor).
 pub struct OxidXContext {
     /// The logical GPU device - used to create resources
     pub device: Arc<wgpu::Device>,
@@ -39,6 +40,10 @@ pub struct OxidXContext {
     pub focused_id: Option<String>,
     /// Time elapsed (for cursor blinking etc)
     pub time: f32,
+    /// Window handle for cursor changes
+    window: Arc<Window>,
+    /// Clipboard instance (lazy initialized)
+    clipboard: Option<arboard::Clipboard>,
 }
 
 impl OxidXContext {
@@ -46,25 +51,21 @@ impl OxidXContext {
     ///
     /// This is an async function because WGPU adapter/device creation is async.
     /// We use pollster::block_on in the engine to call this synchronously.
-    pub async fn new(window: Arc<winit::window::Window>) -> Result<Self, ContextError> {
+    pub async fn new(window: Arc<Window>) -> Result<Self, ContextError> {
         let size = window.inner_size();
 
         // Step 1: Create the WGPU Instance
-        // The instance is the entry point to WGPU.
-        // We request all backends (Vulkan, Metal, DX12, etc.) for maximum compatibility.
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             ..Default::default()
         });
 
         // Step 2: Create the Surface
-        // The surface is what we render to - tied to our window.
         let surface = instance
             .create_surface(window.clone())
             .map_err(|e| ContextError::SurfaceCreation(e.to_string()))?;
 
         // Step 3: Request an Adapter
-        // The adapter represents a physical GPU compatible with our surface.
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
@@ -75,8 +76,6 @@ impl OxidXContext {
             .ok_or(ContextError::NoAdapter)?;
 
         // Step 4: Request a Device and Queue
-        // The device is our logical connection to the GPU.
-        // The queue is how we submit commands to the GPU.
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
@@ -131,77 +130,12 @@ impl OxidXContext {
             renderer,
             focused_id: None,
             time: 0.0,
+            window,
+            clipboard: None,
         })
     }
 
-    /// Creates a context for headless rendering (no window).
-    /// Used for testing in CI environments.
-    pub async fn new_headless(width: u32, height: u32) -> Result<Self, ContextError> {
-        // Use software fallback for CI environments
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all(),
-            ..Default::default()
-        });
-
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::LowPower,
-                compatible_surface: None,
-                force_fallback_adapter: true, // Use software renderer
-            })
-            .await
-            .ok_or(ContextError::NoAdapter)?;
-
-        let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: Some("OxidX Headless Device"),
-                    required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::downlevel_webgl2_defaults(),
-                },
-                None,
-            )
-            .await
-            .map_err(|e| ContextError::DeviceCreation(e.to_string()))?;
-
-        let device = Arc::new(device);
-        let queue = Arc::new(queue);
-
-        // For headless, we create a dummy texture as the render target
-        let surface_format = wgpu::TextureFormat::Rgba8UnormSrgb;
-
-        let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
-            width: width.max(1),
-            height: height.max(1),
-            present_mode: wgpu::PresentMode::Fifo,
-            alpha_mode: wgpu::CompositeAlphaMode::Auto,
-            view_formats: vec![],
-            desired_maximum_frame_latency: 2,
-        };
-
-        let renderer = Renderer::new(
-            device.clone(),
-            queue.clone(),
-            surface_format,
-            width.max(1),
-            height.max(1),
-        );
-
-        // Note: For truly headless, we'd need a dummy surface or render to texture
-        // For now, this creates the device/renderer without a real surface
-        // The surface field is a placeholder - headless tests should use render_to_texture
-
-        // Create a minimal headless context
-        // This is a simplified version - real headless would need render-to-texture
-        Err(ContextError::SurfaceCreation(
-            "Headless context requires render-to-texture (not implemented in this version)".into(),
-        ))
-    }
-
     /// Handles window resize events.
-    /// Updates the surface configuration and renderer projection.
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
             self.size = new_size;
@@ -227,5 +161,62 @@ impl OxidXContext {
     /// Checks if the given ID is currently focused.
     pub fn is_focused(&self, id: &str) -> bool {
         self.focused_id.as_deref() == Some(id)
+    }
+
+    // =========================================================================
+    // OS Integration: Clipboard
+    // =========================================================================
+
+    /// Copies text to the system clipboard.
+    ///
+    /// Returns `true` if successful.
+    pub fn copy_to_clipboard(&mut self, text: &str) -> bool {
+        self.ensure_clipboard();
+        if let Some(ref mut clipboard) = self.clipboard {
+            clipboard.set_text(text).is_ok()
+        } else {
+            false
+        }
+    }
+
+    /// Pastes text from the system clipboard.
+    ///
+    /// Returns `None` if clipboard is empty or unavailable.
+    pub fn paste_from_clipboard(&mut self) -> Option<String> {
+        self.ensure_clipboard();
+        if let Some(ref mut clipboard) = self.clipboard {
+            clipboard.get_text().ok()
+        } else {
+            None
+        }
+    }
+
+    /// Lazily initializes the clipboard.
+    fn ensure_clipboard(&mut self) {
+        if self.clipboard.is_none() {
+            self.clipboard = arboard::Clipboard::new().ok();
+        }
+    }
+
+    // =========================================================================
+    // OS Integration: Cursor
+    // =========================================================================
+
+    /// Sets the cursor icon for the window.
+    ///
+    /// Use this to change the cursor when hovering over interactive elements.
+    ///
+    /// # Example
+    /// ```ignore
+    /// ctx.set_cursor_icon(CursorIcon::Text);  // For text input
+    /// ctx.set_cursor_icon(CursorIcon::Default);  // Reset
+    /// ```
+    pub fn set_cursor_icon(&self, icon: CursorIcon) {
+        self.window.set_cursor_icon(icon);
+    }
+
+    /// Returns the current window reference.
+    pub fn window(&self) -> &Arc<Window> {
+        &self.window
     }
 }

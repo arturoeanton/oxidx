@@ -9,50 +9,57 @@ OxidX is a modern GUI framework for Rust designed for high performance and devel
 
 - **GPU Accelerated**: Built on top of `wgpu` for cross-platform hardware acceleration.
 - **Component System**: Familiar retained-mode architecture using the `OxidXComponent` trait.
-- **Layout Engine**: Flexible Flexbox-like containers (`VStack`, `HStack`, `ZStack`) with nested alignment and padding support.
-- **Styling**: `InteractiveStyle` system for handling Idle, Hover, Pressed, and Focused states seamlessly.
-- **Focus Management**: Centralized event routing for keyboard focus and mouse interactions.
 - **Batched Rendering**: Efficiently draws thousands of primitives in a single draw call.
+- **Runtime Capabilities**:
+  - **Scissor Clipping**: Full support for clipping logic (e.g., ScrollViews).
+  - **OS Integration**: Native Clipboard support (Copy/Paste) and Cursor management.
+  - **Focus Management**: Centralized event routing for keyboard focus and mouse interactions.
+- **Developer Experience (DX)**:
+  - **Procedural Macros**: `#[derive(OxidXWidget)]` removes 90% of boilerplate.
+  - **Hot-Reload**: Watch mode instantly recompiles layout changes.
+  - **IntelliSense**: JSON Schema support for VS Code auto-completion.
 
 ## 📦 Project Structure
 
-- **`oxidx_core`**: The engine heart. Contains the Render Loop, `OxidXContext`, `Renderer`, Event System, and base Primitives.
-- **`oxidx_std`**: The standard library. Provides ready-to-use widgets (`Button`, `Input`, `Label`) and Layout Containers.
-- **`examples/showcase`**: A collection of high-quality demos proving the engine's capabilities.
+- **`oxidx_core`**: The engine heart. Render Loop, `OxidXContext`, `Renderer` (w/ Clipping), Events, and base Primitives.
+- **`oxidx_std`**: The standard library. Widgets (`Button`, `Input`, `Label`) and Layout Containers.
+- **`oxidx_derive`**: Procedural macros for generating builder patterns and boilerplate.
+- **`oxidx_codegen`**: Code generation logic for converting JSON layouts to Rust.
+- **`oxidx_cli`**: The command-line toolchain (`generate`, `schema`, `watch`).
 
-## 🛠️ Components (`oxidx_std`)
+## 🛠️ The OxidX Toolchain
+
+OxidX provides a powerful CLI to speed up development.
+
+### 1. Watch Mode (Hot-Reload)
+Automatically regenerate Rust code when your JSON layout changes.
+
+```bash
+oxidx watch -i login.json
+```
+
+### 2. JSON Schema (IntelliSense)
+Generate a schema file to get auto-completion in VS Code for your layout files.
+
+```bash
+oxidx schema > oxidx.schema.json
+```
+
+### 3. Code Generation
+Manually generate Rust code from a layout file.
+
+```bash
+oxidx generate -i login.json -o src/generated_login.rs
+```
+
+## 🎮 Components (`oxidx_std`)
 
 OxidX comes with a polished standard library:
 
-- **Containers**: `VStack`, `HStack`, `ZStack` (with Padding/Gap support)
-- **Input**: Styled Text Input with Placeholder, Focus Glow, and Text cursor.
-- **Button**: Interactive buttons with state-based styling.
+- **Containers**: `VStack`, `HStack`, `ZStack` (with Padding/Gap/Alignment support)
+- **Input**: Complete text input with **Cursors**, **Selection**, **Clipboard (Ctrl+C/V)**, and Focus visuals.
+- **Button**: Interactive buttons with state-based styling and fluent builder API.
 - **Label**: Typography support with configurable size, weight, and color.
-
-## 🎮 Running Demos
-
-Explore what OxidX can do by running the showcase examples:
-
-### 1. Enterprise Login Form
-A polished UI demo featuring a card layout, focus management for inputs, and modern styling.
-
-```bash
-cargo run -p showcase --bin demo_login
-```
-
-### 2. Crypto Heatmap
-Demonstrates high-performance rendering of 5,000+ dynamic instanced quads.
-
-```bash
-cargo run -p showcase --bin demo_crypto
-```
-
-### 3. Particle System
-Interactive particle simulation showcasing alpha blending and high-frequency updates.
-
-```bash
-cargo run -p showcase --bin demo_particles
-```
 
 ## 👩‍💻 Example Code
 
@@ -73,10 +80,11 @@ fn main() {
             .with_color(Color::WHITE)
     ));
 
-    // Add a button
-    let mut btn = Button::new(0.0, 0.0, 120.0, 40.0);
-    btn.set_label("Click Me");
-    btn.set_style(theme.primary_button);
+    // Add a button using the Fluent API (Powered by Macros)
+    let btn = Button::new()
+        .preferred_size(Vec2::new(120.0, 40.0))
+        .label("Click Me")
+        .style(theme.primary_button);
     
     vstack.add_child(Box::new(btn));
 
@@ -90,6 +98,8 @@ fn main() {
 - [x] Basic Event Loop
 - [x] Standard Widget Library (Input, Button, Label)
 - [x] Focus Management System
+- [x] **Procedural Macros** (`oxidx_derive`)
+- [x] **CLI Toolchain** (CodeGen, Schema, Watch)
+- [x] **Runtime Capabilities** (Clipping, Clipboard, Cursors)
 - [ ] Text Layout & Shaping (Cosmic Text)
-- [ ] Scroll Views / Clipping
 - [ ] Asset Loading (Images/Fonts)

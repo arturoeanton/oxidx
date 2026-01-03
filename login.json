@@ -1,0 +1,19 @@
+{
+  "name": "LoginForm",
+  "root": {
+    "type": "ZStack",
+    "children": [
+      { "type": "Container", "id": "bg_layer", "style": { "bg": "#1a1a1a" } },
+      { 
+        "type": "VStack", 
+        "props": { "spacing": 20, "alignment": "Center" },
+        "children": [
+          { "type": "Label", "props": { "text": "Welcome Back", "size": 24 } },
+          { "type": "Input", "id": "username", "props": { "placeholder": "User" } },
+          { "type": "Input", "id": "password", "props": { "placeholder": "Pass" } },
+          { "type": "Button", "id": "btn_login", "props": { "text": "Sign In", "variant": "Primary" } }
+        ]
+      }
+    ]
+  }
+}

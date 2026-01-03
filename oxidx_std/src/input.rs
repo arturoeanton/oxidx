@@ -1,11 +1,17 @@
 //! Text Input Component
+//!
+//! A text input field with:
+//! - Clipboard support (Ctrl+C/V)
+//! - Selection (Ctrl+A)
+//! - Text cursor on hover
 
 use oxidx_core::events::{KeyCode, OxidXEvent};
 use oxidx_core::layout::LayoutProps;
 use oxidx_core::style::{ComponentState, InteractiveStyle, Style};
 use oxidx_core::{Color, OxidXComponent, OxidXContext, Rect, Renderer, TextStyle, Vec2};
+use winit::window::CursorIcon;
 
-/// A text input field with styling and layout support.
+/// A text input field with styling, layout, clipboard, and cursor support.
 pub struct Input {
     bounds: Rect,
     style: InteractiveStyle,
@@ -16,6 +22,8 @@ pub struct Input {
     is_hovered: bool,
     text_style: TextStyle,
     id: String,
+    /// Whether all text is selected
+    is_selected: bool,
 }
 
 impl Input {
@@ -49,7 +57,7 @@ impl Input {
         let style = InteractiveStyle {
             idle,
             hover,
-            pressed: focused, // Using pressed slot for focus visual
+            pressed: focused,
             disabled: idle,
         };
 
@@ -63,6 +71,7 @@ impl Input {
             is_hovered: false,
             text_style: TextStyle::new(14.0).with_color(Color::WHITE),
             id: String::new(),
+            is_selected: false,
         }
     }
 
@@ -90,41 +99,17 @@ impl OxidXComponent for Input {
     fn update(&mut self, _dt: f32) {}
 
     fn layout(&mut self, available: Rect) -> Vec2 {
-        // Apply margin
         let margin = self.layout.margin;
         self.bounds = Rect::new(
             available.x + margin,
             available.y + margin,
             available.width - margin * 2.0,
-            40.0, // Fixed height for input
+            40.0,
         );
-
         Vec2::new(available.width, 40.0 + margin * 2.0)
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        // Use local state for hover, but Context (or local fallback) for focus
-        // Ideally we check context, but we need access to context here.
-        // Wait, render() only takes Renderer.
-        // The trait render() signature was NOT changed in the prompt request ("Update OxidXComponent Trait: Add generic id... Add on_keyboard_input..."). it didn't say change render.
-        // But the prompt said: "In render: Check ctx.is_focused(self.id)."
-        // This implies render needs ctx.
-        // BUT Renderer might not contain ctx. Context contains Renderer.
-        // If I change render signature I break everything.
-        // Alternative: Input stores `is_focused` which is updated via `on_event` when FocusGained/Lost happens.
-        // The Prompt Step 3 says: "Refactor the Event Loop (Engine): ... If a component is hit -> Call ctx.request_focus(component.id())."
-        // This updates the Context.
-        // Then `Input::render` says "Check ctx.is_focused".
-        // This requires `ctx` in `render`.
-        // If I strictly follow the prompt, I must pass `&OxidXContext` to render.
-        // But `OxidXContext` OWNS `Renderer`. I cannot borrow both mutably.
-        // `ctx.renderer` and `ctx`.
-        // This is a Rust ownership issue.
-        // Solution: I will persist the focus state in `self.is_focused` via `on_event` callbacks which ARE passed `ctx`.
-        // When `FocusGained` happens (dispatched by generic engine logic or recursion), I set `is_focused = true`.
-        // When `FocusLost` (generic engine logic or blur), I set `is_focused = false`.
-        // This syncs the component state with the Context state.
-        // So I will stick to checking `self.is_focused`.
         let state = if self.is_focused {
             ComponentState::Pressed
         } else if self.is_hovered {
@@ -138,23 +123,35 @@ impl OxidXComponent for Input {
         // Render background/border
         renderer.draw_style_rect(self.bounds, current_style);
 
-        // Render Text
+        // Render selection background if selected
         let text = if self.value.is_empty() {
             &self.placeholder
         } else {
             &self.value
         };
 
-        let mut text_color = current_style.text_color;
-        if self.value.is_empty() {
-            // Dim placeholder
-            text_color.a *= 0.5;
-        }
-
         let text_pos = Vec2::new(
             self.bounds.x + self.layout.padding,
-            self.bounds.y + (self.bounds.height - self.text_style.font_size) / 2.0, // Vertically center
+            self.bounds.y + (self.bounds.height - self.text_style.font_size) / 2.0,
         );
+
+        // Draw selection background
+        if self.is_selected && !self.value.is_empty() {
+            let selection_width = self.value.len() as f32 * 8.0; // Hacky monospace
+            let selection_rect = Rect::new(
+                text_pos.x,
+                text_pos.y,
+                selection_width,
+                self.text_style.font_size,
+            );
+            renderer.fill_rect(selection_rect, Color::new(0.2, 0.5, 0.9, 0.5));
+        }
+
+        // Render Text
+        let mut text_color = current_style.text_color;
+        if self.value.is_empty() {
+            text_color.a *= 0.5;
+        }
 
         renderer.draw_text(
             text,
@@ -165,22 +162,62 @@ impl OxidXComponent for Input {
                 ..self.text_style.clone()
             },
         );
+
+        // Draw cursor if focused and not selected
+        if self.is_focused && !self.is_selected {
+            let cursor_x = text_pos.x + self.value.len() as f32 * 8.0;
+            let cursor_rect = Rect::new(cursor_x, text_pos.y, 2.0, self.text_style.font_size);
+            renderer.fill_rect(cursor_rect, current_style.text_color);
+        }
     }
 
-    fn on_event(&mut self, event: &OxidXEvent, _ctx: &mut OxidXContext) {
+    fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
+        // Strict bounds check for mouse events
         match event {
-            OxidXEvent::MouseEnter => self.is_hovered = true,
-            OxidXEvent::MouseLeave => self.is_hovered = false,
-            // MouseDown/FocusGained/FocusLost are handled by updating is_focused
-            OxidXEvent::FocusGained => self.is_focused = true,
-            OxidXEvent::FocusLost => self.is_focused = false,
-            // Keyboard events are handled in on_keyboard_input
+            OxidXEvent::MouseDown { position, .. }
+            | OxidXEvent::MouseUp { position, .. }
+            | OxidXEvent::Click { position, .. } => {
+                if !self.bounds.contains(*position) {
+                    return false;
+                }
+            }
             _ => {}
+        }
+
+        match event {
+            OxidXEvent::MouseEnter => {
+                self.is_hovered = true;
+                // Change cursor to text beam
+                ctx.set_cursor_icon(CursorIcon::Text);
+                true
+            }
+            OxidXEvent::MouseLeave => {
+                self.is_hovered = false;
+                // Reset cursor to default
+                ctx.set_cursor_icon(CursorIcon::Default);
+                true
+            }
+            OxidXEvent::FocusGained => {
+                self.is_focused = true;
+                true
+            }
+            OxidXEvent::FocusLost => {
+                self.is_focused = false;
+                self.is_selected = false;
+                true
+            }
+            OxidXEvent::MouseDown { .. }
+            | OxidXEvent::MouseUp { .. }
+            | OxidXEvent::Click { .. } => {
+                // Clear selection on click
+                self.is_selected = false;
+                true
+            }
+            _ => false,
         }
     }
 
     fn on_keyboard_input(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) {
-        // Double check focus (redundant but safe)
         if !ctx.is_focused(&self.id) {
             return;
         }
@@ -188,12 +225,49 @@ impl OxidXComponent for Input {
         match event {
             OxidXEvent::CharInput { character } => {
                 if !character.is_control() {
+                    // If text is selected, replace it
+                    if self.is_selected {
+                        self.value.clear();
+                        self.is_selected = false;
+                    }
                     self.value.push(*character);
                 }
             }
-            OxidXEvent::KeyDown { key, .. } => {
-                if matches!(key, &KeyCode::BACKSPACE) {
-                    self.value.pop();
+            OxidXEvent::KeyDown { key, modifiers } => {
+                // Handle Ctrl+A (Select All)
+                if modifiers.ctrl && *key == KeyCode::KEY_A {
+                    self.is_selected = !self.value.is_empty();
+                    return;
+                }
+
+                // Handle Ctrl+C (Copy)
+                if modifiers.ctrl && *key == KeyCode::KEY_C {
+                    if self.is_selected || !self.value.is_empty() {
+                        ctx.copy_to_clipboard(&self.value);
+                    }
+                    return;
+                }
+
+                // Handle Ctrl+V (Paste)
+                if modifiers.ctrl && *key == KeyCode::KEY_V {
+                    if let Some(text) = ctx.paste_from_clipboard() {
+                        if self.is_selected {
+                            self.value.clear();
+                            self.is_selected = false;
+                        }
+                        self.value.push_str(&text);
+                    }
+                    return;
+                }
+
+                // Handle Backspace
+                if *key == KeyCode::BACKSPACE {
+                    if self.is_selected {
+                        self.value.clear();
+                        self.is_selected = false;
+                    } else {
+                        self.value.pop();
+                    }
                 }
             }
             _ => {}

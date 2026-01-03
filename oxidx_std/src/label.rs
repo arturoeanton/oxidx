@@ -75,7 +75,9 @@ impl OxidXComponent for Label {
         renderer.draw_text(&self.text, text_pos, self.style.clone());
     }
 
-    fn on_event(&mut self, _event: &OxidXEvent, _ctx: &mut OxidXContext) {}
+    fn on_event(&mut self, _event: &OxidXEvent, _ctx: &mut OxidXContext) -> bool {
+        false
+    }
     fn bounds(&self) -> Rect {
         self.bounds
     }

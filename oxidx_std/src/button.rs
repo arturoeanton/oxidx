@@ -2,6 +2,8 @@
 //!
 //! A simple rectangular button with hover, press, and click handling.
 //! Supports the new styling system.
+//!
+//! This component demonstrates the use of `#[derive(OxidXWidget)]` macro.
 
 use glam::Vec2;
 use oxidx_core::component::OxidXComponent;
@@ -11,58 +13,83 @@ use oxidx_core::renderer::Renderer;
 use oxidx_core::style::{ComponentState, InteractiveStyle};
 use oxidx_core::theme::Theme;
 use oxidx_core::OxidXContext;
+use oxidx_derive::OxidXWidget;
 
 /// A simple button component with interactive styles.
+///
+/// # Example using the derive macro-generated builder
+///
+/// ```ignore
+/// let button = Button::new()
+///     .label("Click me")
+///     .style(Theme::dark().primary_button)
+///     .on_click(|| println!("Clicked!"));
+/// ```
+#[derive(OxidXWidget)]
 pub struct Button {
     /// Bounding rectangle
+    #[oxidx(default = Rect::default())]
     bounds: Rect,
+
     /// Preferred size (used in layout)
+    #[oxidx(prop, default = Vec2::new(100.0, 40.0))]
     preferred_size: Vec2,
+
     /// Visual style configuration
+    #[oxidx(prop, default = Theme::dark().primary_button)]
     style: InteractiveStyle,
+
     /// Label text
+    #[oxidx(prop)]
     label: Option<String>,
+
     /// Hover state
+    #[oxidx(default = false)]
     is_hovered: bool,
+
     /// Pressed state
+    #[oxidx(default = false)]
     is_pressed: bool,
+
     /// Click callback
+    #[oxidx(default = None)]
     on_click: Option<Box<dyn Fn() + Send>>,
 }
 
 impl Button {
-    /// Creates a new button with default theme style.
-    pub fn new(x: f32, y: f32, width: f32, height: f32) -> Self {
+    // Note: new(), preferred_size(), style(), and label() are now generated
+    // by the OxidXWidget derive macro!
+
+    /// Creates a new button at a specific position with size (legacy API).
+    pub fn with_bounds(x: f32, y: f32, width: f32, height: f32) -> Self {
         Self {
             bounds: Rect::new(x, y, width, height),
             preferred_size: Vec2::new(width, height),
-            style: Theme::dark().primary_button,
-            label: None,
-            is_hovered: false,
-            is_pressed: false,
-            on_click: None,
+            ..Self::new()
         }
     }
 
-    /// Creates a new button with a label.
+    /// Creates a new button with a label at a specific position (legacy API).
     pub fn with_label(x: f32, y: f32, width: f32, height: f32, label: impl Into<String>) -> Self {
         Self {
+            bounds: Rect::new(x, y, width, height),
+            preferred_size: Vec2::new(width, height),
             label: Some(label.into()),
-            ..Self::new(x, y, width, height)
+            ..Self::new()
         }
     }
 
-    /// Sets the interactive style.
+    /// Sets the interactive style (mutable reference version).
     pub fn set_style(&mut self, style: InteractiveStyle) {
         self.style = style;
     }
 
-    /// Sets the label text.
+    /// Sets the label text (mutable reference version).
     pub fn set_label(&mut self, label: impl Into<String>) {
         self.label = Some(label.into());
     }
 
-    /// Helper to set click callback.
+    /// Helper to set click callback (fluent API).
     pub fn on_click(mut self, callback: impl Fn() + Send + 'static) -> Self {
         self.on_click = Some(Box::new(callback));
         self
@@ -113,29 +140,49 @@ impl OxidXComponent for Button {
         }
     }
 
-    fn on_event(&mut self, event: &OxidXEvent, _ctx: &mut OxidXContext) {
+    fn on_event(&mut self, event: &OxidXEvent, _ctx: &mut OxidXContext) -> bool {
+        // Strict Hit-Testing Safety check
+        // Prevents ghost clicks if engine broadcasts
+        match event {
+            OxidXEvent::MouseDown { position, .. }
+            | OxidXEvent::MouseUp { position, .. }
+            | OxidXEvent::Click { position, .. } => {
+                if !self.bounds.contains(*position) {
+                    return false;
+                }
+            }
+            _ => {}
+        }
+
         match event {
             OxidXEvent::MouseEnter => {
                 self.is_hovered = true;
+                true
             }
             OxidXEvent::MouseLeave => {
                 self.is_hovered = false;
                 self.is_pressed = false;
+                true
             }
             OxidXEvent::MouseDown { .. } => {
                 self.is_pressed = true;
+                true
             }
             OxidXEvent::MouseUp { .. } => {
                 self.is_pressed = false;
+                true
             }
             OxidXEvent::Click { button, .. } => {
                 if matches!(button, oxidx_core::events::MouseButton::Left) {
                     if let Some(ref callback) = self.on_click {
                         callback();
                     }
+                    true
+                } else {
+                    false
                 }
             }
-            _ => {}
+            _ => false,
         }
     }
 

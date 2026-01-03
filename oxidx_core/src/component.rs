@@ -99,7 +99,9 @@ pub trait OxidXComponent: Send {
     /// Handles a high-level UI event.
     ///
     /// Events are dispatched by the engine after hit testing.
-    fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext);
+    fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
+        false
+    }
 
     /// Handles keyboard input when focused.
     ///

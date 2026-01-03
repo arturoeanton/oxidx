@@ -14,9 +14,13 @@ pub use containers::{HStack, VStack, ZStack};
 pub use input::Input;
 pub use label::Label;
 
+// Re-export derive macro
+pub use oxidx_derive::OxidXWidget;
+
 // Re-export core types
 pub use oxidx_core::{
     run, run_with_config, Anchor, AppConfig, Background, Border, Color, ComponentState,
     InteractiveStyle, OxidXComponent, OxidXEvent, Rect, Renderer, Shadow, SizeConstraint, Spacing,
     StackAlignment, Style, TextStyle, Theme, Vec2,
 };
+

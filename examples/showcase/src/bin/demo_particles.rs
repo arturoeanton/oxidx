@@ -122,7 +122,7 @@ impl OxidXComponent for ParticleSystem {
         }
     }
 
-    fn on_event(&mut self, event: &OxidXEvent, _ctx: &mut OxidXContext) {
+    fn on_event(&mut self, event: &OxidXEvent, _ctx: &mut OxidXContext) -> bool {
         match event {
             OxidXEvent::MouseDown { position, .. } => {
                 self.is_dragging = true;
@@ -130,18 +130,23 @@ impl OxidXComponent for ParticleSystem {
                 // New:
                 self.spawn_particle(*position); // This will spawn 5 particles based on current spawn_particle impl
                 self.spawn(15, position.x, position.y); // Add extra for initial burst
+                true
             }
             OxidXEvent::MouseUp { .. } => {
                 self.is_dragging = false;
+                true
             }
             OxidXEvent::MouseMove { position, .. } => {
                 // Original: self.mouse_pos = *position;
                 // New:
                 if self.is_dragging {
                     self.spawn_particle(*position);
+                    true
+                } else {
+                    false
                 }
             }
-            _ => {}
+            _ => false,
         }
     }
 

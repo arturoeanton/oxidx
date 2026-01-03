@@ -31,10 +31,10 @@ fn main() {
     card_content.add_child(Box::new(input_pass));
 
     // Sign In Button
-    let mut btn = Button::new(0.0, 0.0, 0.0, 45.0); // Size layout handled by parent if stretched?
-                                                    // Determine button width via layout or fixed?
-                                                    // Buttons in VStack usually take full width if stretched or natural size.
-                                                    // Our VStack defaults to Start alignment. Let's make it stretch.
+    let mut btn = Button::with_bounds(0.0, 0.0, 0.0, 45.0); // Size layout handled by parent if stretched?
+                                                            // Determine button width via layout or fixed?
+                                                            // Buttons in VStack usually take full width if stretched or natural size.
+                                                            // Our VStack defaults to Start alignment. Let's make it stretch.
     card_content.set_alignment(StackAlignment::Stretch);
 
     btn.set_label("Sign In");
@@ -79,8 +79,8 @@ fn main() {
         fn render(&self, r: &mut Renderer) {
             self.child.render(r);
         }
-        fn on_event(&mut self, e: &OxidXEvent, ctx: &mut OxidXContext) {
-            self.child.on_event(e, ctx);
+        fn on_event(&mut self, e: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
+            self.child.on_event(e, ctx)
         }
         fn bounds(&self) -> Rect {
             self.bounds
@@ -120,8 +120,8 @@ fn main() {
         fn render(&self, r: &mut Renderer) {
             self.child.render(r);
         }
-        fn on_event(&mut self, e: &OxidXEvent, ctx: &mut OxidXContext) {
-            self.child.on_event(e, ctx);
+        fn on_event(&mut self, e: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
+            self.child.on_event(e, ctx)
         }
         fn bounds(&self) -> Rect {
             self.bounds

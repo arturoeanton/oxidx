@@ -37,6 +37,22 @@ impl Rect {
     pub fn center(&self) -> Vec2 {
         Vec2::new(self.x + self.width / 2.0, self.y + self.height / 2.0)
     }
+
+    /// Computes the intersection of this rectangle with another.
+    ///
+    /// Returns a rectangle representing the overlapping area.
+    /// If the rectangles don't overlap, returns a zero-sized rectangle.
+    pub fn intersect(&self, other: &Rect) -> Rect {
+        let x1 = self.x.max(other.x);
+        let y1 = self.y.max(other.y);
+        let x2 = (self.x + self.width).min(other.x + other.width);
+        let y2 = (self.y + self.height).min(other.y + other.height);
+
+        let width = (x2 - x1).max(0.0);
+        let height = (y2 - y1).max(0.0);
+
+        Rect::new(x1, y1, width, height)
+    }
 }
 
 /// Text alignment options.

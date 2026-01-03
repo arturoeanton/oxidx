@@ -50,6 +50,13 @@ impl KeyCode {
     pub const RIGHT: KeyCode = KeyCode(winit::keyboard::KeyCode::ArrowRight);
     pub const UP: KeyCode = KeyCode(winit::keyboard::KeyCode::ArrowUp);
     pub const DOWN: KeyCode = KeyCode(winit::keyboard::KeyCode::ArrowDown);
+
+    // Letter keys (for shortcuts like Ctrl+C, Ctrl+V, etc.)
+    pub const KEY_A: KeyCode = KeyCode(winit::keyboard::KeyCode::KeyA);
+    pub const KEY_C: KeyCode = KeyCode(winit::keyboard::KeyCode::KeyC);
+    pub const KEY_V: KeyCode = KeyCode(winit::keyboard::KeyCode::KeyV);
+    pub const KEY_X: KeyCode = KeyCode(winit::keyboard::KeyCode::KeyX);
+    pub const KEY_Z: KeyCode = KeyCode(winit::keyboard::KeyCode::KeyZ);
 }
 
 /// Keyboard modifier state.

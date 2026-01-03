@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-serde = { workspace = true }
-serde_json = "1.0"           # O toml, según prefieras para el archivo de diseño
-heck = "0.4"                 # Convierte "CamelCase" a "snake_case" para nombres de variables
-quote = "1.0"                # Ayuda a armar código Rust válido
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+schemars = "0.8"
+anyhow = "1.0"
+chrono = "0.4"

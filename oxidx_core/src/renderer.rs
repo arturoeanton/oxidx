@@ -125,6 +125,9 @@ pub struct Renderer {
     // Screen size for projection
     screen_width: f32,
     screen_height: f32,
+
+    // Scissor clipping stack
+    clip_stack: Vec<Rect>,
 }
 
 impl Renderer {
@@ -268,6 +271,7 @@ impl Renderer {
             text_commands: Vec::new(),
             screen_width: width as f32,
             screen_height: height as f32,
+            clip_stack: Vec::new(),
         }
     }
 
@@ -304,6 +308,38 @@ impl Renderer {
         self.vertices.clear();
         self.indices.clear();
         self.text_commands.clear();
+        self.clip_stack.clear();
+    }
+
+    /// Pushes a clip rectangle onto the clipping stack.
+    ///
+    /// Content rendered after this call will be clipped to the intersection
+    /// of all active clip rectangles. Call `pop_clip()` to restore the previous
+    /// clipping state.
+    ///
+    /// # Arguments
+    /// * `rect` - The clipping rectangle in pixel coordinates
+    pub fn push_clip(&mut self, rect: Rect) {
+        // Intersect with current clip if there is one
+        let clipped = if let Some(current) = self.clip_stack.last() {
+            current.intersect(&rect)
+        } else {
+            rect
+        };
+        self.clip_stack.push(clipped);
+    }
+
+    /// Pops the most recent clip rectangle from the stack.
+    ///
+    /// Restores the previous clipping state. If the stack is empty,
+    /// this is a no-op.
+    pub fn pop_clip(&mut self) {
+        self.clip_stack.pop();
+    }
+
+    /// Returns the current clip rectangle, if any.
+    pub fn current_clip(&self) -> Option<Rect> {
+        self.clip_stack.last().copied()
     }
 
     /// Draws a filled rectangle.

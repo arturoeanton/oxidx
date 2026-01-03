@@ -61,3 +61,6 @@ pub use theme::Theme;
 
 // Re-export glam types
 pub use glam::Vec2;
+
+// Re-export cursor icons from winit
+pub use winit::window::CursorIcon;

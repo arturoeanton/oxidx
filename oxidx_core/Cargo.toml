@@ -4,25 +4,26 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-# Es una librería estándar de Rust
 crate-type = ["rlib"]
 
 [dependencies]
 # Graphics and Windows
 winit = { workspace = true }
 wgpu = { workspace = true }
-glam = { workspace = true }  # Types like Vec2, Mat4
+glam = { workspace = true }
 
 # Text Rendering
-glyphon = "0.5" # Text rendering for wgpu
+glyphon = "0.5"
+
+# Clipboard
+arboard = "3.2"
 
 # Utilities
-pollster = "0.3"                                       # Block on async wgpu init
+pollster = "0.3"
 log = "0.4"
 env_logger = "0.10"
 thiserror = "1.0"
 bytemuck = { version = "1.14", features = ["derive"] }
 
 [dev-dependencies]
-# For headless testing
 futures = "0.3"
