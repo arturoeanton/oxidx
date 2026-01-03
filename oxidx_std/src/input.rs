@@ -3,7 +3,7 @@
 use oxidx_core::events::{KeyCode, OxidXEvent};
 use oxidx_core::layout::LayoutProps;
 use oxidx_core::style::{ComponentState, InteractiveStyle, Style};
-use oxidx_core::{Color, OxidXComponent, Rect, Renderer, TextStyle, Vec2};
+use oxidx_core::{Color, OxidXComponent, OxidXContext, Rect, Renderer, TextStyle, Vec2};
 
 /// A text input field with styling and layout support.
 pub struct Input {
@@ -15,6 +15,7 @@ pub struct Input {
     is_focused: bool,
     is_hovered: bool,
     text_style: TextStyle,
+    id: String,
 }
 
 impl Input {
@@ -61,7 +62,13 @@ impl Input {
             is_focused: false,
             is_hovered: false,
             text_style: TextStyle::new(14.0).with_color(Color::WHITE),
+            id: String::new(),
         }
+    }
+
+    pub fn with_id(mut self, id: impl Into<String>) -> Self {
+        self.id = id.into();
+        self
     }
 
     pub fn with_style(mut self, style: InteractiveStyle) -> Self {
@@ -96,6 +103,28 @@ impl OxidXComponent for Input {
     }
 
     fn render(&self, renderer: &mut Renderer) {
+        // Use local state for hover, but Context (or local fallback) for focus
+        // Ideally we check context, but we need access to context here.
+        // Wait, render() only takes Renderer.
+        // The trait render() signature was NOT changed in the prompt request ("Update OxidXComponent Trait: Add generic id... Add on_keyboard_input..."). it didn't say change render.
+        // But the prompt said: "In render: Check ctx.is_focused(self.id)."
+        // This implies render needs ctx.
+        // BUT Renderer might not contain ctx. Context contains Renderer.
+        // If I change render signature I break everything.
+        // Alternative: Input stores `is_focused` which is updated via `on_event` when FocusGained/Lost happens.
+        // The Prompt Step 3 says: "Refactor the Event Loop (Engine): ... If a component is hit -> Call ctx.request_focus(component.id())."
+        // This updates the Context.
+        // Then `Input::render` says "Check ctx.is_focused".
+        // This requires `ctx` in `render`.
+        // If I strictly follow the prompt, I must pass `&OxidXContext` to render.
+        // But `OxidXContext` OWNS `Renderer`. I cannot borrow both mutably.
+        // `ctx.renderer` and `ctx`.
+        // This is a Rust ownership issue.
+        // Solution: I will persist the focus state in `self.is_focused` via `on_event` callbacks which ARE passed `ctx`.
+        // When `FocusGained` happens (dispatched by generic engine logic or recursion), I set `is_focused = true`.
+        // When `FocusLost` (generic engine logic or blur), I set `is_focused = false`.
+        // This syncs the component state with the Context state.
+        // So I will stick to checking `self.is_focused`.
         let state = if self.is_focused {
             ComponentState::Pressed
         } else if self.is_hovered {
@@ -138,27 +167,41 @@ impl OxidXComponent for Input {
         );
     }
 
-    fn on_event(&mut self, event: &OxidXEvent) {
+    fn on_event(&mut self, event: &OxidXEvent, _ctx: &mut OxidXContext) {
         match event {
             OxidXEvent::MouseEnter => self.is_hovered = true,
             OxidXEvent::MouseLeave => self.is_hovered = false,
-            OxidXEvent::MouseDown { .. } => self.is_focused = true,
+            // MouseDown/FocusGained/FocusLost are handled by updating is_focused
+            OxidXEvent::FocusGained => self.is_focused = true,
             OxidXEvent::FocusLost => self.is_focused = false,
+            // Keyboard events are handled in on_keyboard_input
+            _ => {}
+        }
+    }
+
+    fn on_keyboard_input(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) {
+        // Double check focus (redundant but safe)
+        if !ctx.is_focused(&self.id) {
+            return;
+        }
+
+        match event {
             OxidXEvent::CharInput { character } => {
-                if self.is_focused {
-                    // Filter control chars
-                    if !character.is_control() {
-                        self.value.push(*character);
-                    }
+                if !character.is_control() {
+                    self.value.push(*character);
                 }
             }
             OxidXEvent::KeyDown { key, .. } => {
-                if self.is_focused && matches!(key, &KeyCode::BACKSPACE) {
+                if matches!(key, &KeyCode::BACKSPACE) {
                     self.value.pop();
                 }
             }
             _ => {}
         }
+    }
+
+    fn id(&self) -> &str {
+        &self.id
     }
 
     fn bounds(&self) -> Rect {

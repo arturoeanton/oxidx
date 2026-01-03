@@ -3,6 +3,7 @@
 //! Defines the core trait that all OxidX widgets must implement.
 //! Components render, handle events, animate, and participate in layout.
 
+use crate::context::OxidXContext;
 use crate::events::OxidXEvent;
 use crate::primitives::Rect;
 use crate::renderer::Renderer;
@@ -39,11 +40,13 @@ use glam::Vec2;
 ///         renderer.fill_rect(self.bounds, Color::BLUE);
 ///     }
 ///     
-///     fn on_event(&mut self, event: &OxidXEvent) {
+///     fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) {
 ///         if let OxidXEvent::Click { .. } = event {
 ///             log::info!("Clicked!");
 ///         }
 ///     }
+///     
+///     fn id(&self) -> &str { "my_widget" }
 ///     
 ///     fn bounds(&self) -> Rect { self.bounds }
 ///     fn set_position(&mut self, x: f32, y: f32) { ... }
@@ -59,6 +62,13 @@ pub trait OxidXComponent: Send {
     /// Use for animations: `self.x += speed * delta_time;`
     fn update(&mut self, _delta_time: f32) {
         // Default: no animation
+    }
+
+    /// Returns a unique identifier for this component.
+    ///
+    /// Used for focus tracking. Defaults to empty string.
+    fn id(&self) -> &str {
+        ""
     }
 
     /// Called to calculate layout within available space.
@@ -89,7 +99,14 @@ pub trait OxidXComponent: Send {
     /// Handles a high-level UI event.
     ///
     /// Events are dispatched by the engine after hit testing.
-    fn on_event(&mut self, event: &OxidXEvent);
+    fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext);
+
+    /// Handles keyboard input when focused.
+    ///
+    /// Called by the engine only if this component is focused.
+    fn on_keyboard_input(&mut self, _event: &OxidXEvent, _ctx: &mut OxidXContext) {
+        // Default: ignore keyboard input
+    }
 
     /// Returns the bounding rectangle of this component in pixels.
     ///

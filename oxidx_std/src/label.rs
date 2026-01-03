@@ -1,7 +1,9 @@
 //! Text Label Component
 
 use oxidx_core::layout::LayoutProps;
-use oxidx_core::{Color, OxidXComponent, OxidXEvent, Rect, Renderer, TextStyle, Vec2};
+use oxidx_core::{
+    Color, OxidXComponent, OxidXContext, OxidXEvent, Rect, Renderer, TextStyle, Vec2,
+};
 
 /// A simple text label with layout support.
 pub struct Label {
@@ -73,7 +75,7 @@ impl OxidXComponent for Label {
         renderer.draw_text(&self.text, text_pos, self.style.clone());
     }
 
-    fn on_event(&mut self, _event: &OxidXEvent) {}
+    fn on_event(&mut self, _event: &OxidXEvent, _ctx: &mut OxidXContext) {}
     fn bounds(&self) -> Rect {
         self.bounds
     }

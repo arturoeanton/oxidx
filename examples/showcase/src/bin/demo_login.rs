@@ -2,6 +2,7 @@
 //!
 //! Demonstrates styling system, card layout, focus states, and responsive design.
 
+use oxidx_core::OxidXContext;
 use oxidx_std::prelude::*;
 
 fn main() {
@@ -19,9 +20,12 @@ fn main() {
     card_content.add_child(Box::new(label));
 
     // Inputs
-    let input_user =
-        Input::new("Email Address").with_layout(LayoutProps::default().with_margin(0.0));
-    let input_pass = Input::new("Password").with_layout(LayoutProps::default().with_margin(0.0));
+    let input_user = Input::new("Email Address")
+        .with_id("input_user")
+        .with_layout(LayoutProps::default().with_margin(0.0));
+    let input_pass = Input::new("Password")
+        .with_id("input_pass")
+        .with_layout(LayoutProps::default().with_margin(0.0));
 
     card_content.add_child(Box::new(input_user));
     card_content.add_child(Box::new(input_pass));
@@ -75,8 +79,8 @@ fn main() {
         fn render(&self, r: &mut Renderer) {
             self.child.render(r);
         }
-        fn on_event(&mut self, e: &OxidXEvent) {
-            self.child.on_event(e);
+        fn on_event(&mut self, e: &OxidXEvent, ctx: &mut OxidXContext) {
+            self.child.on_event(e, ctx);
         }
         fn bounds(&self) -> Rect {
             self.bounds
@@ -116,8 +120,8 @@ fn main() {
         fn render(&self, r: &mut Renderer) {
             self.child.render(r);
         }
-        fn on_event(&mut self, e: &OxidXEvent) {
-            self.child.on_event(e);
+        fn on_event(&mut self, e: &OxidXEvent, ctx: &mut OxidXContext) {
+            self.child.on_event(e, ctx);
         }
         fn bounds(&self) -> Rect {
             self.bounds

@@ -10,6 +10,7 @@ use oxidx_core::primitives::{Rect, TextStyle};
 use oxidx_core::renderer::Renderer;
 use oxidx_core::style::{ComponentState, InteractiveStyle};
 use oxidx_core::theme::Theme;
+use oxidx_core::OxidXContext;
 
 /// A simple button component with interactive styles.
 pub struct Button {
@@ -112,7 +113,7 @@ impl OxidXComponent for Button {
         }
     }
 
-    fn on_event(&mut self, event: &OxidXEvent) {
+    fn on_event(&mut self, event: &OxidXEvent, _ctx: &mut OxidXContext) {
         match event {
             OxidXEvent::MouseEnter => {
                 self.is_hovered = true;

@@ -9,6 +9,7 @@ use oxidx_core::events::OxidXEvent;
 use oxidx_core::layout::{Spacing, StackAlignment};
 use oxidx_core::primitives::{Color, Rect};
 use oxidx_core::renderer::Renderer;
+use oxidx_core::OxidXContext;
 
 /// A vertical stack container that arranges children from top to bottom.
 ///
@@ -152,10 +153,19 @@ impl OxidXComponent for VStack {
         }
     }
 
-    fn on_event(&mut self, event: &OxidXEvent) {
+    fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) {
         // Forward events to children
         for child in &mut self.children {
-            child.on_event(event);
+            child.on_event(event, ctx);
+        }
+    }
+
+    fn on_keyboard_input(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) {
+        // Broadcast keyboard events to children
+        // (In a perfect world we would only route to focused child,
+        // but simple recursion works for now as children check their focus state)
+        for child in &mut self.children {
+            child.on_keyboard_input(event, ctx);
         }
     }
 
@@ -304,9 +314,15 @@ impl OxidXComponent for HStack {
         }
     }
 
-    fn on_event(&mut self, event: &OxidXEvent) {
+    fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) {
         for child in &mut self.children {
-            child.on_event(event);
+            child.on_event(event, ctx);
+        }
+    }
+
+    fn on_keyboard_input(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) {
+        for child in &mut self.children {
+            child.on_keyboard_input(event, ctx);
         }
     }
 
@@ -421,10 +437,17 @@ impl OxidXComponent for ZStack {
         }
     }
 
-    fn on_event(&mut self, event: &OxidXEvent) {
+    fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) {
         // Events go to children in reverse order (top first)
         for child in self.children.iter_mut().rev() {
-            child.on_event(event);
+            child.on_event(event, ctx);
+        }
+    }
+
+    fn on_keyboard_input(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) {
+        // Broadcast keyboard input (order doesn't matter for focus check)
+        for child in &mut self.children {
+            child.on_keyboard_input(event, ctx);
         }
     }
 

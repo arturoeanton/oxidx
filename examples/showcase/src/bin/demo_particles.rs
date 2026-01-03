@@ -2,7 +2,9 @@
 //!
 //! Demonstrates update loop, input handling, and transparent blending.
 
-use oxidx_std::prelude::*;
+use oxidx_core::renderer::Renderer;
+use oxidx_core::{AppConfig, Color, OxidXComponent, OxidXContext, Rect, Vec2};
+use oxidx_std::{prelude::*, run_with_config};
 use rand::Rng;
 
 struct Particle {
@@ -17,7 +19,6 @@ struct ParticleSystem {
     bounds: Rect,
     particles: Vec<Particle>,
     is_dragging: bool,
-    mouse_pos: Vec2,
 }
 
 impl ParticleSystem {
@@ -26,7 +27,6 @@ impl ParticleSystem {
             bounds: Rect::default(),
             particles: Vec::new(),
             is_dragging: false,
-            mouse_pos: Vec2::ZERO,
         }
     }
 
@@ -50,14 +50,27 @@ impl ParticleSystem {
             });
         }
     }
+
+    // Helper to spawn particles at a given position
+    fn spawn_particle(&mut self, position: Vec2) {
+        // This method will replace the direct calls to `spawn` in `on_event`
+        // and handle the logic for initial burst vs. continuous stream.
+        // For now, let's assume it spawns a small number for continuous stream.
+        // The original `MouseDown` spawned 20, `update` spawned 5.
+        // Let's make this spawn 5 for continuous, and the `MouseDown` will call it.
+        // If we want a burst on click, we'd need to differentiate.
+        // Based on the provided snippet, `spawn_particle` is called for both.
+        // Let's make it spawn a moderate amount.
+        self.spawn(5, position.x, position.y);
+    }
 }
 
 impl OxidXComponent for ParticleSystem {
     fn update(&mut self, dt: f32) {
-        // Spawn if dragging
-        if self.is_dragging {
-            self.spawn(5, self.mouse_pos.x, self.mouse_pos.y);
-        }
+        // Spawn if dragging - this logic is now handled by on_event's MouseMove
+        // if self.is_dragging {
+        //     self.spawn(5, self.mouse_pos.x, self.mouse_pos.y);
+        // }
 
         let gravity = 800.0;
         let floor_y = self.bounds.height;
@@ -109,18 +122,24 @@ impl OxidXComponent for ParticleSystem {
         }
     }
 
-    fn on_event(&mut self, event: &OxidXEvent) {
+    fn on_event(&mut self, event: &OxidXEvent, _ctx: &mut OxidXContext) {
         match event {
             OxidXEvent::MouseDown { position, .. } => {
                 self.is_dragging = true;
-                self.mouse_pos = *position;
-                self.spawn(20, position.x, position.y); // Burst on click
+                // Original: self.mouse_pos = *position; self.spawn(20, position.x, position.y);
+                // New:
+                self.spawn_particle(*position); // This will spawn 5 particles based on current spawn_particle impl
+                self.spawn(15, position.x, position.y); // Add extra for initial burst
             }
             OxidXEvent::MouseUp { .. } => {
                 self.is_dragging = false;
             }
             OxidXEvent::MouseMove { position, .. } => {
-                self.mouse_pos = *position;
+                // Original: self.mouse_pos = *position;
+                // New:
+                if self.is_dragging {
+                    self.spawn_particle(*position);
+                }
             }
             _ => {}
         }

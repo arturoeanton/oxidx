@@ -199,7 +199,7 @@ pub fn run_with_config<C: OxidXComponent + 'static>(mut component: C, config: Ap
 
                 Event::WindowEvent { event, window_id } if window_id == window.id() => {
                     // Process window events and dispatch UI events
-                    process_window_event(&event, &mut component, &mut input);
+                    process_window_event(&event, &mut component, &mut input, &mut context);
 
                     match event {
                         WindowEvent::CloseRequested => {
@@ -265,6 +265,7 @@ fn process_window_event<C: OxidXComponent>(
     event: &WindowEvent,
     component: &mut C,
     input: &mut InputState,
+    ctx: &mut OxidXContext,
 ) {
     match event {
         // Track mouse position and detect hover changes
@@ -279,18 +280,21 @@ fn process_window_event<C: OxidXComponent>(
 
             // Detect hover state changes
             if input.is_hovered && !input.was_hovered {
-                component.on_event(&OxidXEvent::MouseEnter);
+                component.on_event(&OxidXEvent::MouseEnter, ctx);
             } else if !input.is_hovered && input.was_hovered {
-                component.on_event(&OxidXEvent::MouseLeave);
+                component.on_event(&OxidXEvent::MouseLeave, ctx);
             }
 
             // Fire MouseMove if hovered
             if input.is_hovered {
                 let delta = input.mouse_position - input.prev_mouse_position;
-                component.on_event(&OxidXEvent::MouseMove {
-                    position: input.mouse_position,
-                    delta,
-                });
+                component.on_event(
+                    &OxidXEvent::MouseMove {
+                        position: input.mouse_position,
+                        delta,
+                    },
+                    ctx,
+                );
             }
         }
 
@@ -306,37 +310,54 @@ fn process_window_event<C: OxidXComponent>(
                         // Set focus if focusable
                         if component.is_focusable() && !input.is_focused {
                             input.is_focused = true;
-                            component.on_event(&OxidXEvent::FocusGained);
+                            component.on_event(&OxidXEvent::FocusGained, ctx);
+                            // Also update Context focus
+                            if !component.id().is_empty() {
+                                ctx.request_focus(component.id());
+                            }
                         }
 
-                        component.on_event(&OxidXEvent::MouseDown {
-                            button: mouse_button,
-                            position: input.mouse_position,
-                            modifiers: input.modifiers,
-                        });
+                        component.on_event(
+                            &OxidXEvent::MouseDown {
+                                button: mouse_button,
+                                position: input.mouse_position,
+                                modifiers: input.modifiers,
+                            },
+                            ctx,
+                        );
                     } else {
                         // Clicked outside - lose focus
+                        // Note: Only if we are managing global focus here?
+                        // For now we rely on the component returning generic focus events
+                        // But actually ctx.blur() should happen if we click background
                         if input.is_focused {
                             input.is_focused = false;
-                            component.on_event(&OxidXEvent::FocusLost);
+                            component.on_event(&OxidXEvent::FocusLost, ctx);
+                            ctx.blur();
                         }
                     }
                 }
                 ElementState::Released => {
                     if input.is_hovered {
-                        component.on_event(&OxidXEvent::MouseUp {
-                            button: mouse_button,
-                            position: input.mouse_position,
-                            modifiers: input.modifiers,
-                        });
-
-                        // Fire Click if same button
-                        if input.pressed_button == Some(mouse_button) {
-                            component.on_event(&OxidXEvent::Click {
+                        component.on_event(
+                            &OxidXEvent::MouseUp {
                                 button: mouse_button,
                                 position: input.mouse_position,
                                 modifiers: input.modifiers,
-                            });
+                            },
+                            ctx,
+                        );
+
+                        // Fire Click if same button
+                        if input.pressed_button == Some(mouse_button) {
+                            component.on_event(
+                                &OxidXEvent::Click {
+                                    button: mouse_button,
+                                    position: input.mouse_position,
+                                    modifiers: input.modifiers,
+                                },
+                                ctx,
+                            );
                         }
                     }
                     input.pressed_button = None;
@@ -355,34 +376,44 @@ fn process_window_event<C: OxidXComponent>(
             };
         }
 
-        // Handle keyboard input (only when focused)
+        // Handle keyboard input (routed via Context focus)
         WindowEvent::KeyboardInput { event, .. } => {
-            if input.is_focused {
-                if let PhysicalKey::Code(code) = event.physical_key {
-                    let key = KeyCode::from(code);
-                    match event.state {
-                        ElementState::Pressed => {
-                            component.on_event(&OxidXEvent::KeyDown {
-                                key,
-                                modifiers: input.modifiers,
-                            });
-                        }
-                        ElementState::Released => {
-                            component.on_event(&OxidXEvent::KeyUp {
-                                key,
-                                modifiers: input.modifiers,
-                            });
-                        }
-                    }
+            // Find focused component via traversing?
+            // Since we can't easily find the component by ID in the tree without a map,
+            // we will dispatch the event to the root, and if the root implements routing logic
+            // it will find the child.
+            // BUT, the trait on_keyboard_input implementation in containers needs to know.
+
+            // Actually, the simplest way for a tree-based framework without a separate registry
+            // is to let the root dispatch.
+            // We'll call on_keyboard_input on the root. Containers should propagate if they contain the focused ID.
+
+            if let PhysicalKey::Code(code) = event.physical_key {
+                let key = KeyCode::from(code);
+                let cx_event = match event.state {
+                    ElementState::Pressed => OxidXEvent::KeyDown {
+                        key,
+                        modifiers: input.modifiers,
+                    },
+                    ElementState::Released => OxidXEvent::KeyUp {
+                        key,
+                        modifiers: input.modifiers,
+                    },
+                };
+
+                // Dispatch to focused component only?
+                // We'll use on_keyboard_input which is intended for this.
+                if ctx.focused_id.is_some() {
+                    component.on_keyboard_input(&cx_event, ctx);
                 }
             }
         }
 
         // Handle character input (for text fields)
         WindowEvent::Ime(winit::event::Ime::Commit(text)) => {
-            if input.is_focused {
+            if ctx.focused_id.is_some() {
                 for ch in text.chars() {
-                    component.on_event(&OxidXEvent::CharInput { character: ch });
+                    component.on_keyboard_input(&OxidXEvent::CharInput { character: ch }, ctx);
                 }
             }
         }

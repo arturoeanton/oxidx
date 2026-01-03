@@ -2,8 +2,9 @@
 //!
 //! Demonstrates high-performance batch rendering of thousands of dynamic objects.
 
+use oxidx_core::OxidXContext;
 use oxidx_std::prelude::*;
-use rand::Rng;
+use rand::Rng; // Added import for Context
 
 const GRID_COLS: usize = 100;
 const GRID_ROWS: usize = 50;
@@ -93,7 +94,7 @@ impl OxidXComponent for HeatmapGrid {
         );
     }
 
-    fn on_event(&mut self, _event: &OxidXEvent) {}
+    fn on_event(&mut self, _event: &OxidXEvent, _ctx: &mut OxidXContext) {}
     fn bounds(&self) -> Rect {
         self.bounds
     }

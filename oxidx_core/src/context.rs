@@ -35,6 +35,10 @@ pub struct OxidXContext {
     pub size: winit::dpi::PhysicalSize<u32>,
     /// The batched 2D renderer
     pub renderer: Renderer,
+    /// The ID of the currently focused component
+    pub focused_id: Option<String>,
+    /// Time elapsed (for cursor blinking etc)
+    pub time: f32,
 }
 
 impl OxidXContext {
@@ -125,6 +129,8 @@ impl OxidXContext {
             config,
             size,
             renderer,
+            focused_id: None,
+            time: 0.0,
         })
     }
 
@@ -203,8 +209,23 @@ impl OxidXContext {
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
 
-            // Update renderer's orthographic projection
             self.renderer.resize(new_size.width, new_size.height);
         }
+    }
+
+    /// Requests focus for a component by ID.
+    pub fn request_focus(&mut self, id: impl Into<String>) {
+        let id = id.into();
+        self.focused_id = Some(id);
+    }
+
+    /// Clears the current focus.
+    pub fn blur(&mut self) {
+        self.focused_id = None;
+    }
+
+    /// Checks if the given ID is currently focused.
+    pub fn is_focused(&self, id: &str) -> bool {
+        self.focused_id.as_deref() == Some(id)
     }
 }
