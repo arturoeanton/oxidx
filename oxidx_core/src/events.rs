@@ -120,6 +120,19 @@ pub enum OxidXEvent {
     /// Character was typed while component has focus.
     /// Used for text input fields.
     CharInput { character: char },
+
+    /// IME Composition (Pre-edit)
+    /// Text explicitly being composed by the IME.
+    /// `cursor_start` and `cursor_end` indicate the current selection within the preedit text.
+    ImePreedit {
+        text: String,
+        cursor_start: Option<usize>,
+        cursor_end: Option<usize>,
+    },
+
+    /// IME Commit
+    /// Final text committed by the IME.
+    ImeCommit(String),
 }
 
 impl OxidXEvent {

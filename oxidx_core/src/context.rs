@@ -3,6 +3,7 @@
 //! Manages the WGPU rendering context including device, queue, and surface.
 //! Also provides access to OS integration (clipboard, cursor).
 
+use crate::primitives::Rect;
 use crate::renderer::Renderer;
 use std::sync::Arc;
 use thiserror::Error;
@@ -213,6 +214,26 @@ impl OxidXContext {
     /// ```
     pub fn set_cursor_icon(&self, icon: CursorIcon) {
         self.window.set_cursor_icon(icon);
+    }
+
+    /// Sets the IME cursor area.
+    ///
+    /// This tells the OS where the text cursor is, so it can position the
+    /// IME candidate window correctly.
+    ///
+    /// # Arguments
+    /// * `rect` - The cursor rectangle in logical pixels relative to the window.
+    pub fn set_ime_position(&self, rect: Rect) {
+        self.window.set_ime_cursor_area(
+            winit::dpi::Position::Logical(winit::dpi::LogicalPosition::new(
+                rect.x as f64,
+                rect.y as f64,
+            )),
+            winit::dpi::Size::Logical(winit::dpi::LogicalSize::new(
+                rect.width as f64,
+                rect.height as f64,
+            )),
+        );
     }
 
     /// Returns the current window reference.

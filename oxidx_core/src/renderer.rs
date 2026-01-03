@@ -15,10 +15,10 @@
 use crate::primitives::{Color, Rect, TextStyle};
 use crate::style::{Background, Style};
 use glam::{Mat4, Vec2};
-use glyphon::{
-    Attrs, Buffer, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache, TextArea,
-    TextBounds, TextRenderer as GlyphonTextRenderer,
+use glyphon::cosmic_text::{
+    Attrs, AttrsList, Buffer, Family, FontSystem, Metrics, Shaping, SwashCache,
 };
+use glyphon::{Resolution, TextArea, TextBounds, TextRenderer as GlyphonTextRenderer};
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
@@ -79,11 +79,23 @@ struct Uniforms {
 }
 
 /// Text command queued for rendering.
-struct TextCommand {
-    text: String,
-    position: Vec2,
-    style: TextStyle,
-    bounds_width: Option<f32>,
+enum TextCommand {
+    /// Simple string (legacy/easy API)
+    Simple {
+        text: String,
+        position: Vec2,
+        style: TextStyle,
+        bounds_width: Option<f32>,
+    },
+    /// Rich text with attributes
+    Rich {
+        text: String,
+        attrs: AttrsList,
+        position: Vec2,
+        bounds_width: Option<f32>,
+        default_color: Color,
+        line_height: f32,
+    },
 }
 
 /// Initial capacity for vertex/index buffers.
@@ -115,12 +127,14 @@ pub struct Renderer {
     vertices: Vec<Vertex>,
     indices: Vec<u32>,
 
-    // Text rendering (glyphon)
-    font_system: FontSystem,
-    swash_cache: SwashCache,
-    text_renderer: GlyphonTextRenderer,
-    text_atlas: glyphon::TextAtlas,
+    // Text rendering
+    pub text_brush: TextBrush,
     text_commands: Vec<TextCommand>,
+
+    // Overlay layer (rendered on top, no clipping)
+    overlay_vertices: Vec<Vertex>,
+    overlay_indices: Vec<u32>,
+    overlay_text_commands: Vec<TextCommand>,
 
     // Screen size for projection
     screen_width: f32,
@@ -128,6 +142,39 @@ pub struct Renderer {
 
     // Scissor clipping stack
     clip_stack: Vec<Rect>,
+}
+
+/// Manages text resources and rendering.
+/// Wraps cosmic-text and glyphon.
+pub struct TextBrush {
+    pub font_system: FontSystem,
+    pub swash_cache: SwashCache,
+    pub text_renderer: GlyphonTextRenderer,
+    pub text_atlas: glyphon::TextAtlas,
+    // Cache for simple text commands to avoid reallocation every frame
+    // In a real engine we'd use a proper LRU cache or handle IDs
+    // For now we just use it for the current frame's batch
+}
+
+impl TextBrush {
+    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
+        let font_system = FontSystem::new();
+        let swash_cache = SwashCache::new();
+        let mut text_atlas = glyphon::TextAtlas::new(device, queue, format);
+        let text_renderer = GlyphonTextRenderer::new(
+            &mut text_atlas,
+            device,
+            wgpu::MultisampleState::default(),
+            None,
+        );
+
+        Self {
+            font_system,
+            swash_cache,
+            text_renderer,
+            text_atlas,
+        }
+    }
 }
 
 impl Renderer {
@@ -240,16 +287,8 @@ impl Renderer {
             mapped_at_creation: false,
         });
 
-        // Initialize glyphon for text rendering
-        let font_system = FontSystem::new();
-        let swash_cache = SwashCache::new();
-        let mut text_atlas = glyphon::TextAtlas::new(&device, &queue, surface_format);
-        let text_renderer = GlyphonTextRenderer::new(
-            &mut text_atlas,
-            &device,
-            wgpu::MultisampleState::default(),
-            None,
-        );
+        // Initialize TextBrush
+        let text_brush = TextBrush::new(&device, &queue, surface_format);
 
         Self {
             device,
@@ -264,11 +303,11 @@ impl Renderer {
             index_capacity: INITIAL_INDEX_CAPACITY,
             vertices: Vec::with_capacity(INITIAL_VERTEX_CAPACITY),
             indices: Vec::with_capacity(INITIAL_INDEX_CAPACITY),
-            font_system,
-            swash_cache,
-            text_renderer,
-            text_atlas,
+            text_brush,
             text_commands: Vec::new(),
+            overlay_vertices: Vec::new(),
+            overlay_indices: Vec::new(),
+            overlay_text_commands: Vec::new(),
             screen_width: width as f32,
             screen_height: height as f32,
             clip_stack: Vec::new(),
@@ -308,6 +347,9 @@ impl Renderer {
         self.vertices.clear();
         self.indices.clear();
         self.text_commands.clear();
+        self.overlay_vertices.clear();
+        self.overlay_indices.clear();
+        self.overlay_text_commands.clear();
         self.clip_stack.clear();
     }
 
@@ -471,18 +513,33 @@ impl Renderer {
         }
     }
 
-    /// Queues text for rendering.
-    ///
-    /// # Arguments
-    /// * `text` - The text to render
-    /// * `position` - Position in pixels (top-left of text bounds)
-    /// * `style` - Text style (font size, color, alignment)
+    /// Queues simple text for rendering.
     pub fn draw_text(&mut self, text: impl Into<String>, position: Vec2, style: TextStyle) {
-        self.text_commands.push(TextCommand {
+        self.text_commands.push(TextCommand::Simple {
             text: text.into(),
             position,
             style,
             bounds_width: None,
+        });
+    }
+
+    /// Queues rich text (using cosmic-text AttrsList) for rendering.
+    pub fn draw_rich_text(
+        &mut self,
+        text: String,
+        attrs: AttrsList,
+        position: Vec2,
+        bounds_width: Option<f32>,
+        default_color: Color,
+        line_height: f32,
+    ) {
+        self.text_commands.push(TextCommand::Rich {
+            text,
+            attrs,
+            position,
+            bounds_width,
+            default_color,
+            line_height,
         });
     }
 
@@ -500,12 +557,91 @@ impl Renderer {
         max_width: f32,
         style: TextStyle,
     ) {
-        self.text_commands.push(TextCommand {
+        self.text_commands.push(TextCommand::Simple {
             text: text.into(),
             position,
             style,
             bounds_width: Some(max_width),
         });
+    }
+
+    // ========================================================================
+    // OVERLAY LAYER (rendered on top, no clipping)
+    // ========================================================================
+
+    /// Draws a filled rectangle on the overlay layer.
+    /// Overlay content is rendered after the main pass with no scissor clipping.
+    pub fn draw_overlay_rect(&mut self, rect: Rect, color: Color) {
+        let base_index = self.overlay_vertices.len() as u32;
+
+        self.overlay_vertices
+            .push(Vertex::new(rect.x, rect.y, color));
+        self.overlay_vertices
+            .push(Vertex::new(rect.x + rect.width, rect.y, color));
+        self.overlay_vertices.push(Vertex::new(
+            rect.x + rect.width,
+            rect.y + rect.height,
+            color,
+        ));
+        self.overlay_vertices
+            .push(Vertex::new(rect.x, rect.y + rect.height, color));
+
+        self.overlay_indices.push(base_index);
+        self.overlay_indices.push(base_index + 1);
+        self.overlay_indices.push(base_index + 2);
+        self.overlay_indices.push(base_index);
+        self.overlay_indices.push(base_index + 2);
+        self.overlay_indices.push(base_index + 3);
+    }
+
+    /// Draws text on the overlay layer.
+    /// Overlay content is rendered after the main pass with no scissor clipping.
+    pub fn draw_overlay_text(&mut self, text: impl Into<String>, position: Vec2, style: TextStyle) {
+        self.overlay_text_commands.push(TextCommand::Simple {
+            text: text.into(),
+            position,
+            style,
+            bounds_width: None,
+        });
+    }
+
+    /// Draws a styled rectangle on the overlay layer.
+    pub fn draw_overlay_style_rect(&mut self, rect: Rect, style: &Style) {
+        // Shadow
+        if let Some(shadow) = &style.shadow {
+            let shadow_rect = Rect::new(
+                rect.x + shadow.offset.x,
+                rect.y + shadow.offset.y,
+                rect.width,
+                rect.height,
+            );
+            self.draw_overlay_rect(shadow_rect, shadow.color);
+        }
+        // Border
+        if let Some(border) = &style.border {
+            if border.width > 0.0 {
+                let border_rect = Rect::new(
+                    rect.x - border.width,
+                    rect.y - border.width,
+                    rect.width + border.width * 2.0,
+                    rect.height + border.width * 2.0,
+                );
+                self.draw_overlay_rect(border_rect, border.color);
+            }
+        }
+        // Background
+        match style.background {
+            Background::Solid(color) => {
+                self.draw_overlay_rect(rect, color);
+            }
+            Background::LinearGradient { start, end, .. } => {
+                let r = (start.r + end.r) / 2.0;
+                let g = (start.g + end.g) / 2.0;
+                let b = (start.b + end.b) / 2.0;
+                let a = (start.a + end.a) / 2.0;
+                self.draw_overlay_rect(rect, Color::new(r, g, b, a));
+            }
+        }
     }
 
     /// Ends the frame and renders all batched content.
@@ -523,22 +659,25 @@ impl Renderer {
         // Ensure buffers are large enough
         self.ensure_buffer_capacity();
 
-        // Upload vertex data
+        // Upload main layer vertex data
         if !self.vertices.is_empty() {
             self.queue
                 .write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&self.vertices));
         }
 
-        // Upload index data
+        // Upload main layer index data
         if !self.indices.is_empty() {
             self.queue
                 .write_buffer(&self.index_buffer, 0, bytemuck::cast_slice(&self.indices));
         }
 
-        // Prepare text for rendering
+        // Prepare main layer text for rendering
         self.prepare_text();
 
-        // Begin render pass
+        // Prepare overlay text for rendering (before render pass to avoid borrow issues)
+        self.prepare_overlay_text();
+
+        // Begin render pass (main layer + overlay layer in same pass)
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("OxidX Render Pass"),
@@ -560,7 +699,9 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            // Draw all batched shapes
+            // =============================================
+            // MAIN PASS (subject to scissor clipping)
+            // =============================================
             if !self.indices.is_empty() {
                 render_pass.set_pipeline(&self.pipeline);
                 render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
@@ -570,74 +711,262 @@ impl Renderer {
                 render_pass.draw_indexed(0..self.indices.len() as u32, 0, 0..1);
             }
 
-            // Render text (glyphon 0.5 renders from what was prepared in the atlas)
+            // Render main layer text
             let _ = self
+                .text_brush
                 .text_renderer
-                .render(&self.text_atlas, &mut render_pass);
+                .render(&self.text_brush.text_atlas, &mut render_pass);
+
+            // =============================================
+            // OVERLAY PASS (no scissor clipping)
+            // =============================================
+            if !self.overlay_indices.is_empty() {
+                // Upload overlay vertex/index data
+                // Note: We reuse the same buffers for simplicity, overwriting main data
+                // A production engine would use separate buffers or offset
+                self.queue.write_buffer(
+                    &self.vertex_buffer,
+                    0,
+                    bytemuck::cast_slice(&self.overlay_vertices),
+                );
+                self.queue.write_buffer(
+                    &self.index_buffer,
+                    0,
+                    bytemuck::cast_slice(&self.overlay_indices),
+                );
+
+                render_pass.set_pipeline(&self.pipeline);
+                render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+                render_pass
+                    .set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..self.overlay_indices.len() as u32, 0, 0..1);
+            }
+
+            // Note: Overlay text was prepared before render pass, just render it
+            let _ = self
+                .text_brush
+                .text_renderer
+                .render(&self.text_brush.text_atlas, &mut render_pass);
         }
 
         // Trim the text atlas periodically
-        self.text_atlas.trim();
+        self.text_brush.text_atlas.trim();
     }
 
-    /// Prepares text commands for rendering with glyphon.
+    /// Prepares text commands for rendering.
     fn prepare_text(&mut self) {
         if self.text_commands.is_empty() {
             return;
         }
 
+        let mut buffers = Vec::new();
+
+        // 1. Create buffers for all commands
+        // Note: In a real implementation we would cache these buffers in TextBrush
+        // using IDs or frames, but for simplicity we recreate them.
         for cmd in &self.text_commands {
-            // Create a text buffer for this command
-            let mut buffer = Buffer::new(
-                &mut self.font_system,
-                Metrics::new(cmd.style.font_size, cmd.style.font_size * 1.2),
-            );
+            match cmd {
+                TextCommand::Simple {
+                    text,
+                    position,
+                    style,
+                    bounds_width,
+                } => {
+                    let mut buffer = Buffer::new(
+                        &mut self.text_brush.font_system,
+                        Metrics::new(style.font_size, style.font_size * 1.2),
+                    );
 
-            let bounds_width = cmd
-                .bounds_width
-                .unwrap_or(self.screen_width - cmd.position.x);
-            buffer.set_size(&mut self.font_system, bounds_width, self.screen_height);
+                    let width = bounds_width.unwrap_or(self.screen_width - position.x);
+                    buffer.set_size(&mut self.text_brush.font_system, width, self.screen_height);
 
-            buffer.set_text(
-                &mut self.font_system,
-                &cmd.text,
-                Attrs::new().family(Family::SansSerif),
-                Shaping::Advanced,
-            );
+                    buffer.set_text(
+                        &mut self.text_brush.font_system,
+                        text,
+                        Attrs::new().family(Family::SansSerif),
+                        Shaping::Advanced,
+                    );
 
-            buffer.shape_until_scroll(&mut self.font_system);
+                    buffer.shape_until_scroll(&mut self.text_brush.font_system);
+                    buffers.push((buffer, *position, style.color));
+                }
+                TextCommand::Rich {
+                    text,
+                    attrs,
+                    position,
+                    bounds_width,
+                    default_color,
+                    line_height,
+                } => {
+                    let mut buffer = Buffer::new(
+                        &mut self.text_brush.font_system,
+                        Metrics::new(*line_height, *line_height * 1.2),
+                    );
 
-            // Prepare the buffer for rendering
-            let _ = self.text_renderer.prepare(
-                &self.device,
-                &self.queue,
-                &mut self.font_system,
-                &mut self.text_atlas,
-                Resolution {
-                    width: self.screen_width as u32,
-                    height: self.screen_height as u32,
-                },
-                [TextArea {
-                    buffer: &buffer,
-                    left: cmd.position.x,
-                    top: cmd.position.y,
-                    scale: 1.0,
-                    bounds: TextBounds {
-                        left: cmd.position.x as i32,
-                        top: cmd.position.y as i32,
-                        right: (cmd.position.x + bounds_width) as i32,
-                        bottom: self.screen_height as i32,
-                    },
-                    default_color: glyphon::Color::rgba(
-                        (cmd.style.color.r * 255.0) as u8,
-                        (cmd.style.color.g * 255.0) as u8,
-                        (cmd.style.color.b * 255.0) as u8,
-                        (cmd.style.color.a * 255.0) as u8,
-                    ),
-                }],
-                &mut self.swash_cache,
-            );
+                    let width = bounds_width.unwrap_or(self.screen_width - position.x);
+                    buffer.set_size(&mut self.text_brush.font_system, width, self.screen_height);
+
+                    buffer.set_text(
+                        &mut self.text_brush.font_system,
+                        text,
+                        Attrs::new().family(Family::SansSerif),
+                        Shaping::Advanced,
+                    );
+
+                    if !buffer.lines.is_empty() {
+                        for line in &mut buffer.lines {
+                            line.set_attrs_list(attrs.clone());
+                        }
+                    }
+
+                    buffer.shape_until_scroll(&mut self.text_brush.font_system);
+                    buffers.push((buffer, *position, *default_color));
+                }
+            }
         }
+
+        // 2. Prepare text areas
+        let text_areas: Vec<TextArea> = buffers
+            .iter()
+            .map(|(buffer, pos, color)| TextArea {
+                buffer,
+                left: pos.x,
+                top: pos.y,
+                scale: 1.0,
+                bounds: TextBounds {
+                    left: pos.x as i32,
+                    top: pos.y as i32,
+                    right: (pos.x + buffer.size().0) as i32,
+                    bottom: self.screen_height as i32,
+                },
+                default_color: glyphon::Color::rgba(
+                    (color.r * 255.0) as u8,
+                    (color.g * 255.0) as u8,
+                    (color.b * 255.0) as u8,
+                    (color.a * 255.0) as u8,
+                ),
+            })
+            .collect();
+
+        // 3. Submit to glyphon
+        let _ = self.text_brush.text_renderer.prepare(
+            &self.device,
+            &self.queue,
+            &mut self.text_brush.font_system,
+            &mut self.text_brush.text_atlas,
+            Resolution {
+                width: self.screen_width as u32,
+                height: self.screen_height as u32,
+            },
+            text_areas,
+            &mut self.text_brush.swash_cache,
+        );
+    }
+
+    /// Prepares overlay text commands for rendering.
+    fn prepare_overlay_text(&mut self) {
+        if self.overlay_text_commands.is_empty() {
+            return;
+        }
+
+        let mut buffers = Vec::new();
+
+        for cmd in &self.overlay_text_commands {
+            match cmd {
+                TextCommand::Simple {
+                    text,
+                    position,
+                    style,
+                    bounds_width,
+                } => {
+                    let mut buffer = Buffer::new(
+                        &mut self.text_brush.font_system,
+                        Metrics::new(style.font_size, style.font_size * 1.2),
+                    );
+
+                    let width = bounds_width.unwrap_or(self.screen_width - position.x);
+                    buffer.set_size(&mut self.text_brush.font_system, width, self.screen_height);
+
+                    buffer.set_text(
+                        &mut self.text_brush.font_system,
+                        text,
+                        Attrs::new().family(Family::SansSerif),
+                        Shaping::Advanced,
+                    );
+
+                    buffer.shape_until_scroll(&mut self.text_brush.font_system);
+                    buffers.push((buffer, *position, style.color));
+                }
+                TextCommand::Rich {
+                    text,
+                    attrs,
+                    position,
+                    bounds_width,
+                    default_color,
+                    line_height,
+                } => {
+                    let mut buffer = Buffer::new(
+                        &mut self.text_brush.font_system,
+                        Metrics::new(*line_height, *line_height * 1.2),
+                    );
+
+                    let width = bounds_width.unwrap_or(self.screen_width - position.x);
+                    buffer.set_size(&mut self.text_brush.font_system, width, self.screen_height);
+
+                    buffer.set_text(
+                        &mut self.text_brush.font_system,
+                        text,
+                        Attrs::new().family(Family::SansSerif),
+                        Shaping::Advanced,
+                    );
+
+                    if !buffer.lines.is_empty() {
+                        for line in &mut buffer.lines {
+                            line.set_attrs_list(attrs.clone());
+                        }
+                    }
+
+                    buffer.shape_until_scroll(&mut self.text_brush.font_system);
+                    buffers.push((buffer, *position, *default_color));
+                }
+            }
+        }
+
+        let text_areas: Vec<TextArea> = buffers
+            .iter()
+            .map(|(buffer, pos, color)| TextArea {
+                buffer,
+                left: pos.x,
+                top: pos.y,
+                scale: 1.0,
+                bounds: TextBounds {
+                    left: pos.x as i32,
+                    top: pos.y as i32,
+                    right: (pos.x + buffer.size().0) as i32,
+                    bottom: self.screen_height as i32,
+                },
+                default_color: glyphon::Color::rgba(
+                    (color.r * 255.0) as u8,
+                    (color.g * 255.0) as u8,
+                    (color.b * 255.0) as u8,
+                    (color.a * 255.0) as u8,
+                ),
+            })
+            .collect();
+
+        let _ = self.text_brush.text_renderer.prepare(
+            &self.device,
+            &self.queue,
+            &mut self.text_brush.font_system,
+            &mut self.text_brush.text_atlas,
+            Resolution {
+                width: self.screen_width as u32,
+                height: self.screen_height as u32,
+            },
+            text_areas,
+            &mut self.text_brush.swash_cache,
+        );
     }
 
     /// Ensures vertex and index buffers are large enough.

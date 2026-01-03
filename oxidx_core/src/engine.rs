@@ -425,11 +425,32 @@ fn process_window_event<C: OxidXComponent>(
             }
         }
 
-        // Handle character input (for text fields)
-        WindowEvent::Ime(winit::event::Ime::Commit(text)) => {
+        // Handle IME input
+        WindowEvent::Ime(ime_event) => {
             if ctx.focused_id.is_some() {
-                for ch in text.chars() {
-                    component.on_keyboard_input(&OxidXEvent::CharInput { character: ch }, ctx);
+                match ime_event {
+                    winit::event::Ime::Preedit(text, cursor) => {
+                        let (start, end) = cursor
+                            .map(|(s, e)| (Some(s), Some(e)))
+                            .unwrap_or((None, None));
+                        component.on_event(
+                            &OxidXEvent::ImePreedit {
+                                text: text.to_string(),
+                                cursor_start: start,
+                                cursor_end: end,
+                            },
+                            ctx,
+                        );
+                    }
+                    winit::event::Ime::Commit(text) => {
+                        component.on_event(&OxidXEvent::ImeCommit(text.to_string()), ctx);
+                        // Also fire CharInput for compatibility if needed, but components should prefer ImeCommit for blocks
+                        for ch in text.chars() {
+                            component
+                                .on_keyboard_input(&OxidXEvent::CharInput { character: ch }, ctx);
+                        }
+                    }
+                    _ => {}
                 }
             }
         }

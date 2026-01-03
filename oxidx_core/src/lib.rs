@@ -38,6 +38,7 @@
 //! }
 //! ```
 
+pub mod assets;
 pub mod component;
 pub mod context;
 pub mod engine;
@@ -49,6 +50,7 @@ pub mod style;
 pub mod theme;
 
 // Re-export primary types
+pub use assets::{AssetError, AssetLoader, LoadedImage};
 pub use component::OxidXComponent;
 pub use context::{ContextError, OxidXContext};
 pub use engine::{run, run_with_config, AppConfig};

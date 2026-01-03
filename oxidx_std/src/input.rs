@@ -24,6 +24,8 @@ pub struct Input {
     id: String,
     /// Whether all text is selected
     is_selected: bool,
+    /// IME pre-edit text (composition)
+    ime_preedit: String,
 }
 
 impl Input {
@@ -72,6 +74,7 @@ impl Input {
             text_style: TextStyle::new(14.0).with_color(Color::WHITE),
             id: String::new(),
             is_selected: false,
+            ime_preedit: String::new(),
         }
     }
 
@@ -92,6 +95,26 @@ impl Input {
 
     pub fn value(&self) -> &str {
         &self.value
+    }
+
+    /// Helper to update IME cursor position
+    fn update_ime_position(&self, ctx: &OxidXContext) {
+        if self.is_focused {
+            let text_pos_y = self.bounds.y + (self.bounds.height - self.text_style.font_size) / 2.0;
+            let padding = self.layout.padding;
+
+            // Calculate cursor x (same logic as render)
+            let base_width = self.value.len() as f32 * 8.0;
+            let preedit_width = self.ime_preedit.len() as f32 * 8.0;
+            let cursor_x = self.bounds.x + padding + base_width + preedit_width;
+
+            ctx.set_ime_position(Rect::new(
+                cursor_x,
+                text_pos_y,
+                2.0,
+                self.text_style.font_size,
+            ));
+        }
     }
 }
 
@@ -165,9 +188,50 @@ impl OxidXComponent for Input {
 
         // Draw cursor if focused and not selected
         if self.is_focused && !self.is_selected {
-            let cursor_x = text_pos.x + self.value.len() as f32 * 8.0;
-            let cursor_rect = Rect::new(cursor_x, text_pos.y, 2.0, self.text_style.font_size);
+            // Calculate cursor position (simple monospace approximation)
+            let base_width = self.value.len() as f32 * 8.0;
+            let cursor_x = text_pos.x + base_width;
+
+            // Render IME pre-edit text if active
+            if !self.ime_preedit.is_empty() {
+                renderer.draw_text(
+                    &self.ime_preedit,
+                    Vec2::new(cursor_x, text_pos.y),
+                    TextStyle {
+                        font_size: self.text_style.font_size,
+                        color: Color::new(1.0, 1.0, 0.5, 1.0), // Yellow for pre-edit
+                        ..self.text_style.clone()
+                    },
+                );
+
+                // Draw underline for pre-edit
+                let preedit_width = self.ime_preedit.len() as f32 * 8.0;
+                renderer.fill_rect(
+                    Rect::new(
+                        cursor_x,
+                        text_pos.y + self.text_style.font_size,
+                        preedit_width,
+                        1.0,
+                    ),
+                    Color::new(1.0, 1.0, 0.5, 1.0),
+                );
+            }
+
+            // Draw I-beam cursor
+            // If pre-edit is active, cursor is usually at end of pre-edit or specific pos.
+            // For simplicity, we put it at the end of pre-edit + value.
+            let total_width = base_width + (self.ime_preedit.len() as f32 * 8.0);
+            let final_cursor_x = text_pos.x + total_width;
+
+            let cursor_rect = Rect::new(final_cursor_x, text_pos.y, 2.0, self.text_style.font_size);
             renderer.fill_rect(cursor_rect, current_style.text_color);
+
+            //
+            // We can calculate cursor position in `on_event`?
+            // `text_pos` depends on `bounds`.
+            // `bounds` is updated in `layout`.
+            // So in `on_event`, we have valid `bounds`.
+            // We can recalculate `cursor_x` there and call `set_ime_position`.
         }
     }
 
@@ -211,6 +275,23 @@ impl OxidXComponent for Input {
             | OxidXEvent::Click { .. } => {
                 // Clear selection on click
                 self.is_selected = false;
+                true
+            }
+            OxidXEvent::ImePreedit { text, .. } => {
+                self.ime_preedit = text.clone();
+                // We should update IME position here too if it changes
+                self.update_ime_position(ctx);
+                true
+            }
+            OxidXEvent::ImeCommit(text) => {
+                // Commit text
+                if self.is_selected {
+                    self.value.clear();
+                    self.is_selected = false;
+                }
+                self.value.push_str(text);
+                self.ime_preedit.clear(); // Clear preedit
+                self.update_ime_position(ctx);
                 true
             }
             _ => false,
