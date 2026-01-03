@@ -32,6 +32,11 @@ impl Rect {
     pub fn size(&self) -> Vec2 {
         Vec2::new(self.width, self.height)
     }
+
+    /// Returns the center point.
+    pub fn center(&self) -> Vec2 {
+        Vec2::new(self.x + self.width / 2.0, self.y + self.height / 2.0)
+    }
 }
 
 /// Text alignment options.
@@ -102,6 +107,23 @@ impl Color {
 
     pub const fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
         Self { r, g, b, a }
+    }
+
+    /// Creates a color from a hex string (e.g. "#RRGGBB" or "RRGGBB").
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        let hex = hex.trim_start_matches('#');
+        if hex.len() != 6 {
+            return None;
+        }
+        let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+        let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+        let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+        Some(Self::new(
+            r as f32 / 255.0,
+            g as f32 / 255.0,
+            b as f32 / 255.0,
+            1.0,
+        ))
     }
 
     pub fn to_array(&self) -> [f32; 4] {

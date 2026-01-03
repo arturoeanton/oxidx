@@ -168,3 +168,50 @@ pub enum StackAlignment {
     /// Stretch children to fill cross-axis.
     Stretch,
 }
+
+/// General alignment options.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Alignment {
+    /// Align to the start (left/top).
+    #[default]
+    Start,
+    /// Center within available space.
+    Center,
+    /// Align to the end (right/bottom).
+    End,
+    /// Stretch to fill available space.
+    Stretch,
+}
+
+/// Common layout properties for components.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct LayoutProps {
+    /// Internal padding.
+    pub padding: f32,
+    /// External margin.
+    pub margin: f32,
+    /// Self alignment within parent.
+    pub alignment: Alignment,
+}
+
+impl LayoutProps {
+    /// Creates a new LayoutProps with default values.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_padding(mut self, padding: f32) -> Self {
+        self.padding = padding;
+        self
+    }
+
+    pub fn with_margin(mut self, margin: f32) -> Self {
+        self.margin = margin;
+        self
+    }
+
+    pub fn with_alignment(mut self, alignment: Alignment) -> Self {
+        self.alignment = alignment;
+        self
+    }
+}

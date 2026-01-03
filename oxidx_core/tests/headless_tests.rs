@@ -78,9 +78,9 @@ fn test_primitives() {
     use oxidx_core::primitives::{Color, Rect};
 
     // Test Color
-    let color = Color::from_hex(0xFF5500);
+    let color = Color::from_hex("FF0000").unwrap();
     assert_eq!(color.r, 1.0);
-    assert!((color.g - 0.333).abs() < 0.01);
+    assert_eq!(color.g, 0.0);
     assert_eq!(color.b, 0.0);
     assert_eq!(color.a, 1.0);
 

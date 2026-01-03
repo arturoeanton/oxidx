@@ -4,11 +4,15 @@
 
 pub mod button;
 pub mod containers;
+pub mod input;
+pub mod label;
 pub mod prelude;
 
 // Re-export components
 pub use button::Button;
 pub use containers::{HStack, VStack, ZStack};
+pub use input::Input;
+pub use label::Label;
 
 // Re-export core types
 pub use oxidx_core::{

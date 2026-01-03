@@ -337,6 +337,7 @@ pub struct ZStack {
     bounds: Rect,
     children: Vec<Box<dyn OxidXComponent>>,
     background: Option<Color>,
+    padding: f32,
 }
 
 impl ZStack {
@@ -346,7 +347,19 @@ impl ZStack {
             bounds: Rect::default(),
             children: Vec::new(),
             background: None,
+            padding: 0.0,
         }
+    }
+
+    /// Sets the ZStack padding.
+    pub fn with_padding(mut self, padding: f32) -> Self {
+        self.padding = padding;
+        self
+    }
+
+    /// Sets the padding.
+    pub fn set_padding(&mut self, padding: f32) {
+        self.padding = padding;
     }
 
     /// Sets the background color.
@@ -381,9 +394,17 @@ impl OxidXComponent for ZStack {
     fn layout(&mut self, available: Rect) -> Vec2 {
         self.bounds = available;
 
-        // All children get the full available space
+        let padding = self.padding;
+        let content_rect = Rect::new(
+            available.x + padding,
+            available.y + padding,
+            available.width - padding * 2.0,
+            available.height - padding * 2.0,
+        );
+
+        // All children get the full content space
         for child in &mut self.children {
-            child.layout(available);
+            child.layout(content_rect);
         }
 
         Vec2::new(available.width, available.height)

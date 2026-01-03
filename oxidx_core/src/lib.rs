@@ -53,7 +53,7 @@ pub use component::OxidXComponent;
 pub use context::{ContextError, OxidXContext};
 pub use engine::{run, run_with_config, AppConfig};
 pub use events::{KeyCode, Modifiers, MouseButton, OxidXEvent};
-pub use layout::{Anchor, SizeConstraint, Spacing, StackAlignment};
+pub use layout::{Alignment, Anchor, LayoutProps, SizeConstraint, Spacing, StackAlignment};
 pub use primitives::{Color, Rect, TextAlign, TextStyle};
 pub use renderer::Renderer;
 pub use style::{Background, Border, ComponentState, InteractiveStyle, Shadow, Style};
