@@ -4,7 +4,7 @@ This document tracks the current stability and implementation status of the Oxid
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| **Core Engine** | 🟢 Stable | efficient render loop, batched rendering, wgpu backend. |
+| **Core Engine** | 🟢 Stable | Efficient render loop, batched rendering, Two-pass Overlay Rendering (Z-fix). |
 | **Event System** | 🟢 Stable | Mouse, Keyboard, Focus, and IME events fully implemented. |
 | **Layout System** | 🟢 Stable | Flex-like stacks, Grid, and absolute positioning. |
 | **Focus Manager** | 🟢 Stable | Tab/Shift+Tab navigation working reliably. |
@@ -19,7 +19,7 @@ This document tracks the current stability and implementation status of the Oxid
 | `TextArea` | 🟢 Stable | Multi-line, scrolling, line numbers, undo/redo. |
 | `Checkbox` | 🟢 Stable | Tri-state support (checked, unchecked, indeterminate). |
 | `RadioGroup` | 🟢 Stable | Keyboard navigation, exclusion logic. |
-| `ComboBox` | 🟢 Stable | Dropdown, search/filter, scrolling list. |
+| `ComboBox` | 🟢 Stable | Dropdown (Overlay), search/filter, scrolling list. |
 | `ListBox` | 🟢 Stable | Multi-selection, virtualization ready. |
 | `Grid` | 🟢 Stable | Resizable columns, sorting, cell selection. |
 | `ScrollView` | 🟢 Stable | Nested clipping, scrollbars, mouse wheel. |

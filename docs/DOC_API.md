@@ -204,6 +204,7 @@ Manages GPU context and OS integration. Passed to event handlers.
 |--------|-------------|
 | `draw_overlay_rect(rect, color)` | Overlay rectangle |
 | `draw_overlay_text(text, pos, style)` | Overlay text |
+| `draw_overlay_text_bounded(text, pos, max_width, style)` | Overlay text with wrap |
 | `draw_overlay_style_rect(rect, style)` | Styled overlay |
 
 ### Info

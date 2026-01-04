@@ -204,6 +204,7 @@ Gestiona el contexto GPU e integración con el SO. Se pasa a los manejadores de 
 |--------|-------------|
 | `draw_overlay_rect(rect, color)` | Rectángulo overlay |
 | `draw_overlay_text(text, pos, style)` | Texto overlay |
+| `draw_overlay_text_bounded(text, pos, max_width, style)` | Texto overlay con wrap |
 | `draw_overlay_style_rect(rect, style)` | Overlay con estilo |
 
 ### Información
