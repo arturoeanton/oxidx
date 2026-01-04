@@ -79,7 +79,9 @@ OxidX comes with a polished standard library:
 | **Charts** | Data visualization widgets: `PieChart`, `BarChart`, `LineChart` |
 | **Calendar** | Interactive month view calendar for date selection |
 | **ContextMenu** | Right-click overlay menus with sub-items support |
-| **SideMenu / Header** | High-level application layout structures |
+| **CodeEditor** | Syntax-highlighted code editor with line numbers, minimap, and dynamic syntax loading |
+| **Modal / Alert / Confirm** | Dialog overlays for user prompts and confirmations |
+| **SideMenu / Header / Footer** | High-level application layout structures |
 
 ## 👩‍💻 Quick Start
 

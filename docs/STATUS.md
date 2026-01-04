@@ -34,6 +34,8 @@ This document tracks the current stability and implementation status of the Oxid
 | `Charts` | 🟡 Beta | Pie, Bar, and Line charts (basic rendering). |
 | `Calendar` | 🟡 Beta | Month view with selection. |
 | `ContextMenu` | 🟡 Beta | Overlay-based menu system. |
+| `CodeEditor` | 🟢 Stable | Syntax highlighting, line numbers, minimap, dynamic JSON syntax. |
+| `Modal/Alert/Confirm` | 🟡 Beta | Blocking dialog overlays. |
 
 ## Tooling
 

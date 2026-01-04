@@ -79,7 +79,9 @@ OxidX viene con una librería estándar pulida:
 | **Charts** | Widgets de visualización de datos: `PieChart`, `BarChart`, `LineChart` |
 | **Calendar** | Calendario interactivo mensual para selección de fechas |
 | **ContextMenu** | Menús contextuales overlay (clic derecho) con soporte de items |
-| **SideMenu / Header** | Estructuras de alto nivel para layout de aplicaciones |
+| **CodeEditor** | Editor de código con resaltado de sintaxis, números de línea, minimapa y carga dinámica de sintaxis |
+| **Modal / Alert / Confirm** | Overlays de diálogo para prompts y confirmaciones |
+| **SideMenu / Header / Footer** | Estructuras de alto nivel para layout de aplicaciones |
 
 ## 👩‍💻 Inicio Rápido
 
