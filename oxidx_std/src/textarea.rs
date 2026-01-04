@@ -158,6 +158,8 @@ pub struct TextArea {
     show_scrollbar_x: bool,
     /// Show vertical scrollbar
     show_scrollbar_y: bool,
+    /// Is dragging the scrollbar thumb
+    is_dragging_scrollbar: bool,
 
     // === Undo/Redo ===
     undo_stack: Vec<UndoAction>,
@@ -178,6 +180,14 @@ pub struct TextArea {
     cached_tokens: Vec<Vec<TextSpan>>,
     /// Whether cache needs to be rebuilt
     tokens_dirty: bool,
+
+    // === Minimap (VS Code style) ===
+    /// Show minimap on right side
+    show_minimap: bool,
+    /// Width of minimap in pixels
+    minimap_width: f32,
+    /// Is dragging the minimap viewport
+    is_dragging_minimap: bool,
 }
 
 /// Action for undo/redo
@@ -253,6 +263,7 @@ impl TextArea {
             visible_lines: 10,
             show_scrollbar_x: false,
             show_scrollbar_y: true,
+            is_dragging_scrollbar: false,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
             ime_preedit: String::new(),
@@ -263,6 +274,10 @@ impl TextArea {
             syntax_theme: SyntaxTheme::dark_rust(),
             cached_tokens: Vec::new(),
             tokens_dirty: true,
+            // Minimap
+            show_minimap: false,
+            minimap_width: 80.0,
+            is_dragging_minimap: false,
         }
     }
 
@@ -323,6 +338,18 @@ impl TextArea {
     /// Shows/hides the vertical scrollbar.
     pub fn with_scrollbar_y(mut self, show: bool) -> Self {
         self.show_scrollbar_y = show;
+        self
+    }
+
+    /// Enables/disables the minimap (VS Code style code preview).
+    pub fn with_minimap(mut self, show: bool) -> Self {
+        self.show_minimap = show;
+        self
+    }
+
+    /// Sets the minimap width (default: 80 pixels).
+    pub fn with_minimap_width(mut self, width: f32) -> Self {
+        self.minimap_width = width;
         self
     }
 
@@ -1305,11 +1332,14 @@ impl OxidXComponent for TextArea {
 
         // 4. Draw text lines with syntax highlighting
         let is_empty = self.lines.len() == 1 && self.lines[0].is_empty();
+        let visible_top = content_y;
+        let visible_bottom = self.bounds.y + self.bounds.height - padding;
 
         for (i, line) in self.lines.iter().enumerate() {
             let y = content_y + (i as f32 * self.line_height) - self.scroll_offset.y;
 
-            if y < content_y - self.line_height || y > self.bounds.y + self.bounds.height {
+            // Skip lines outside visible area (strict clipping)
+            if y + self.line_height < visible_top || y > visible_bottom {
                 continue;
             }
 
@@ -1402,14 +1432,148 @@ impl OxidXComponent for TextArea {
                     cursor_x + renderer.measure_text(&self.ime_preedit, self.text_style.font_size)
                 };
 
-                renderer.fill_rect(
-                    Rect::new(final_cursor_x, cursor_y, 2.0, self.line_height),
-                    self.text_style.color,
-                );
+                // Only draw cursor if within visible area
+                if cursor_y >= content_y && cursor_y < self.bounds.y + self.bounds.height {
+                    renderer.fill_rect(
+                        Rect::new(final_cursor_x, cursor_y, 2.0, self.line_height),
+                        self.text_style.color,
+                    );
+                }
 
                 self.cached_cursor_x.set(final_cursor_x);
                 self.cached_cursor_y.set(cursor_y);
             }
+        }
+
+        // 6. Draw scrollbars
+        let scrollbar_width = 8.0;
+        let content_height = self.lines.len() as f32 * self.line_height;
+        let visible_height = self.bounds.height - padding * 2.0;
+
+        // Vertical scrollbar
+        if self.show_scrollbar_y && content_height > visible_height {
+            let track_x = self.bounds.x + self.bounds.width - scrollbar_width - 2.0;
+            let track_y = self.bounds.y + padding;
+            let track_height = visible_height;
+
+            // Track background
+            renderer.fill_rect(
+                Rect::new(track_x, track_y, scrollbar_width, track_height),
+                Color::new(0.15, 0.15, 0.18, 0.8),
+            );
+
+            // Thumb
+            let max_scroll = (content_height - visible_height).max(1.0);
+            let thumb_height = (visible_height / content_height * track_height).max(20.0);
+            let thumb_y =
+                track_y + (self.scroll_offset.y / max_scroll) * (track_height - thumb_height);
+
+            renderer.fill_rect(
+                Rect::new(track_x, thumb_y, scrollbar_width, thumb_height),
+                Color::new(0.4, 0.4, 0.45, 0.9),
+            );
+        }
+
+        // 7. Draw Minimap (VS Code style)
+        if self.show_minimap {
+            let minimap_x = self.bounds.x + self.bounds.width - self.minimap_width - 4.0;
+            let minimap_y = self.bounds.y + padding;
+            let minimap_height = visible_height;
+
+            // Minimap background
+            renderer.fill_rect(
+                Rect::new(minimap_x, minimap_y, self.minimap_width, minimap_height),
+                Color::new(0.08, 0.08, 0.1, 0.95),
+            );
+
+            // Calculate minimap scale
+            let total_lines = self.lines.len() as f32;
+            let minimap_line_height = 2.0; // Each line is 2px tall in minimap
+            let minimap_content_height = total_lines * minimap_line_height;
+
+            // Calculate what portion of content is visible
+            let scale = if minimap_content_height > minimap_height {
+                minimap_height / minimap_content_height
+            } else {
+                1.0
+            };
+
+            // Calculate minimap scroll offset to keep viewport visible
+            let minimap_scroll = if minimap_content_height > minimap_height {
+                let scroll_ratio = self.scroll_offset.y / content_height.max(1.0);
+                scroll_ratio * (minimap_content_height - minimap_height)
+            } else {
+                0.0
+            };
+
+            // Draw minimap lines
+            for (i, line) in self.lines.iter().enumerate() {
+                let line_y = minimap_y + (i as f32 * minimap_line_height) - minimap_scroll;
+
+                // Skip lines outside minimap area
+                if line_y < minimap_y - minimap_line_height || line_y > minimap_y + minimap_height {
+                    continue;
+                }
+
+                if line.is_empty() {
+                    continue;
+                }
+
+                // Use syntax tokens if available for coloring
+                if self.syntax_theme.enabled && i < self.cached_tokens.len() {
+                    let mut x = minimap_x + 2.0;
+                    for span in &self.cached_tokens[i] {
+                        let char_width = 1.0; // Each char is ~1px in minimap
+                        let span_width =
+                            (span.text.len() as f32 * char_width).min(self.minimap_width - 4.0);
+
+                        if span_width > 0.5 {
+                            let mut color = span.color;
+                            color.a *= 0.8;
+                            renderer.fill_rect(
+                                Rect::new(x, line_y, span_width, minimap_line_height - 0.5),
+                                color,
+                            );
+                        }
+                        x += span_width;
+                        if x > minimap_x + self.minimap_width - 2.0 {
+                            break;
+                        }
+                    }
+                } else {
+                    // Simple gray line representation
+                    let line_width = (line.len() as f32 * 0.8).min(self.minimap_width - 4.0);
+                    renderer.fill_rect(
+                        Rect::new(
+                            minimap_x + 2.0,
+                            line_y,
+                            line_width,
+                            minimap_line_height - 0.5,
+                        ),
+                        Color::new(0.6, 0.6, 0.65, 0.6),
+                    );
+                }
+            }
+
+            // Draw viewport indicator (the visible area rectangle)
+            let viewport_ratio = visible_height / content_height;
+            let viewport_height = (minimap_height * viewport_ratio)
+                .max(20.0)
+                .min(minimap_height);
+            let viewport_y = minimap_y
+                + (self.scroll_offset.y / content_height.max(1.0))
+                    * (minimap_height - viewport_height);
+
+            renderer.fill_rect(
+                Rect::new(minimap_x, viewport_y, self.minimap_width, viewport_height),
+                Color::new(0.5, 0.5, 0.55, 0.25),
+            );
+
+            // Viewport border
+            renderer.fill_rect(
+                Rect::new(minimap_x, viewport_y, 2.0, viewport_height),
+                Color::new(0.6, 0.6, 0.7, 0.5),
+            );
         }
     }
 
@@ -1471,6 +1635,51 @@ impl OxidXComponent for TextArea {
                 modifiers,
                 ..
             } => {
+                let padding = self.layout.padding;
+                let content_height = self.lines.len() as f32 * self.line_height;
+                let visible_height = self.bounds.height - padding * 2.0;
+
+                // Check if clicking on minimap
+                if self.show_minimap {
+                    let minimap_x = self.bounds.x + self.bounds.width - self.minimap_width - 4.0;
+
+                    if position.x >= minimap_x && position.x <= self.bounds.x + self.bounds.width {
+                        let minimap_y = self.bounds.y + padding;
+                        let max_scroll = (content_height - visible_height).max(0.0);
+
+                        // Center the viewport on click position
+                        let click_ratio =
+                            ((position.y - minimap_y) / visible_height).clamp(0.0, 1.0);
+                        self.scroll_offset.y = (click_ratio * content_height
+                            - visible_height / 2.0)
+                            .clamp(0.0, max_scroll);
+                        self.is_dragging_minimap = true;
+                        return true;
+                    }
+                }
+
+                // Check if clicking on scrollbar
+                let scrollbar_width = 8.0;
+
+                if self.show_scrollbar_y && content_height > visible_height {
+                    let scrollbar_x = self.bounds.x + self.bounds.width - scrollbar_width - 2.0;
+
+                    // If click is on scrollbar area
+                    if position.x >= scrollbar_x
+                        && position.x <= scrollbar_x + scrollbar_width + 2.0
+                    {
+                        let track_y = self.bounds.y + padding;
+                        let track_height = visible_height;
+                        let max_scroll = (content_height - visible_height).max(1.0);
+
+                        // Calculate scroll position from click
+                        let click_ratio = ((position.y - track_y) / track_height).clamp(0.0, 1.0);
+                        self.scroll_offset.y = click_ratio * max_scroll;
+                        self.is_dragging_scrollbar = true;
+                        return true;
+                    }
+                }
+
                 if !self.id.is_empty() {
                     ctx.request_focus(&self.id);
                 }
@@ -1503,6 +1712,35 @@ impl OxidXComponent for TextArea {
                 true
             }
             OxidXEvent::MouseMove { position, .. } => {
+                // Minimap drag has priority
+                if self.is_dragging_minimap {
+                    let padding = self.layout.padding;
+                    let content_height = self.lines.len() as f32 * self.line_height;
+                    let visible_height = self.bounds.height - padding * 2.0;
+                    let minimap_y = self.bounds.y + padding;
+                    let max_scroll = (content_height - visible_height).max(0.0);
+
+                    let click_ratio = ((position.y - minimap_y) / visible_height).clamp(0.0, 1.0);
+                    self.scroll_offset.y = (click_ratio * content_height - visible_height / 2.0)
+                        .clamp(0.0, max_scroll);
+                    return true;
+                }
+
+                // Scrollbar drag has priority
+                if self.is_dragging_scrollbar {
+                    let padding = self.layout.padding;
+                    let content_height = self.lines.len() as f32 * self.line_height;
+                    let visible_height = self.bounds.height - padding * 2.0;
+                    let track_y = self.bounds.y + padding;
+                    let track_height = visible_height;
+                    let max_scroll = (content_height - visible_height).max(1.0);
+
+                    let click_ratio = ((position.y - track_y) / track_height).clamp(0.0, 1.0);
+                    self.scroll_offset.y = click_ratio * max_scroll;
+                    return true;
+                }
+
+                // Text selection
                 if self.is_selecting {
                     let content_x = self.bounds.x + self.layout.padding + self.gutter_width;
                     let content_y = self.bounds.y + self.layout.padding;
@@ -1522,6 +1760,16 @@ impl OxidXComponent for TextArea {
                 }
             }
             OxidXEvent::MouseUp { .. } => {
+                // Release minimap drag
+                if self.is_dragging_minimap {
+                    self.is_dragging_minimap = false;
+                    return true;
+                }
+                // Release scrollbar drag
+                if self.is_dragging_scrollbar {
+                    self.is_dragging_scrollbar = false;
+                    return true;
+                }
                 self.is_selecting = false;
                 if self.selection_anchor == Some(self.cursor) {
                     self.clear_selection();

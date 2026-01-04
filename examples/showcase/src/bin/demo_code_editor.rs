@@ -21,8 +21,9 @@ fn main() {
         .with_id("code_editor")
         .with_line_numbers(true)
         .with_tab_size(4)
-        .with_syntax_highlighting(true)
         .with_syntax_theme(SyntaxTheme::dark_rust())
+        .with_syntax_highlighting(true) // Must be after theme to override enabled=false
+        .with_minimap(true) // VS Code-style minimap
         .text(SAMPLE_CODE);
 
     // === Header ===
