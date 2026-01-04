@@ -756,7 +756,7 @@ impl OxidXComponent for Grid {
                 // Header text
                 let text_style = TextStyle {
                     font_size: self.size.font_size,
-                    color: renderer.theme.colors.text_main,
+                    color: renderer.theme.colors.text_dim, // Muted header text
                     bold: true,
                     align: match col.align {
                         ColumnAlign::Left => TextAlign::Left,
@@ -801,7 +801,8 @@ impl OxidXComponent for Grid {
 
             // Row Highlight
             if self.selected_rows.contains(&row.id) {
-                renderer.fill_rect(row_rect, renderer.theme.colors.primary.with_alpha(0.3));
+                renderer.fill_rect(row_rect, renderer.theme.colors.primary.with_alpha(0.15));
+            // Subtle selection
             } else if self.striped_rows && i % 2 == 1 {
                 renderer.fill_rect(row_rect, renderer.theme.colors.surface_alt);
             }
@@ -846,7 +847,7 @@ impl OxidXComponent for Grid {
                     renderer.draw_line(
                         Vec2::new(x + col.width, y),
                         Vec2::new(x + col.width, y + row_h),
-                        renderer.theme.colors.border.with_alpha(0.5),
+                        renderer.theme.colors.border.with_alpha(0.3),
                         1.0,
                     );
                 }
@@ -876,14 +877,20 @@ impl OxidXComponent for Grid {
                 + (self.scroll.offset_y / self.scroll.max_offset_y())
                     * (self.scrollbar_v_rect.height - thumb_h);
 
-            renderer.fill_rect(
-                Rect::new(
-                    self.scrollbar_v_rect.x,
-                    thumb_y,
-                    self.scrollbar_v_rect.width,
-                    thumb_h,
-                ),
-                renderer.theme.colors.border,
+            // Rounded scrollbar thumb
+            let thumb_width = 6.0;
+            let thumb_rect = Rect::new(
+                self.scrollbar_v_rect.x + (self.scrollbar_v_rect.width - thumb_width) / 2.0,
+                thumb_y,
+                thumb_width,
+                thumb_h,
+            );
+            renderer.draw_rounded_rect(
+                thumb_rect,
+                renderer.theme.colors.surface_hover,
+                thumb_width / 2.0,
+                None,
+                None,
             );
         }
 
@@ -895,14 +902,20 @@ impl OxidXComponent for Grid {
                 + (self.scroll.offset_x / self.scroll.max_offset_x())
                     * (self.scrollbar_h_rect.width - thumb_w);
 
-            renderer.fill_rect(
-                Rect::new(
-                    thumb_x,
-                    self.scrollbar_h_rect.y,
-                    thumb_w,
-                    self.scrollbar_h_rect.height,
-                ),
-                renderer.theme.colors.border,
+            // Rounded scrollbar thumb
+            let thumb_height = 6.0;
+            let thumb_rect = Rect::new(
+                thumb_x,
+                self.scrollbar_h_rect.y + (self.scrollbar_h_rect.height - thumb_height) / 2.0,
+                thumb_w,
+                thumb_height,
+            );
+            renderer.draw_rounded_rect(
+                thumb_rect,
+                renderer.theme.colors.surface_hover,
+                thumb_height / 2.0,
+                None,
+                None,
             );
         }
 

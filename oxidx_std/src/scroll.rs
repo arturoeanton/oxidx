@@ -36,12 +36,16 @@ pub struct ScrollbarStyle {
 
 impl Default for ScrollbarStyle {
     fn default() -> Self {
+        // Modern thin scrollbar with Zinc theme colors
         Self {
-            width: 8.0,
-            track_color: Color::new(0.2, 0.2, 0.2, 0.3),
-            thumb_color: Color::new(0.5, 0.5, 0.5, 0.6),
-            thumb_hover_color: Color::new(0.6, 0.6, 0.6, 0.8),
-            min_thumb_size: 30.0,
+            width: 6.0,                      // Thin
+            track_color: Color::TRANSPARENT, // Invisible track
+            // surface_hover: #3f3f46
+            thumb_color: Color::from_hex("3f3f46").unwrap_or(Color::new(0.25, 0.25, 0.27, 0.8)),
+            // Lighter on hover
+            thumb_hover_color: Color::from_hex("52525b")
+                .unwrap_or(Color::new(0.32, 0.32, 0.36, 1.0)),
+            min_thumb_size: 24.0,
             padding: 2.0,
         }
     }
@@ -364,40 +368,56 @@ impl OxidXComponent for ScrollView {
         // 3. Pop clip
         renderer.pop_clip();
 
-        // 4. Draw vertical scrollbar
+        // 4. Draw vertical scrollbar (modern, rounded)
         if self.show_scrollbar_y && self.needs_scroll_y() {
             let track = self.scrollbar_y_track();
             let thumb = self.scrollbar_y_thumb();
             let style = &self.scrollbar_style;
 
-            // Track background
-            renderer.fill_rect(track, style.track_color);
+            // Track background (transparent by default)
+            if style.track_color.a > 0.0 {
+                renderer.fill_rect(track, style.track_color);
+            }
 
-            // Thumb
+            // Thumb - fully rounded
             let thumb_color = if self.dragging_scrollbar_y || self.scrollbar_y_hovered {
                 style.thumb_hover_color
             } else {
                 style.thumb_color
             };
-            renderer.fill_rect(thumb, thumb_color);
+            renderer.draw_rounded_rect(
+                thumb,
+                thumb_color,
+                style.width / 2.0, // Full rounding
+                None,
+                None,
+            );
         }
 
-        // 5. Draw horizontal scrollbar
+        // 5. Draw horizontal scrollbar (modern, rounded)
         if self.show_scrollbar_x && self.needs_scroll_x() {
             let track = self.scrollbar_x_track();
             let thumb = self.scrollbar_x_thumb();
             let style = &self.scrollbar_style;
 
-            // Track background
-            renderer.fill_rect(track, style.track_color);
+            // Track background (transparent by default)
+            if style.track_color.a > 0.0 {
+                renderer.fill_rect(track, style.track_color);
+            }
 
-            // Thumb
+            // Thumb - fully rounded
             let thumb_color = if self.dragging_scrollbar_x || self.scrollbar_x_hovered {
                 style.thumb_hover_color
             } else {
                 style.thumb_color
             };
-            renderer.fill_rect(thumb, thumb_color);
+            renderer.draw_rounded_rect(
+                thumb,
+                thumb_color,
+                style.width / 2.0, // Full rounding
+                None,
+                None,
+            );
         }
     }
 

@@ -18,7 +18,7 @@ impl Modal {
         Self {
             content: Box::new(content),
             bounds: Rect::default(),
-            scrim_color: Color::new(0.0, 0.0, 0.0, 0.5), // Semi-transparent black
+            scrim_color: Color::new(0.0, 0.0, 0.0, 0.7), // 70% opacity scrim
         }
     }
 }
@@ -47,8 +47,13 @@ impl OxidXComponent for Modal {
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        // Draw Scrim
+        // Draw Scrim (dark overlay)
         renderer.fill_rect(self.bounds, self.scrim_color);
+
+        // Draw shadow under content
+        let content_bounds = self.content.bounds();
+        renderer.draw_shadow(content_bounds, 12.0, 20.0, Color::new(0.0, 0.0, 0.0, 0.5));
+
         // Draw Content
         self.content.render(renderer);
     }
@@ -98,35 +103,38 @@ impl Alert {
     pub fn show(ctx: &mut OxidXContext, title: &str, message: &str) {
         // Build UI
         let mut vstack = VStack::new();
-        // Padding 20, Gap 15
-        vstack.set_spacing(oxidx_core::layout::Spacing::new(20.0, 15.0));
+        // Padding 24, Gap 16
+        vstack.set_spacing(oxidx_core::layout::Spacing::new(24.0, 16.0));
         vstack.set_alignment(StackAlignment::Center);
 
-        // Use background color (Style logic removed for now)
-        vstack.set_background(Color::new(0.2, 0.2, 0.25, 1.0));
+        // Theme-appropriate background (will be rendered by parent container)
+        // Use surface color from theme palette: #27272a
+        vstack
+            .set_background(Color::from_hex("27272a").unwrap_or(Color::new(0.15, 0.15, 0.16, 1.0)));
 
-        // Title
+        // Title - primary text color
         let mut lbl_title = Label::new(title);
         lbl_title.set_size(18.0);
-        lbl_title.set_color(Color::WHITE);
+        // text_primary: #f4f4f5
+        lbl_title.set_color(Color::from_hex("f4f4f5").unwrap_or(Color::WHITE));
         vstack.add_child(Box::new(lbl_title));
 
-        // Message
-        // Message
+        // Message - secondary text color
         for line in message.split('\n') {
             let mut lbl_msg = Label::new(line);
             lbl_msg.set_size(14.0);
-            lbl_msg.set_color(Color::new(0.8, 0.8, 0.8, 1.0));
-            // Center text
+            // text_secondary: #a1a1aa
+            lbl_msg
+                .set_color(Color::from_hex("a1a1aa").unwrap_or(Color::new(0.63, 0.63, 0.67, 1.0)));
             lbl_msg.set_align(oxidx_core::primitives::TextAlign::Center);
             vstack.add_child(Box::new(lbl_msg));
         }
 
-        // OK Button
+        // OK Button (Primary style)
         let btn = Button::new()
             .label("OK")
             .on_click(|ctx: &mut OxidXContext| {
-                ctx.remove_overlay(); // Close top overlay
+                ctx.remove_overlay();
             });
         vstack.add_child(Box::new(btn));
 
@@ -156,45 +164,44 @@ impl Confirm {
 
         // Build UI
         let mut vstack = VStack::new();
-        // Padding 20, Gap 15
-        vstack.set_spacing(oxidx_core::layout::Spacing::new(20.0, 15.0));
+        // Padding 24, Gap 16
+        vstack.set_spacing(oxidx_core::layout::Spacing::new(24.0, 16.0));
         vstack.set_alignment(StackAlignment::Center);
 
-        // Use background color
-        vstack.set_background(Color::new(0.2, 0.2, 0.25, 1.0));
+        // Theme-appropriate background: #27272a
+        vstack
+            .set_background(Color::from_hex("27272a").unwrap_or(Color::new(0.15, 0.15, 0.16, 1.0)));
 
-        // Title
+        // Title - primary text
         let mut lbl_title = Label::new(title);
         lbl_title.set_size(18.0);
-        lbl_title.set_color(Color::WHITE);
+        lbl_title.set_color(Color::from_hex("f4f4f5").unwrap_or(Color::WHITE));
         vstack.add_child(Box::new(lbl_title));
 
-        // Message
-        // Message
+        // Message - secondary text
         for line in message.split('\n') {
             let mut lbl_msg = Label::new(line);
             lbl_msg.set_size(14.0);
-            lbl_msg.set_color(Color::new(0.8, 0.8, 0.8, 1.0));
-            // Center text
+            lbl_msg
+                .set_color(Color::from_hex("a1a1aa").unwrap_or(Color::new(0.63, 0.63, 0.67, 1.0)));
             lbl_msg.set_align(oxidx_core::primitives::TextAlign::Center);
             vstack.add_child(Box::new(lbl_msg));
         }
 
-        // Buttons
+        // Buttons row
         let mut hstack = HStack::new();
-        hstack.set_spacing(oxidx_core::layout::Spacing::gap(10.0));
+        hstack.set_spacing(oxidx_core::layout::Spacing::gap(12.0));
 
-        // Cancel
+        // Cancel Button (Ghost/Secondary style - transparent bg)
         let cb_c = cb_cancel.clone();
         let btn_cancel = Button::new()
             .label("Cancel")
             .on_click(move |ctx: &mut OxidXContext| {
                 cb_c(ctx);
-                // demo_dialogs.rs handles closing
             });
         hstack.add_child(Box::new(btn_cancel));
 
-        // Confirm
+        // Confirm Button (Primary style - handled by Button default)
         let cb_ok = cb_confirm.clone();
         let btn_confirm = Button::new()
             .label("Confirm")

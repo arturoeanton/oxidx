@@ -42,15 +42,20 @@ pub struct TreeItemStyle {
 
 impl Default for TreeItemStyle {
     fn default() -> Self {
+        // Colors aligned with Zinc/Obsidian theme
         Self {
             header_height: 24.0,
             indent_size: 20.0,
             icon_width: 20.0,
             expander_width: 16.0,
-            text_color: Color::new(0.85, 0.85, 0.9, 1.0),
-            folder_color: Color::new(0.9, 0.85, 0.5, 1.0),
-            hover_color: Color::new(0.2, 0.2, 0.25, 1.0),
-            selected_color: Color::new(0.25, 0.35, 0.55, 1.0),
+            // text_primary: #f4f4f5
+            text_color: Color::from_hex("f4f4f5").unwrap_or(Color::WHITE),
+            // text_secondary for folders: #a1a1aa
+            folder_color: Color::from_hex("a1a1aa").unwrap_or(Color::new(0.63, 0.63, 0.67, 1.0)),
+            // surface_hover: #3f3f46
+            hover_color: Color::from_hex("3f3f46").unwrap_or(Color::new(0.25, 0.25, 0.27, 1.0)),
+            // primary with 15% alpha for subtle selection
+            selected_color: Color::new(0.31, 0.27, 0.9, 0.15), // #4f46e5 @ 15%
             font_size: 13.0,
         }
     }

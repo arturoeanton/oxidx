@@ -155,52 +155,74 @@ impl OxidXComponent for Checkbox {
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        // Draw checkbox background/border
+        // Extract ALL theme values upfront to avoid borrow conflicts
+        let border_focus = renderer.theme.colors.border_focus;
+        let primary_hover = renderer.theme.colors.primary_hover;
+        let border = renderer.theme.colors.border;
+        let primary = renderer.theme.colors.primary;
+        let surface_hover = renderer.theme.colors.surface_hover;
+        let surface_alt = renderer.theme.colors.surface_alt;
+        let text_on_primary = renderer.theme.colors.text_on_primary;
+        let text_main = renderer.theme.colors.text_main;
+        let disabled_text = renderer.theme.colors.disabled_text;
+        let spacing_sm = renderer.theme.spacing.sm;
+
         let border_color = if self.focused {
-            renderer.theme.colors.border_focus
+            border_focus
+        } else if self.hovered && !self.disabled {
+            primary_hover
         } else {
-            renderer.theme.colors.border
+            border
         };
 
         let bg_color = if self.checked {
-            renderer.theme.colors.primary
+            primary
+        } else if self.hovered && !self.disabled {
+            surface_hover
         } else {
-            renderer.theme.colors.surface
+            surface_alt
         };
 
-        // Checkbox square
-        let size = 20.0;
+        // Checkbox square with rounded corners
+        let size = 18.0;
+        let radius = 4.0;
         let y_center = self.bounds.y + self.bounds.height / 2.0;
         let checkbox_rect = Rect::new(self.bounds.x, y_center - size / 2.0, size, size);
 
-        renderer.fill_rect(checkbox_rect, bg_color);
-        renderer.stroke_rect(checkbox_rect, border_color, 1.0);
+        // Draw checkbox background
+        renderer.draw_rounded_rect(
+            checkbox_rect,
+            bg_color,
+            radius,
+            Some(border_color),
+            Some(if self.focused { 2.0 } else { 1.0 }),
+        );
 
-        // Checkmark
+        // Checkmark (✓) when checked
         if self.checked {
-            // Draw a simple checkmark
-            let check_color = renderer.theme.colors.text_on_primary;
-            let check_rect = Rect::new(
-                checkbox_rect.x + 4.0,
-                checkbox_rect.y + 4.0,
-                size - 8.0,
-                size - 8.0,
+            renderer.draw_text(
+                "✓",
+                glam::Vec2::new(checkbox_rect.x + 2.0, checkbox_rect.y + 1.0),
+                TextStyle {
+                    font_size: 14.0,
+                    color: text_on_primary,
+                    ..Default::default()
+                },
             );
-            renderer.fill_rect(check_rect, check_color);
         }
 
         // Label
         if !self.label.is_empty() {
-            let text_x = self.bounds.x + size + renderer.theme.spacing.sm;
+            let text_x = self.bounds.x + size + spacing_sm;
             renderer.draw_text(
                 &self.label,
                 Vec2::new(text_x, self.bounds.y + (self.bounds.height - 14.0) / 2.0),
                 TextStyle {
                     font_size: 14.0,
                     color: if self.disabled {
-                        renderer.theme.colors.disabled_text
+                        disabled_text
                     } else {
-                        renderer.theme.colors.text_main
+                        text_main
                     },
                     ..Default::default()
                 },

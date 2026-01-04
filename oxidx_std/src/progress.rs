@@ -71,11 +71,17 @@ impl OxidXComponent for ProgressBar {
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        // Draw background track
-        renderer.fill_rect(self.bounds, renderer.theme.colors.surface_alt);
+        // Extract theme colors upfront
+        let track_color = renderer.theme.colors.surface_alt;
+        let fill_color = self.color.unwrap_or(renderer.theme.colors.primary);
+
+        // Pill radius (fully rounded)
+        let radius = self.bounds.height / 2.0;
+
+        // Draw background track (pill shape)
+        renderer.draw_rounded_rect(self.bounds, track_color, radius, None, None);
 
         let progress = if self.indeterminate {
-            // Simple animation simulation or just fixed for now to avoid complexity without delta time state in render
             0.5
         } else {
             self.progress.clamp(0.0, 1.0)
@@ -83,19 +89,17 @@ impl OxidXComponent for ProgressBar {
 
         let progress_width = self.bounds.width * progress;
 
-        // Indeterminate animation logic dropped for simplicity in this refactor step,
-        // can be re-added if `update` logic manages state.
+        if progress_width > 0.0 {
+            let progress_rect = Rect::new(
+                self.bounds.x,
+                self.bounds.y,
+                progress_width,
+                self.bounds.height,
+            );
 
-        let progress_rect = Rect::new(
-            self.bounds.x,
-            self.bounds.y,
-            progress_width,
-            self.bounds.height,
-        );
-
-        // Draw progress bar
-        let color = self.color.unwrap_or(renderer.theme.colors.primary);
-        renderer.fill_rect(progress_rect, color);
+            // Draw progress fill (pill shape)
+            renderer.draw_rounded_rect(progress_rect, fill_color, radius, None, None);
+        }
     }
 
     fn on_event(&mut self, _event: &OxidXEvent, _ctx: &mut OxidXContext) -> bool {

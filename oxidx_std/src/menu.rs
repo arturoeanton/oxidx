@@ -1,6 +1,6 @@
 use oxidx_core::{
-    ComponentState, OxidXComponent, OxidXContext, OxidXEvent, Rect, Renderer, Style, TextStyle,
-    Vec2,
+    Color, ComponentState, OxidXComponent, OxidXContext, OxidXEvent, Rect, Renderer, Style,
+    TextStyle, Vec2,
 };
 
 /// A single entry in a ContextMenu.
@@ -36,6 +36,7 @@ impl OxidXComponent for MenuEntry {
     }
 
     fn render(&self, renderer: &mut Renderer) {
+        // Extract theme colors
         let text_color = if self.state == ComponentState::Disabled {
             renderer.theme.colors.disabled_text
         } else if self.state == ComponentState::Pressed {
@@ -44,19 +45,34 @@ impl OxidXComponent for MenuEntry {
             renderer.theme.colors.text_main
         };
 
+        // Hover/Press backgrounds with internal rounded corners
+        let inner_margin = 4.0;
+        let inner_rect = Rect::new(
+            self.bounds.x + inner_margin,
+            self.bounds.y + 2.0,
+            self.bounds.width - inner_margin * 2.0,
+            self.bounds.height - 4.0,
+        );
+
         if self.state == ComponentState::Pressed {
-            renderer.fill_rect(self.bounds, renderer.theme.colors.primary);
+            renderer.draw_rounded_rect(inner_rect, renderer.theme.colors.primary, 4.0, None, None);
         } else if self.state == ComponentState::Hover && self.state != ComponentState::Disabled {
-            renderer.fill_rect(self.bounds, renderer.theme.colors.surface_hover);
+            renderer.draw_rounded_rect(
+                inner_rect,
+                renderer.theme.colors.surface_alt,
+                4.0,
+                None,
+                None,
+            );
         }
 
         // Center vertically, left align with padding
         let text_pos = Vec2::new(
-            self.bounds.x + 12.0,
-            self.bounds.y + (self.bounds.height - 16.0) / 2.0, // Assuming 16px font
+            self.bounds.x + 16.0,
+            self.bounds.y + (self.bounds.height - 14.0) / 2.0,
         );
 
-        let style = TextStyle::new(16.0).with_color(text_color);
+        let style = TextStyle::new(14.0).with_color(text_color);
         renderer.draw_text(&self.label, text_pos, style);
     }
 
@@ -189,13 +205,18 @@ impl OxidXComponent for ContextMenu {
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        // Background
-        renderer.fill_rect(self.bounds, renderer.theme.colors.surface);
+        // Modern container with shadow, rounded corners
+        let radius = 12.0;
+        let bg_color = renderer.theme.colors.surface;
+        let border_color = renderer.theme.colors.border;
 
-        // Border
-        renderer.stroke_rect(self.bounds, renderer.theme.colors.border, 1.0);
+        // Shadow (if renderer supports it)
+        renderer.draw_shadow(self.bounds, radius, 15.0, Color::new(0.0, 0.0, 0.0, 0.35));
 
-        // Render entries (entries handle their own theme access correctly)
+        // Background with rounded corners
+        renderer.draw_rounded_rect(self.bounds, bg_color, radius, Some(border_color), Some(1.0));
+
+        // Render entries
         for entry in &self.entries {
             entry.render(renderer);
         }

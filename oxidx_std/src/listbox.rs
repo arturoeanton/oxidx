@@ -226,21 +226,19 @@ impl OxidXComponent for ListBox {
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        // Extract theme values
+        // Extract ALL theme values upfront to avoid borrow conflicts
         let surface_alt = renderer.theme.colors.surface_alt;
         let surface_hover = renderer.theme.colors.surface_hover;
         let border = renderer.theme.colors.border;
+        let border_focus = renderer.theme.colors.border_focus;
         let primary = renderer.theme.colors.primary;
         let text_color = renderer.theme.colors.text_main;
 
         // Background
         renderer.fill_rect(self.bounds, surface_alt);
 
-        let border_color = if self.focused {
-            renderer.theme.colors.border_focus // Using dedicated focus border color if available, or just focus color
-        } else {
-            border
-        };
+        // Border
+        let border_color = if self.focused { border_focus } else { border };
         renderer.stroke_rect(self.bounds, border_color, 1.0);
 
         // Clip
@@ -255,9 +253,9 @@ impl OxidXComponent for ListBox {
         for i in visible_start..visible_end {
             let item_rect = Rect::new(self.bounds.x, y, self.bounds.width, self.item_height);
 
-            // Highlight
+            // Highlight - SUBTLE selection with low alpha
             if self.selected_indices.contains(&i) {
-                renderer.fill_rect(item_rect, primary.with_alpha(0.3));
+                renderer.fill_rect(item_rect, primary.with_alpha(0.15));
             } else if self.hovered_index == Some(i) {
                 renderer.fill_rect(item_rect, surface_hover);
             }
@@ -279,27 +277,28 @@ impl OxidXComponent for ListBox {
 
         renderer.pop_clip();
 
-        // Scrollbar
+        // Modern Scrollbar
         if self.content_height() > self.bounds.height {
-            let scrollbar_width = 10.0;
+            let scrollbar_width = 6.0; // Thinner
             let track_rect = Rect::new(
-                self.bounds.x + self.bounds.width - scrollbar_width,
-                self.bounds.y,
+                self.bounds.x + self.bounds.width - scrollbar_width - 2.0,
+                self.bounds.y + 2.0,
                 scrollbar_width,
-                self.bounds.height,
+                self.bounds.height - 4.0,
             );
 
-            renderer.fill_rect(track_rect, surface_alt);
+            // Transparent track (no fill)
 
             let ratio = self.bounds.height / self.content_height();
-            let thumb_height = (self.bounds.height * ratio).max(20.0);
+            let thumb_height = (self.bounds.height * ratio).max(24.0);
             let thumb_y = track_rect.y
                 + (self.scroll_offset / self.max_scroll()) * (track_rect.height - thumb_height);
 
+            // Fully rounded thumb
             renderer.draw_rounded_rect(
-                Rect::new(track_rect.x + 2.0, thumb_y, 6.0, thumb_height),
-                border,
-                3.0,
+                Rect::new(track_rect.x, thumb_y, scrollbar_width, thumb_height),
+                surface_hover,
+                scrollbar_width / 2.0, // Full rounding
                 None,
                 None,
             );

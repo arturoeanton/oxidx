@@ -43,11 +43,15 @@ pub struct GutterStyle {
 
 impl Default for GutterStyle {
     fn default() -> Self {
+        // Subtle zinc colors for professional divider
         Self {
             size: 6.0,
-            color: Color::new(0.2, 0.2, 0.25, 1.0),
-            hover_color: Color::new(0.3, 0.3, 0.4, 1.0),
-            drag_color: Color::new(0.4, 0.5, 0.8, 1.0),
+            // border_subtle: #3f3f46
+            color: Color::from_hex("3f3f46").unwrap_or(Color::new(0.25, 0.25, 0.27, 1.0)),
+            // surface_hover
+            hover_color: Color::from_hex("52525b").unwrap_or(Color::new(0.32, 0.32, 0.36, 1.0)),
+            // primary on drag
+            drag_color: Color::from_hex("6366f1").unwrap_or(Color::new(0.39, 0.4, 0.95, 1.0)),
         }
     }
 }
@@ -318,7 +322,7 @@ impl OxidXComponent for SplitView {
         // Render second panel
         self.second.render(renderer);
 
-        // Render gutter
+        // Render gutter as clean 1px divider line
         let gutter_color = if self.is_dragging {
             self.gutter_style.drag_color
         } else if self.is_hovered {
@@ -327,7 +331,23 @@ impl OxidXComponent for SplitView {
             self.gutter_style.color
         };
 
-        renderer.fill_rect(self.gutter_rect, gutter_color);
+        // Draw a thin 1px line centered in the gutter
+        let line_rect = match self.direction {
+            SplitDirection::Horizontal => Rect::new(
+                self.gutter_rect.x + self.gutter_rect.width / 2.0 - 0.5,
+                self.gutter_rect.y,
+                1.0,
+                self.gutter_rect.height,
+            ),
+            SplitDirection::Vertical => Rect::new(
+                self.gutter_rect.x,
+                self.gutter_rect.y + self.gutter_rect.height / 2.0 - 0.5,
+                self.gutter_rect.width,
+                1.0,
+            ),
+        };
+
+        renderer.fill_rect(line_rect, gutter_color);
     }
 
     fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
