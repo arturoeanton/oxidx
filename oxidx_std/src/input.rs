@@ -12,7 +12,7 @@
 
 use oxidx_core::events::{KeyCode, OxidXEvent};
 use oxidx_core::layout::LayoutProps;
-use oxidx_core::style::{InteractiveStyle, Style};
+use oxidx_core::style::InteractiveStyle;
 use oxidx_core::{Color, OxidXComponent, OxidXContext, Rect, Renderer, TextStyle, Vec2};
 use std::cell::Cell;
 use winit::window::CursorIcon;
@@ -70,42 +70,14 @@ pub struct Input {
 
 impl Input {
     /// Creates a new Input with a placeholder.
+    /// Styling is resolved dynamically from the theme during render().
     pub fn new(placeholder: impl Into<String>) -> Self {
-        // Dark theme styling
-        let border_color = Color::new(0.3, 0.3, 0.35, 1.0);
-        let focus_color = Color::new(0.2, 0.5, 0.9, 1.0);
-        let bg = Color::new(0.1, 0.1, 0.12, 1.0);
-        let text_white = Color::WHITE;
-
-        let idle = Style::new()
-            .bg_solid(bg)
-            .border(1.0, border_color)
-            .rounded(4.0)
-            .text_color(text_white);
-
-        let hover = Style::new()
-            .bg_solid(Color::new(0.12, 0.12, 0.15, 1.0))
-            .border(1.0, Color::WHITE)
-            .rounded(4.0)
-            .text_color(text_white);
-
-        let focused = Style::new()
-            .bg_solid(bg)
-            .border(2.0, focus_color)
-            .rounded(4.0)
-            .shadow(Vec2::new(0.0, 0.0), 8.0, focus_color)
-            .text_color(text_white);
-
         Self {
             bounds: Rect::default(),
             layout: LayoutProps::default().with_padding(14.0),
             width: None,
-            style: InteractiveStyle {
-                idle,
-                hover,
-                pressed: focused,
-                disabled: idle,
-            },
+            // Style is resolved dynamically from theme in render()
+            style: InteractiveStyle::default(),
             text_style: TextStyle::new(16.0).with_color(Color::WHITE),
             placeholder: placeholder.into(),
             value: String::new(),

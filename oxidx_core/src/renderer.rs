@@ -748,55 +748,359 @@ impl Renderer {
         });
     }
 
+    pub fn draw_mesh(&mut self, vertices: Vec<Vertex>, indices: Vec<u32>, texture_id: TextureId) {
+        self.push_command(RenderOp::Geometry {
+            vertices,
+            indices,
+            texture_id,
+        });
+    }
+
+    /// Draws a rounded rectangle by tessellating it into a center rect + 4 corner fans.
     pub fn draw_rounded_rect(
         &mut self,
         rect: Rect,
         color: Color,
-        _radius: f32,
+        radius: f32,
         border_color: Option<Color>,
         border_width: Option<f32>,
     ) {
-        self.fill_rect(rect, color);
+        // Fallback to simple rect if radius is too small
+        if radius < 0.5 {
+            self.fill_rect(rect, color);
+            if let Some(bc) = border_color {
+                if let Some(bw) = border_width {
+                    self.stroke_rect(rect, bc, bw);
+                }
+            }
+            return;
+        }
+
+        // --- Fill Rounded Rect ---
+        // We create a mesh for the filled body.
+        // Structure:
+        // Central cross (2 rects) covering the non-rounded area.
+        // 4 Corner fans.
+
+        let mut vertices = Vec::new();
+        let mut indices = Vec::new();
+
+        // Ensure radius doesn't exceed dimensions
+        let r = radius.min(rect.width / 2.0).min(rect.height / 2.0);
+        let x = rect.x;
+        let y = rect.y;
+        let w = rect.width;
+        let h = rect.height;
+
+        // Central cross
+        // Rect 1: Horizontal stripe (minus corners vertically) - Actually let's do:
+        // Inner Rect: x+r, y+r, w-2r, h-2r
+        // Top Rect: x+r, y, w-2r, r
+        // Bottom Rect: x+r, y+h-r, w-2r, r
+        // Left Rect: x, y+r, r, h-2r
+        // Right Rect: x+w-r, y+r, r, h-2r
+        // ... Or simpler:
+        // Center-Horizontal: x, y+r, w, h-2r
+        // Top-Center: x+r, y, w-2r, r
+        // Bottom-Center: x+r, y+h-r, w-2r, r
+
+        // Let's use the cross method:
+        // 1. Horizontal bar (full width, height minus 2*radius) at y+radius
+        // 2. Vertical bar (width minus 2*radius, full height) at x+radius
+        // This covers the center.
+        // Wait, that overlaps the center square twice. That's fine for opaque colors, but bad for alpha.
+        // Correct non-overlapping tessellation:
+        // 1. Center: (x+r, y+r, w-2r, h-2r)
+        // 2. Top: (x+r, y, w-2r, r)
+        // 3. Bottom: (x+r, y+h-r, w-2r, r)
+        // 4. Left: (x, y+r, r, h-2r)
+        // 5. Right: (x+w-r, y+r, r, h-2r)
+        // 6. 4 Corners (Fans)
+
+        // Helper to push a rect to vertices/indices
+        let mut push_rect = |rx: f32, ry: f32, rw: f32, rh: f32| {
+            let start = vertices.len() as u32;
+            vertices.push(Vertex::new(rx, ry, color));
+            vertices.push(Vertex::new(rx + rw, ry, color));
+            vertices.push(Vertex::new(rx + rw, ry + rh, color));
+            vertices.push(Vertex::new(rx, ry + rh, color));
+
+            indices.extend_from_slice(&[start, start + 1, start + 2, start, start + 2, start + 3]);
+        };
+
+        // Center
+        push_rect(x + r, y + r, w - 2.0 * r, h - 2.0 * r);
+        // Top
+        push_rect(x + r, y, w - 2.0 * r, r);
+        // Bottom
+        push_rect(x + r, y + h - r, w - 2.0 * r, r);
+        // Left
+        push_rect(x, y + r, r, h - 2.0 * r);
+        // Right
+        push_rect(x + w - r, y + r, r, h - 2.0 * r);
+
+        // Corners
+        let corners = [
+            (
+                x + r,
+                y + r,
+                std::f32::consts::PI,
+                1.5 * std::f32::consts::PI,
+            ), // Top-Left
+            (
+                x + w - r,
+                y + r,
+                1.5 * std::f32::consts::PI,
+                2.0 * std::f32::consts::PI,
+            ), // Top-Right
+            (x + w - r, y + h - r, 0.0, 0.5 * std::f32::consts::PI), // Bottom-Right
+            (
+                x + r,
+                y + h - r,
+                0.5 * std::f32::consts::PI,
+                std::f32::consts::PI,
+            ), // Bottom-Left
+        ];
+
+        let segments = (r * 0.5).max(4.0) as usize; // Adaptive segments
+
+        for (cx, cy, start_angle, end_angle) in corners {
+            let center_idx = vertices.len() as u32;
+            vertices.push(Vertex::new(cx, cy, color)); // Pivot
+
+            for i in 0..=segments {
+                let t = i as f32 / segments as f32;
+                let angle = start_angle + (end_angle - start_angle) * t;
+                let px = cx + angle.cos() * r;
+                let py = cy + angle.sin() * r;
+                vertices.push(Vertex::new(px, py, color));
+
+                if i > 0 {
+                    // Triangle fan: Center, Prev, Current
+                    indices.extend_from_slice(&[
+                        center_idx,
+                        center_idx + i as u32,
+                        center_idx + i as u32 + 1,
+                    ]);
+                }
+            }
+        }
+
+        self.draw_mesh(vertices, indices, self.white_texture);
+
+        // --- Stroke Border ---
+        // If border is present, we need to draw the outline.
+        // For simplicity, we'll draw a slightly larger rounded rect behind if needed, or loop lines.
+        // Stroking curves is hard without shaders.
+        // "Cheap" implementation: Draw 4 straight lines and 4 arcs.
         if let Some(bc) = border_color {
             if let Some(bw) = border_width {
-                self.stroke_rect(rect, bc, bw);
+                // Top line
+                self.fill_rect(Rect::new(x + r, y - bw / 2.0, w - 2.0 * r, bw), bc);
+                // Bottom line
+                self.fill_rect(Rect::new(x + r, y + h - bw / 2.0, w - 2.0 * r, bw), bc);
+                // Left line
+                self.fill_rect(Rect::new(x - bw / 2.0, y + r, bw, h - 2.0 * r), bc);
+                // Right line
+                self.fill_rect(Rect::new(x + w - bw / 2.0, y + r, bw, h - 2.0 * r), bc);
+
+                // For corners, we cheat: draw small circles/points or lines.
+                // A proper stroke implementation is out of scope for low-poly batcher without line shaders.
+                // We'll iterate the arcs with small line segments.
+                for (cx, cy, start_angle, end_angle) in corners {
+                    let segments = 8;
+                    for i in 0..segments {
+                        let t1 = i as f32 / segments as f32;
+                        let t2 = (i + 1) as f32 / segments as f32;
+
+                        let a1 = start_angle + (end_angle - start_angle) * t1;
+                        let a2 = start_angle + (end_angle - start_angle) * t2;
+
+                        let p1 = Vec2::new(cx + a1.cos() * r, cy + a1.sin() * r);
+                        let p2 = Vec2::new(cx + a2.cos() * r, cy + a2.sin() * r);
+
+                        self.draw_line(p1, p2, bc, bw);
+                    }
+                }
             }
         }
     }
 
+    /// Draws a soft shadow using a gradient mesh.
+    pub fn draw_shadow(&mut self, rect: Rect, radius: f32, blur: f32, color: Color) {
+        // Create a mesh that extends `blur` pixels out from the rect (plus radius).
+        // Inner color = `color`, Outer color = `color.with_alpha(0.0)`.
+        // Tessellation is similar to rounded rect Stroke, but with a gradient quad strip.
+
+        let r = radius.min(rect.width / 2.0);
+        let blur_dist = blur;
+
+        // Inner coords (on the rect edge)
+        let inner_x = rect.x;
+        let inner_y = rect.y;
+        let inner_w = rect.width;
+        let inner_h = rect.height;
+
+        // Outer coords (expanded by blur)
+        // Not exactly expanded rect, but the outer edge of the blur.
+
+        let center_color = color;
+        let outer_color = color.with_alpha(0.0);
+
+        let mut vertices = Vec::new();
+        let mut indices = Vec::new();
+
+        // We will build a "ring" around the rect.
+        // Corners are 1/4 annulus sectors.
+        // Sides are rectangular gradients.
+
+        // Helper for building gradient quads
+        let mut add_quad = |p1: Vec2, p2: Vec2, p3: Vec2, p4: Vec2| {
+            let start = vertices.len() as u32;
+            // Inner points (p1, p2)
+            vertices.push(Vertex::new(p1.x, p1.y, center_color));
+            vertices.push(Vertex::new(p2.x, p2.y, center_color));
+            // Outer points (p3, p4)
+            vertices.push(Vertex::new(p3.x, p3.y, outer_color));
+            vertices.push(Vertex::new(p4.x, p4.y, outer_color));
+
+            indices.extend_from_slice(&[
+                start,
+                start + 1,
+                start + 2,
+                start + 1,
+                start + 3,
+                start + 2,
+            ]);
+        };
+
+        // Inner start points for straight sections
+        let t_l = Vec2::new(inner_x + r, inner_y);
+        let t_r = Vec2::new(inner_x + inner_w - r, inner_y);
+
+        // Outer points (extruded by normal * blur)
+        let t_l_out = Vec2::new(inner_x + r, inner_y - blur_dist);
+        let t_r_out = Vec2::new(inner_x + inner_w - r, inner_y - blur_dist);
+
+        let r_t = Vec2::new(inner_x + inner_w, inner_y + r);
+        let r_b = Vec2::new(inner_x + inner_w, inner_y + inner_h - r);
+        let r_t_out = Vec2::new(inner_x + inner_w + blur_dist, inner_y + r);
+        let r_b_out = Vec2::new(inner_x + inner_w + blur_dist, inner_y + inner_h - r);
+
+        let b_r_start = Vec2::new(inner_x + inner_w - r, inner_y + inner_h);
+        let b_l_end = Vec2::new(inner_x + r, inner_y + inner_h);
+        let b_r_out = Vec2::new(inner_x + inner_w - r, inner_y + inner_h + blur_dist);
+        let b_l_out = Vec2::new(inner_x + r, inner_y + inner_h + blur_dist);
+
+        let l_b = Vec2::new(inner_x, inner_y + inner_h - r);
+        let l_t = Vec2::new(inner_x, inner_y + r);
+        let l_b_out = Vec2::new(inner_x - blur_dist, inner_y + inner_h - r);
+        let l_t_out = Vec2::new(inner_x - blur_dist, inner_y + r);
+
+        // 1. Top Edge
+        add_quad(t_l, t_r, t_l_out, t_r_out);
+        // 2. Right Edge
+        add_quad(r_t, r_b, r_t_out, r_b_out);
+        // 3. Bottom Edge
+        add_quad(b_l_end, b_r_start, b_l_out, b_r_out);
+        // 4. Left Edge
+        add_quad(l_t, l_b, l_t_out, l_b_out);
+
+        // 5. Corners (Triangle strips simulating arch)
+        // We iterate angles. Inner radius = r (oops, inner is actually the rect edge point because corner has radius r)
+        // Ideally: Inner path is arc of radius r centered at (x+r, y+r)
+        // Outer path is arc of radius r+blur centered at same point.
+        // Inner color = center_color. Outer color = transparent.
+
+        let corner_centers = [
+            (
+                inner_x + r,
+                inner_y + r,
+                std::f32::consts::PI,
+                1.5 * std::f32::consts::PI,
+            ), // TL
+            (
+                inner_x + inner_w - r,
+                inner_y + r,
+                1.5 * std::f32::consts::PI,
+                2.0 * std::f32::consts::PI,
+            ), // TR
+            (
+                inner_x + inner_w - r,
+                inner_y + inner_h - r,
+                0.0,
+                0.5 * std::f32::consts::PI,
+            ), // BR
+            (
+                inner_x + r,
+                inner_y + inner_h - r,
+                0.5 * std::f32::consts::PI,
+                std::f32::consts::PI,
+            ), // BL
+        ];
+
+        let segments = 8;
+
+        for (cx, cy, start_a, end_a) in corner_centers {
+            for i in 0..segments {
+                let t1 = i as f32 / segments as f32;
+                let t2 = (i + 1) as f32 / segments as f32;
+                let a1 = start_a + (end_a - start_a) * t1;
+                let a2 = start_a + (end_a - start_a) * t2;
+
+                let p1_inner = Vec2::new(cx + a1.cos() * r, cy + a1.sin() * r);
+                let p2_inner = Vec2::new(cx + a2.cos() * r, cy + a2.sin() * r);
+
+                let p1_outer = Vec2::new(cx + a1.cos() * (r + blur), cy + a1.sin() * (r + blur));
+                let p2_outer = Vec2::new(cx + a2.cos() * (r + blur), cy + a2.sin() * (r + blur));
+
+                add_quad(p1_inner, p2_inner, p1_outer, p2_outer);
+            }
+        }
+
+        // Also fill the center background behind the element? No, shadow is usually just edges or under.
+        // A true "box-shadow" in CSS is also filled if inset, but outset is usually behind.
+        // We'll trust the element on top covers the hole.
+        // But what if the element is transparent?
+        // Usually shadows are rendered *fully* behind, including the center.
+        // So let's fill the center part with solid shadow color.
+        // Center without blur:
+        self.draw_rounded_rect(rect, center_color, r, None, None);
+
+        self.draw_mesh(vertices, indices, self.white_texture);
+    }
+
     pub fn draw_style_rect(&mut self, rect: Rect, style: &Style) {
         if let Some(shadow) = &style.shadow {
+            // Shadow bounds need to be offset
             let shadow_rect = Rect::new(
                 rect.x + shadow.offset.x,
                 rect.y + shadow.offset.y,
                 rect.width,
                 rect.height,
             );
-            self.fill_rect(shadow_rect, shadow.color);
+            self.draw_shadow(shadow_rect, style.rounded, shadow.blur, shadow.color);
         }
 
-        if let Some(border) = &style.border {
-            if border.width > 0.0 {
-                let border_rect = Rect::new(
-                    rect.x - border.width,
-                    rect.y - border.width,
-                    rect.width + border.width * 2.0,
-                    rect.height + border.width * 2.0,
-                );
-                self.fill_rect(border_rect, border.color);
-            }
-        }
+        // Border width extraction
+        let (border_color, border_width) = if let Some(border) = &style.border {
+            (Some(border.color), Some(border.width))
+        } else {
+            (None, None)
+        };
 
         match style.background {
             Background::Solid(color) => {
-                self.fill_rect(rect, color);
+                self.draw_rounded_rect(rect, color, style.rounded, border_color, border_width);
             }
             Background::LinearGradient { start, end, .. } => {
+                // Gradient for rounded rect not implemented yet, fallback to avg color
                 let r = (start.r + end.r) / 2.0;
                 let g = (start.g + end.g) / 2.0;
                 let b = (start.b + end.b) / 2.0;
                 let a = (start.a + end.a) / 2.0;
-                self.fill_rect(rect, Color::new(r, g, b, a));
+                let avg = Color::new(r, g, b, a);
+                self.draw_rounded_rect(rect, avg, style.rounded, border_color, border_width);
             }
         }
     }

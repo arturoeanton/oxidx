@@ -68,6 +68,7 @@ pub struct Style {
     pub shadow: Option<Shadow>,
     pub text_color: Color,
     pub rounded: f32,
+    pub padding: Vec2,
 }
 
 impl Style {
@@ -113,6 +114,11 @@ impl Style {
         if let Some(border) = &mut self.border {
             border.radius = radius;
         }
+        self
+    }
+
+    pub fn padding(mut self, h: f32, v: f32) -> Self {
+        self.padding = Vec2::new(h, v);
         self
     }
 }

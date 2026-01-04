@@ -95,32 +95,39 @@ impl Theme {
         serde_json::from_str(json).map_err(|e| e.to_string())
     }
 
+    /// Professional "Zinc/Obsidian" dark theme inspired by Linear, Vercel, and Zed.
     pub fn dark() -> Self {
         Self {
             colors: ThemeColors {
-                background: Color::new(0.1, 0.1, 0.12, 1.0),
-                surface: Color::new(0.15, 0.15, 0.18, 1.0),
-                surface_alt: Color::new(0.12, 0.12, 0.15, 1.0),
-                surface_hover: Color::new(0.2, 0.2, 0.23, 1.0),
+                // Backgrounds - Zinc scale
+                background: Color::from_hex("09090b").unwrap(), // bg_app: Deepest black/zinc
+                surface: Color::from_hex("18181b").unwrap(),    // bg_surface: Panel background
+                surface_alt: Color::from_hex("27272a").unwrap(), // bg_element: Input/button bg
+                surface_hover: Color::from_hex("3f3f46").unwrap(), // Hover state
 
-                text_main: Color::new(0.95, 0.95, 0.95, 1.0),
-                text_dim: Color::new(0.7, 0.7, 0.75, 1.0),
-                text_inverted: Color::new(0.1, 0.1, 0.12, 1.0),
+                // Text - High contrast zinc scale
+                text_main: Color::from_hex("f4f4f5").unwrap(), // text_primary: Bright text
+                text_dim: Color::from_hex("a1a1aa").unwrap(),  // text_secondary: Muted text
+                text_inverted: Color::from_hex("09090b").unwrap(),
 
-                primary: Color::new(0.2, 0.4, 0.8, 1.0),
-                primary_hover: Color::new(0.3, 0.5, 0.9, 1.0),
-                primary_pressed: Color::new(0.15, 0.3, 0.6, 1.0),
+                // Primary - Vibrant Indigo
+                primary: Color::from_hex("4f46e5").unwrap(), // accent_primary
+                primary_hover: Color::from_hex("6366f1").unwrap(), // Lighter indigo on hover
+                primary_pressed: Color::from_hex("4338ca").unwrap(), // Deeper indigo on press
                 text_on_primary: Color::WHITE,
 
-                border: Color::new(0.3, 0.3, 0.35, 1.0),
-                border_focus: Color::new(0.4, 0.6, 1.0, 0.8),
+                // Borders - Subtle zinc
+                border: Color::from_hex("3f3f46").unwrap(), // border_subtle
+                border_focus: Color::from_hex("6366f1").unwrap(), // Indigo focus ring
 
-                disabled_bg: Color::new(0.2, 0.2, 0.2, 1.0),
-                disabled_text: Color::new(0.5, 0.5, 0.5, 1.0),
+                // States
+                disabled_bg: Color::from_hex("27272a").unwrap(),
+                disabled_text: Color::from_hex("71717a").unwrap(),
 
-                danger: Color::new(0.9, 0.2, 0.2, 1.0),
-                success: Color::new(0.2, 0.8, 0.2, 1.0),
-                warning: Color::new(0.9, 0.7, 0.1, 1.0),
+                // Functional colors
+                danger: Color::from_hex("ef4444").unwrap(), // Red-500
+                success: Color::from_hex("22c55e").unwrap(), // Green-500
+                warning: Color::from_hex("f59e0b").unwrap(), // Amber-500
             },
             spacing: ThemeSpacing {
                 xs: 4.0,
@@ -130,9 +137,9 @@ impl Theme {
                 xl: 32.0,
             },
             borders: ThemeBorders {
-                radius_sm: 2.0,
-                radius_md: 4.0,
-                radius_lg: 8.0,
+                radius_sm: 6.0,  // Small elements (inputs/buttons)
+                radius_md: 8.0,  // Medium elements
+                radius_lg: 12.0, // Containers (cards/modals)
                 width: 1.0,
                 width_focus: 2.0,
             },
@@ -197,26 +204,27 @@ impl Theme {
 
     // --- Helper Accessors for Component Compatibility ---
 
+    /// Professional button style with subtle, elegant shadows.
     pub fn primary_button_style(&self) -> InteractiveStyle {
         InteractiveStyle {
             idle: Style::new()
                 .bg_solid(self.colors.primary)
-                .rounded(self.borders.radius_md)
+                .rounded(self.borders.radius_sm)
                 .text_color(self.colors.text_on_primary)
-                .shadow(Vec2::new(0.0, 2.0), 4.0, Color::new(0.0, 0.0, 0.0, 0.3)),
+                .shadow(Vec2::new(0.0, 4.0), 12.0, Color::new(0.0, 0.0, 0.0, 0.25)),
             hover: Style::new()
                 .bg_solid(self.colors.primary_hover)
-                .rounded(self.borders.radius_md)
+                .rounded(self.borders.radius_sm)
                 .text_color(self.colors.text_on_primary)
-                .shadow(Vec2::new(0.0, 3.0), 6.0, Color::new(0.0, 0.0, 0.0, 0.3)),
+                .shadow(Vec2::new(0.0, 6.0), 15.0, Color::new(0.0, 0.0, 0.0, 0.3)),
             pressed: Style::new()
                 .bg_solid(self.colors.primary_pressed)
-                .rounded(self.borders.radius_md)
+                .rounded(self.borders.radius_sm)
                 .text_color(self.colors.text_on_primary)
-                .shadow(Vec2::new(0.0, 1.0), 2.0, Color::new(0.0, 0.0, 0.0, 0.3)),
+                .shadow(Vec2::new(0.0, 2.0), 6.0, Color::new(0.0, 0.0, 0.0, 0.2)),
             disabled: Style::new()
                 .bg_solid(self.colors.disabled_bg)
-                .rounded(self.borders.radius_md)
+                .rounded(self.borders.radius_sm)
                 .text_color(self.colors.disabled_text),
         }
     }
@@ -242,10 +250,12 @@ impl Theme {
         }
     }
 
+    /// Professional card style with subtle border and elegant shadow.
     pub fn card_style(&self) -> Style {
         Style::new()
             .bg_solid(self.colors.surface)
             .rounded(self.borders.radius_lg)
-            .shadow(Vec2::new(0.0, 4.0), 12.0, Color::new(0.0, 0.0, 0.0, 0.3))
+            .border(self.borders.width, self.colors.border)
+            .shadow(Vec2::new(0.0, 8.0), 24.0, Color::new(0.0, 0.0, 0.0, 0.25))
     }
 }
