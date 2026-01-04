@@ -110,7 +110,7 @@ pub struct Renderer {
     // GPU resources
     device: Arc<wgpu::Device>,
     queue: Arc<wgpu::Queue>,
-    surface_format: wgpu::TextureFormat,
+    _surface_format: wgpu::TextureFormat,
 
     // Render pipeline
     pipeline: wgpu::RenderPipeline,
@@ -141,7 +141,44 @@ pub struct Renderer {
     screen_height: f32,
 
     // Scissor clipping stack
-    clip_stack: Vec<Rect>,
+    clip_stack: ClipStack,
+}
+
+/// Manages the clipping rectangles stack.
+#[derive(Debug, Clone, Default)]
+pub struct ClipStack {
+    stack: Vec<Rect>,
+}
+
+impl ClipStack {
+    pub fn new() -> Self {
+        Self { stack: Vec::new() }
+    }
+
+    pub fn push(&mut self, rect: Rect) {
+        let clipped = if let Some(current) = self.stack.last() {
+            current.intersect(&rect)
+        } else {
+            rect
+        };
+        self.stack.push(clipped);
+    }
+
+    pub fn pop(&mut self) -> Option<Rect> {
+        self.stack.pop()
+    }
+
+    pub fn current(&self) -> Option<Rect> {
+        self.stack.last().copied()
+    }
+
+    pub fn clear(&mut self) {
+        self.stack.clear();
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.stack.is_empty()
+    }
 }
 
 /// Manages text resources and rendering.
@@ -293,7 +330,7 @@ impl Renderer {
         Self {
             device,
             queue,
-            surface_format,
+            _surface_format: surface_format,
             pipeline,
             uniform_buffer,
             uniform_bind_group,
@@ -310,7 +347,7 @@ impl Renderer {
             overlay_text_commands: Vec::new(),
             screen_width: width as f32,
             screen_height: height as f32,
-            clip_stack: Vec::new(),
+            clip_stack: ClipStack::new(),
         }
     }
 
@@ -362,13 +399,7 @@ impl Renderer {
     /// # Arguments
     /// * `rect` - The clipping rectangle in pixel coordinates
     pub fn push_clip(&mut self, rect: Rect) {
-        // Intersect with current clip if there is one
-        let clipped = if let Some(current) = self.clip_stack.last() {
-            current.intersect(&rect)
-        } else {
-            rect
-        };
-        self.clip_stack.push(clipped);
+        self.clip_stack.push(rect);
     }
 
     /// Pops the most recent clip rectangle from the stack.
@@ -376,12 +407,14 @@ impl Renderer {
     /// Restores the previous clipping state. If the stack is empty,
     /// this is a no-op.
     pub fn pop_clip(&mut self) {
-        self.clip_stack.pop();
+        if self.clip_stack.pop().is_none() {
+            log::warn!("Clip stack underflow! pop_clip() called on empty stack.");
+        }
     }
 
     /// Returns the current clip rectangle, if any.
     pub fn current_clip(&self) -> Option<Rect> {
-        self.clip_stack.last().copied()
+        self.clip_stack.current()
     }
 
     /// Draws a filled rectangle.
@@ -992,5 +1025,37 @@ impl Renderer {
                 mapped_at_creation: false,
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::primitives::Rect;
+
+    #[test]
+    fn test_clip_stack() {
+        let mut stack = ClipStack::new();
+        assert!(stack.is_empty());
+
+        // Push Rect A (0,0, 100,100)
+        let rect_a = Rect::new(0.0, 0.0, 100.0, 100.0);
+        stack.push(rect_a);
+        assert_eq!(stack.current(), Some(rect_a));
+
+        // Push Rect B (50,50, 100,100) -> Intersection should be (50,50, 50,50)
+        let rect_b = Rect::new(50.0, 50.0, 100.0, 100.0);
+        stack.push(rect_b);
+        let expected = Rect::new(50.0, 50.0, 50.0, 50.0);
+        assert_eq!(stack.current(), Some(expected));
+
+        // Pop
+        stack.pop();
+        assert_eq!(stack.current(), Some(rect_a));
+
+        // Pop empty
+        stack.pop();
+        assert!(stack.is_empty());
+        assert_eq!(stack.pop(), None); // Safe: should handle underflow without panic
     }
 }

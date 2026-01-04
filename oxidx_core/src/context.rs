@@ -29,22 +29,50 @@ pub struct OxidXContext {
     pub device: Arc<wgpu::Device>,
     /// The command queue - used to submit work to the GPU
     pub queue: Arc<wgpu::Queue>,
-    /// The surface we render to (typically a window)
-    pub surface: wgpu::Surface<'static>,
+    /// The surface we render to (typically a window, optional for headless)
+    pub surface: Option<wgpu::Surface<'static>>,
     /// Configuration for the surface (format, size, etc.)
-    pub config: wgpu::SurfaceConfiguration,
+    pub config: Option<wgpu::SurfaceConfiguration>,
     /// Current window size in physical pixels
     pub size: winit::dpi::PhysicalSize<u32>,
     /// The batched 2D renderer
     pub renderer: Renderer,
-    /// The ID of the currently focused component
-    pub focused_id: Option<String>,
+    /// Manages component focus
+    pub focus: FocusManager,
     /// Time elapsed (for cursor blinking etc)
     pub time: f32,
-    /// Window handle for cursor changes
-    window: Arc<Window>,
+    /// Window handle for cursor changes (optional for headless)
+    window: Option<Arc<Window>>,
     /// Clipboard instance (lazy initialized)
     clipboard: Option<arboard::Clipboard>,
+}
+
+/// Manages focus state for components.
+#[derive(Debug, Clone, Default)]
+pub struct FocusManager {
+    focused_id: Option<String>,
+}
+
+impl FocusManager {
+    pub fn new() -> Self {
+        Self { focused_id: None }
+    }
+
+    pub fn request(&mut self, id: impl Into<String>) {
+        self.focused_id = Some(id.into());
+    }
+
+    pub fn blur(&mut self) {
+        self.focused_id = None;
+    }
+
+    pub fn is_focused(&self, id: &str) -> bool {
+        self.focused_id.as_deref() == Some(id)
+    }
+
+    pub fn focused_id(&self) -> Option<&str> {
+        self.focused_id.as_deref()
+    }
 }
 
 impl OxidXContext {
@@ -125,24 +153,50 @@ impl OxidXContext {
         Ok(Self {
             device,
             queue,
-            surface,
-            config,
+            surface: Some(surface),
+            config: Some(config),
             size,
             renderer,
-            focused_id: None,
+            focus: FocusManager::new(),
             time: 0.0,
-            window,
+            window: Some(window),
             clipboard: None,
         })
+    }
+
+    /// Creates a headless context for testing or CLI usage.
+    pub fn new_headless(
+        device: Arc<wgpu::Device>,
+        queue: Arc<wgpu::Queue>,
+        surface_format: wgpu::TextureFormat,
+        width: u32,
+        height: u32,
+    ) -> Self {
+        let renderer = Renderer::new(device.clone(), queue.clone(), surface_format, width, height);
+
+        Self {
+            device,
+            queue,
+            surface: None,
+            config: None,
+            size: winit::dpi::PhysicalSize::new(width, height),
+            renderer,
+            focus: FocusManager::new(),
+            time: 0.0,
+            window: None,
+            clipboard: None,
+        }
     }
 
     /// Handles window resize events.
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
             self.size = new_size;
-            self.config.width = new_size.width;
-            self.config.height = new_size.height;
-            self.surface.configure(&self.device, &self.config);
+            if let (Some(surface), Some(config)) = (&self.surface, &mut self.config) {
+                config.width = new_size.width;
+                config.height = new_size.height;
+                surface.configure(&self.device, config);
+            }
 
             self.renderer.resize(new_size.width, new_size.height);
         }
@@ -150,18 +204,17 @@ impl OxidXContext {
 
     /// Requests focus for a component by ID.
     pub fn request_focus(&mut self, id: impl Into<String>) {
-        let id = id.into();
-        self.focused_id = Some(id);
+        self.focus.request(id);
     }
 
     /// Clears the current focus.
     pub fn blur(&mut self) {
-        self.focused_id = None;
+        self.focus.blur();
     }
 
     /// Checks if the given ID is currently focused.
     pub fn is_focused(&self, id: &str) -> bool {
-        self.focused_id.as_deref() == Some(id)
+        self.focus.is_focused(id)
     }
 
     // =========================================================================
@@ -213,7 +266,9 @@ impl OxidXContext {
     /// ctx.set_cursor_icon(CursorIcon::Default);  // Reset
     /// ```
     pub fn set_cursor_icon(&self, icon: CursorIcon) {
-        self.window.set_cursor_icon(icon);
+        if let Some(window) = &self.window {
+            window.set_cursor_icon(icon);
+        }
     }
 
     /// Sets the IME cursor area.
@@ -224,20 +279,46 @@ impl OxidXContext {
     /// # Arguments
     /// * `rect` - The cursor rectangle in logical pixels relative to the window.
     pub fn set_ime_position(&self, rect: Rect) {
-        self.window.set_ime_cursor_area(
-            winit::dpi::Position::Logical(winit::dpi::LogicalPosition::new(
-                rect.x as f64,
-                rect.y as f64,
-            )),
-            winit::dpi::Size::Logical(winit::dpi::LogicalSize::new(
-                rect.width as f64,
-                rect.height as f64,
-            )),
-        );
+        if let Some(window) = &self.window {
+            window.set_ime_cursor_area(
+                winit::dpi::Position::Logical(winit::dpi::LogicalPosition::new(
+                    rect.x as f64,
+                    rect.y as f64,
+                )),
+                winit::dpi::Size::Logical(winit::dpi::LogicalSize::new(
+                    rect.width as f64,
+                    rect.height as f64,
+                )),
+            );
+        }
     }
 
     /// Returns the current window reference.
-    pub fn window(&self) -> &Arc<Window> {
-        &self.window
+    pub fn window(&self) -> Option<&Arc<Window>> {
+        self.window.as_ref()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_focus_manager() {
+        let mut fm = FocusManager::new();
+        assert!(fm.focused_id().is_none());
+
+        fm.request("input_1");
+        assert!(fm.is_focused("input_1"));
+        assert!(!fm.is_focused("input_2"));
+        assert_eq!(fm.focused_id(), Some("input_1"));
+
+        fm.request("input_2");
+        assert!(fm.is_focused("input_2"));
+        assert!(!fm.is_focused("input_1"));
+
+        fm.blur();
+        assert!(fm.focused_id().is_none());
+        assert!(!fm.is_focused("input_2"));
     }
 }

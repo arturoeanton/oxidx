@@ -64,18 +64,12 @@ impl AppConfig {
     }
 }
 
-/// Tracks input state for hit testing and event dispatch.
+/// Tracks input state for event dispatch.
 struct InputState {
     /// Current mouse position in pixels.
     mouse_position: Vec2,
     /// Previous mouse position (for delta calculation).
     prev_mouse_position: Vec2,
-    /// Whether the component is currently hovered.
-    is_hovered: bool,
-    /// Whether the component was hovered last frame.
-    was_hovered: bool,
-    /// Whether the component has focus.
-    is_focused: bool,
     /// Current keyboard modifiers.
     modifiers: Modifiers,
     /// Button that started a press (for click detection).
@@ -87,9 +81,6 @@ impl Default for InputState {
         Self {
             mouse_position: Vec2::ZERO,
             prev_mouse_position: Vec2::ZERO,
-            is_hovered: false,
-            was_hovered: false,
-            is_focused: false,
             modifiers: Modifiers::default(),
             pressed_button: None,
         }
@@ -277,104 +268,66 @@ fn process_window_event<C: OxidXComponent>(
     ctx: &mut OxidXContext,
 ) {
     match event {
-        // Track mouse position and detect hover changes
+        // Track mouse position
         WindowEvent::CursorMoved { position, .. } => {
             input.prev_mouse_position = input.mouse_position;
             input.mouse_position = Vec2::new(position.x as f32, position.y as f32);
 
-            // Hit testing: check if mouse is over component
-            let bounds = component.bounds();
-            input.was_hovered = input.is_hovered;
-            input.is_hovered = bounds.contains(input.mouse_position);
-
-            // Detect hover state changes
-            if input.is_hovered && !input.was_hovered {
-                component.on_event(&OxidXEvent::MouseEnter, ctx);
-            } else if !input.is_hovered && input.was_hovered {
-                component.on_event(&OxidXEvent::MouseLeave, ctx);
-            }
-
-            // Fire MouseMove if hovered
-            if input.is_hovered {
-                let delta = input.mouse_position - input.prev_mouse_position;
-                component.on_event(
-                    &OxidXEvent::MouseMove {
-                        position: input.mouse_position,
-                        delta,
-                    },
-                    ctx,
-                );
-            }
+            // Always dispatch MouseMove to root - let components handle hit-testing
+            let delta = input.mouse_position - input.prev_mouse_position;
+            component.on_event(
+                &OxidXEvent::MouseMove {
+                    position: input.mouse_position,
+                    delta,
+                },
+                ctx,
+            );
         }
 
-        // Handle mouse button events
+        // Handle mouse button events - always dispatch to root
         WindowEvent::MouseInput { state, button, .. } => {
             let mouse_button = MouseButton::from(*button);
 
             match state {
                 ElementState::Pressed => {
-                    if input.is_hovered {
-                        input.pressed_button = Some(mouse_button);
+                    input.pressed_button = Some(mouse_button);
 
-                        // Set focus if focusable
-                        if component.is_focusable() && !input.is_focused {
-                            input.is_focused = true;
-                            component.on_event(&OxidXEvent::FocusGained, ctx);
-                            // Also update Context focus
-                            if !component.id().is_empty() {
-                                ctx.request_focus(component.id());
-                            }
-                        }
+                    // Always dispatch MouseDown to root
+                    let handled = component.on_event(
+                        &OxidXEvent::MouseDown {
+                            button: mouse_button,
+                            position: input.mouse_position,
+                            modifiers: input.modifiers,
+                        },
+                        ctx,
+                    );
 
-                        let handled = component.on_event(
-                            &OxidXEvent::MouseDown {
-                                button: mouse_button,
-                                position: input.mouse_position,
-                                modifiers: input.modifiers,
-                            },
-                            ctx,
-                        );
-
-                        // Debug log for click handling
-                        if matches!(state, ElementState::Pressed) {
-                            if handled {
-                                // log::debug!("MouseDown Handled");
-                            }
-                        }
-                    } else {
-                        // Clicked outside - lose focus
-                        // Note: Only if we are managing global focus here?
-                        // For now we rely on the component returning generic focus events
-                        // But actually ctx.blur() should happen if we click background
-                        if input.is_focused {
-                            input.is_focused = false;
-                            component.on_event(&OxidXEvent::FocusLost, ctx);
-                            ctx.blur();
-                        }
+                    // If nothing handled the click, blur any focused component
+                    if !handled {
+                        ctx.blur();
                     }
                 }
                 ElementState::Released => {
-                    if input.is_hovered {
+                    // Always dispatch MouseUp to root
+                    component.on_event(
+                        &OxidXEvent::MouseUp {
+                            button: mouse_button,
+                            position: input.mouse_position,
+                            modifiers: input.modifiers,
+                        },
+                        ctx,
+                    );
+
+                    // Fire Click if same button that was pressed
+                    if input.pressed_button == Some(mouse_button) {
                         component.on_event(
-                            &OxidXEvent::MouseUp {
+                            &OxidXEvent::Click {
                                 button: mouse_button,
                                 position: input.mouse_position,
                                 modifiers: input.modifiers,
                             },
                             ctx,
                         );
-
-                        // Fire Click if same button
-                        if input.pressed_button == Some(mouse_button) {
-                            component.on_event(
-                                &OxidXEvent::Click {
-                                    button: mouse_button,
-                                    position: input.mouse_position,
-                                    modifiers: input.modifiers,
-                                },
-                                ctx,
-                            );
-                        }
                     }
                     input.pressed_button = None;
                 }
@@ -419,7 +372,7 @@ fn process_window_event<C: OxidXComponent>(
 
                 // Dispatch to focused component only?
                 // We'll use on_keyboard_input which is intended for this.
-                if ctx.focused_id.is_some() {
+                if ctx.focus.focused_id().is_some() {
                     component.on_keyboard_input(&cx_event, ctx);
                 }
             }
@@ -427,7 +380,7 @@ fn process_window_event<C: OxidXComponent>(
 
         // Handle IME input
         WindowEvent::Ime(ime_event) => {
-            if ctx.focused_id.is_some() {
+            if ctx.focus.focused_id().is_some() {
                 match ime_event {
                     winit::event::Ime::Preedit(text, cursor) => {
                         let (start, end) = cursor
@@ -466,7 +419,12 @@ fn render_frame<C: OxidXComponent>(
     clear_color: Color,
 ) -> Result<(), wgpu::SurfaceError> {
     // Get the current frame's texture
-    let output = ctx.surface.get_current_texture()?;
+    let surface = match &ctx.surface {
+        Some(s) => s,
+        None => return Ok(()),
+    };
+
+    let output = surface.get_current_texture()?;
     let view = output
         .texture
         .create_view(&wgpu::TextureViewDescriptor::default());

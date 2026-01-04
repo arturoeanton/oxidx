@@ -270,11 +270,18 @@ impl OxidXComponent for Input {
                 self.is_selected = false;
                 true
             }
-            OxidXEvent::MouseDown { .. }
-            | OxidXEvent::MouseUp { .. }
-            | OxidXEvent::Click { .. } => {
+            OxidXEvent::MouseDown { .. } => {
+                // Request focus when clicked
+                ctx.request_focus(&self.id);
+                self.is_focused = true;
                 // Clear selection on click
                 self.is_selected = false;
+                // Update IME position for input
+                self.update_ime_position(ctx);
+                true
+            }
+            OxidXEvent::MouseUp { .. } | OxidXEvent::Click { .. } => {
+                // Already focused on MouseDown, just consume
                 true
             }
             OxidXEvent::ImePreedit { text, .. } => {
