@@ -107,6 +107,11 @@ impl TextStyle {
         self.color = color;
         self
     }
+
+    pub fn with_size(mut self, size: f32) -> Self {
+        self.font_size = size;
+        self
+    }
 }
 
 /// RGBA Color.

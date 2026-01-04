@@ -22,6 +22,7 @@ pub struct Input {
     // === Layout ===
     bounds: Rect,
     layout: LayoutProps,
+    width: Option<f32>,
 
     // === Styling ===
     style: InteractiveStyle,
@@ -35,6 +36,7 @@ pub struct Input {
     is_focused: bool,
     is_hovered: bool,
     id: String,
+    is_password: bool,
 
     // === IME ===
     ime_preedit: String,
@@ -97,6 +99,7 @@ impl Input {
         Self {
             bounds: Rect::default(),
             layout: LayoutProps::default().with_padding(14.0),
+            width: None,
             style: InteractiveStyle {
                 idle,
                 hover,
@@ -109,6 +112,7 @@ impl Input {
             is_focused: false,
             is_hovered: false,
             id: String::new(),
+            is_password: false,
             ime_preedit: String::new(),
             cursor_pos: 0,
             cursor_blink_timer: 0.0,
@@ -131,9 +135,20 @@ impl Input {
         self
     }
 
+    pub fn width(mut self, width: f32) -> Self {
+        self.width = Some(width);
+        self
+    }
+
     /// Builder: Set custom interactive style
     pub fn with_style(mut self, style: InteractiveStyle) -> Self {
         self.style = style;
+        self
+    }
+
+    /// Builder: Ensure input masks characters
+    pub fn password_mode(mut self, enabled: bool) -> Self {
+        self.is_password = enabled;
         self
     }
 
@@ -314,6 +329,10 @@ impl Input {
         if char_index == 0 || self.value.is_empty() {
             return 0.0;
         }
+        if self.is_password {
+            let prefix = "*".repeat(char_index);
+            return renderer.measure_text(&prefix, self.text_style.font_size);
+        }
         let prefix: String = self.value.chars().take(char_index).collect();
         renderer.measure_text(&prefix, self.text_style.font_size)
     }
@@ -377,13 +396,11 @@ impl OxidXComponent for Input {
 
     fn layout(&mut self, available: Rect) -> Vec2 {
         let margin = self.layout.margin;
-        self.bounds = Rect::new(
-            available.x + margin,
-            available.y + margin,
-            available.width - margin * 2.0,
-            40.0,
-        );
-        Vec2::new(available.width, 40.0 + margin * 2.0)
+        let width = self.width.unwrap_or(available.width - margin * 2.0);
+        let height = 40.0;
+
+        self.bounds = Rect::new(available.x + margin, available.y + margin, width, height);
+        Vec2::new(width + margin * 2.0, height + margin * 2.0)
     }
 
     fn render(&self, renderer: &mut Renderer) {
@@ -427,8 +444,12 @@ impl OxidXComponent for Input {
         }
 
         // 4. Draw text (value or placeholder)
+        let display_text_owned;
         let display_text = if self.value.is_empty() {
             &self.placeholder
+        } else if self.is_password {
+            display_text_owned = "*".repeat(self.value.chars().count());
+            &display_text_owned
         } else {
             &self.value
         };
@@ -814,20 +835,9 @@ impl OxidXComponent for Input {
                     self.reset_cursor_blink();
                     return;
                 }
-
-                // Escape
-                if *key == KeyCode::ESCAPE {
-                    self.clear_selection();
-                    self.ime_preedit.clear();
-                    return;
-                }
             }
             _ => {}
         }
-    }
-
-    fn id(&self) -> &str {
-        &self.id
     }
 
     fn bounds(&self) -> Rect {
@@ -835,16 +845,12 @@ impl OxidXComponent for Input {
     }
 
     fn set_position(&mut self, x: f32, y: f32) {
-        self.bounds.x = x + self.layout.margin;
-        self.bounds.y = y + self.layout.margin;
+        self.bounds.x = x;
+        self.bounds.y = y;
     }
 
     fn set_size(&mut self, width: f32, height: f32) {
-        self.bounds.width = width - self.layout.margin * 2.0;
-        self.bounds.height = height - self.layout.margin * 2.0;
-    }
-
-    fn is_focusable(&self) -> bool {
-        true
+        self.bounds.width = width;
+        self.bounds.height = height;
     }
 }

@@ -2243,6 +2243,7 @@ dependencies = [
 name = "oxidx_std"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "glam",
  "log",
  "oxidx_core",

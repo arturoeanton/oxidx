@@ -1,6 +1,5 @@
 use oxidx_core::{
-    run_with_config, AppConfig, Color, ComponentState, OxidXComponent, OxidXContext, OxidXEvent,
-    Rect, Renderer, Vec2,
+    run_with_config, AppConfig, OxidXComponent, OxidXContext, OxidXEvent, Rect, Renderer, Vec2,
 };
 use oxidx_std::{Button, ComboBox, ContextMenu, MenuEntry};
 

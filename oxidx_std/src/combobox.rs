@@ -4,29 +4,33 @@ use oxidx_core::context::OxidXContext;
 use oxidx_core::events::{KeyCode, OxidXEvent};
 use oxidx_core::primitives::{Color, Rect, TextStyle};
 use oxidx_core::renderer::Renderer;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+
+const NO_SELECTION: usize = usize::MAX;
 
 /// The dropdown overlay component.
 struct ComboBoxDropdown {
     bounds: Rect,
-    items: Vec<String>,
+    items: Arc<Vec<String>>,
     item_height: f32,
     scroll_offset: f32,
-    max_height: f32,
+    _max_height: f32,
     hovered_item: Option<usize>,
-    selected_index: Option<usize>,
 
-    // Callbacks/State
-    on_select: Option<Box<dyn Fn(usize) + Send + Sync>>, // Pass simple index
+    // Shared State
+    selected_index: Arc<AtomicUsize>,
     is_open: Arc<AtomicBool>,
+
+    // Callbacks
+    on_select: Option<Box<dyn Fn(usize) + Send + Sync>>,
 }
 
 impl ComboBoxDropdown {
     fn new(
         bounds: Rect,
-        items: Vec<String>,
-        selected_index: Option<usize>,
+        items: Arc<Vec<String>>,
+        selected_index: Arc<AtomicUsize>,
         is_open: Arc<AtomicBool>,
     ) -> Self {
         Self {
@@ -34,11 +38,11 @@ impl ComboBoxDropdown {
             items,
             item_height: 30.0,
             scroll_offset: 0.0,
-            max_height: 200.0,
+            _max_height: 200.0,
             hovered_item: None,
             selected_index,
-            on_select: None,
             is_open,
+            on_select: None,
         }
     }
 
@@ -70,14 +74,23 @@ impl OxidXComponent for ComboBoxDropdown {
     fn render(&self, renderer: &mut Renderer) {
         // Extract theme
         let theme = &renderer.theme;
-        let surface_alt = theme.surface_alt;
+        let surface = theme.surface; // Use surface instead of surface_alt for better visibility
         let surface_hover = theme.surface_hover;
         let border = theme.border;
         let primary = theme.primary;
         let text_color = theme.text;
 
+        // Draw Shadow
+        let shadow_rect = Rect::new(
+            self.bounds.x + 2.0,
+            self.bounds.y + 2.0,
+            self.bounds.width,
+            self.bounds.height,
+        );
+        renderer.fill_rect(shadow_rect, Color::new(0.0, 0.0, 0.0, 0.5));
+
         // Background
-        renderer.fill_rect(self.bounds, surface_alt);
+        renderer.fill_rect(self.bounds, surface);
         renderer.stroke_rect(self.bounds, border, 1.0);
 
         // Clip content
@@ -87,6 +100,8 @@ impl OxidXComponent for ComboBoxDropdown {
         let visible_count = (self.bounds.height / self.item_height).ceil() as usize;
         let visible_end = (visible_start + visible_count + 1).min(self.items.len());
 
+        let current_selection = self.selected_index.load(Ordering::Relaxed);
+
         let mut y = self.bounds.y + (visible_start as f32 * self.item_height) - self.scroll_offset;
 
         for i in visible_start..visible_end {
@@ -95,7 +110,7 @@ impl OxidXComponent for ComboBoxDropdown {
             // Highlight
             if self.hovered_item == Some(i) {
                 renderer.fill_rect(item_rect, surface_hover);
-            } else if self.selected_index == Some(i) {
+            } else if current_selection == i {
                 renderer.fill_rect(item_rect, primary.with_alpha(0.2));
             }
 
@@ -150,6 +165,9 @@ impl OxidXComponent for ComboBoxDropdown {
                     let idx = (local_y / self.item_height).floor() as usize;
 
                     if idx < self.items.len() {
+                        // Update Shared State
+                        self.selected_index.store(idx, Ordering::Relaxed);
+
                         // Callback
                         if let Some(cb) = &self.on_select {
                             cb(idx);
@@ -186,13 +204,14 @@ impl OxidXComponent for ComboBoxDropdown {
 pub struct ComboBox {
     id: String,
     bounds: Rect,
-    items: Vec<String>,
-    selected_index: Option<usize>,
+
+    // Shared State
+    items: Arc<Vec<String>>,
+    selected_index: Arc<AtomicUsize>,
+    is_open: Arc<AtomicBool>,
+
     placeholder: String,
     disabled: bool,
-
-    // State
-    is_open: Arc<AtomicBool>,
     hovered: bool,
     focused: bool,
 
@@ -204,8 +223,8 @@ impl ComboBox {
         Self {
             id: id.into(),
             bounds: Rect::ZERO,
-            items: Vec::new(),
-            selected_index: None,
+            items: Arc::new(Vec::new()),
+            selected_index: Arc::new(AtomicUsize::new(NO_SELECTION)),
             placeholder: "Select...".to_string(),
             disabled: false,
             is_open: Arc::new(AtomicBool::new(false)),
@@ -216,12 +235,13 @@ impl ComboBox {
     }
 
     pub fn items(mut self, items: Vec<String>) -> Self {
-        self.items = items;
+        self.items = Arc::new(items);
         self
     }
 
-    pub fn selected_index(mut self, index: Option<usize>) -> Self {
-        self.selected_index = index;
+    pub fn selected_index(self, index: Option<usize>) -> Self {
+        let val = index.unwrap_or(NO_SELECTION);
+        self.selected_index.store(val, Ordering::Relaxed);
         self
     }
 
@@ -235,20 +255,25 @@ impl ComboBox {
         self
     }
 
+    pub fn get_selected_index(&self) -> Option<usize> {
+        let val = self.selected_index.load(Ordering::Relaxed);
+        if val == NO_SELECTION {
+            None
+        } else {
+            Some(val)
+        }
+    }
+
+    pub fn get_items(&self) -> &Vec<String> {
+        &self.items
+    }
+
     pub fn on_select<F>(mut self, callback: F) -> Self
     where
         F: Fn(usize, &String) + Send + Sync + 'static,
     {
         self.on_select = Some(Arc::new(callback));
         self
-    }
-
-    pub fn get_selected_index(&self) -> Option<usize> {
-        self.selected_index
-    }
-
-    pub fn get_items(&self) -> &Vec<String> {
-        &self.items
     }
 
     fn toggle(&mut self, ctx: &mut OxidXContext) {
@@ -258,7 +283,7 @@ impl ComboBox {
 
         let currently_open = self.is_open.load(Ordering::Relaxed);
         if currently_open {
-            ctx.clear_overlays(); // This will drop the dropdown, setting is_open to false
+            ctx.clear_overlays();
         } else {
             self.open(ctx);
         }
@@ -271,7 +296,6 @@ impl ComboBox {
         let max_dropdown_height = 200.0;
         let dropdown_height = (self.items.len() as f32 * item_height).min(max_dropdown_height);
 
-        // Position below the combo box
         let dropdown_bounds = Rect::new(
             self.bounds.x,
             self.bounds.y + self.bounds.height,
@@ -279,57 +303,8 @@ impl ComboBox {
             dropdown_height,
         );
 
-        // Create callback closure
         let cb_clone = self.on_select.clone();
-        let items_clone = self.items.clone(); // Clone items (costly? could use Rc or ref if component allowed lifetime)
-                                              // Note: Component trait requires 'static usually or owned data. Vector clone for UI string list is okay.
-
-        // We also need to update OUR selected_index when something is selected.
-        // But we can't mutate `self` from the overlay callback directly easily without RefCell which components don't always use?
-        // Wait, OxidXComponent structure assumes ownership.
-        // The `on_select` passed to `ComboBox` is user logic.
-        // The `ComboBox` needs to update its display.
-        // BUT the overlay is separate.
-        // We can't easily mutate ComboBox from Overlay unless we share state via Rc<RefCell<...>>.
-        // HOWEVER, standard pattern: ComboBox updates on EVENT.
-        // The Overlay will act, close.
-        // We need the selection to propagate back.
-        // Simplest: Shared `selected_index` via Rc<Cell<Option<usize>>>?
-        // Or send an event? OxidX doesn't have internal message bus yet.
-
-        // Alternative: The user callback updates the app state, which re-renders/updates the ComboBox props.
-        // This is the "React" way.
-        // But for internal state (displaying selected item), ComboBox needs to know.
-
-        // Let's use Rc<Cell<Option<usize>>> for internal selection state if we want to sync.
-        // But `selected_index` is `Option<usize>` field.
-        // Let's rely on the user callback to update the app model, and the app model to update ComboBox `selected_index` on next frame?
-        // OR: We define that `ComboBox` manages its own state?
-        // If `on_select` is provided, usually user updates model.
-        //
-        // For now, let's just trigger the callback. The user is responsible for updating the `selected_index` prop if they want persistence.
-        // (Or we could make `ComboBox` fully stateful later).
-        // Actually, existing implementation updated `self.selected_index`.
-        // To maintain that behavior with detached overlay, we need shared mutable state.
-
-        // Let's verify: `self` is stuck here.
-        // We can't pass `&mut self` to overlay.
-        // We'll proceed with the Callbacks. The standard component `on_select` usually implies "notify me".
-        // Updating `self.selected_index` is convenient but maybe not strictly required if using Unidirectional Data Flow.
-        // BUT, for a self-container component, it should update.
-        //
-        // HACK/SOLUTION: We can use a `std::sync::mpsc` channel or similar? No, overkill.
-        // Shared State `Rc<Cell<Option<usize>>>` for selected index.
-        //
-        // Let's try to stick to "User Callback".
-        // If the user wants the combo to update, they should update the index passed to it, OR we just update it if we can.
-        //
-        // WAIT: If we use `ctx.emit_event(...)` we could send a custom event? no custom events yet.
-        //
-        // Let's use `Rc<Cell<Option<usize>>>` for the selection index inner state if we want it self-contained.
-        // But for this refactor, I will just call the callback.
-        // Limitation: visual update of the "Header" might lag one frame or require App logic to update props.
-        // This is acceptable for modern UI.
+        let items_clone = self.items.clone();
 
         let on_select = if let Some(cb) = &cb_clone {
             let cb = cb.clone();
@@ -346,7 +321,7 @@ impl ComboBox {
         let dropdown = ComboBoxDropdown::new(
             dropdown_bounds,
             self.items.clone(),
-            self.selected_index,
+            self.selected_index.clone(),
             self.is_open.clone(),
         )
         .with_callback(on_select);
@@ -463,8 +438,9 @@ impl OxidXComponent for ComboBox {
         renderer.stroke_rect(self.bounds, border_color, 1.0);
 
         // Text
-        let text = if let Some(idx) = self.selected_index {
-            self.items.get(idx).unwrap_or(&self.placeholder)
+        let sel_idx = self.selected_index.load(Ordering::Relaxed);
+        let text = if sel_idx != NO_SELECTION {
+            self.items.get(sel_idx).unwrap_or(&self.placeholder)
         } else {
             &self.placeholder
         };

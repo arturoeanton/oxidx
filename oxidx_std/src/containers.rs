@@ -52,6 +52,12 @@ impl VStack {
         }
     }
 
+    /// Sets the spacing gap (builder).
+    pub fn spacing(mut self, gap: f32) -> Self {
+        self.spacing.gap = gap;
+        self
+    }
+
     /// Sets the spacing configuration.
     pub fn set_spacing(&mut self, spacing: Spacing) {
         self.spacing = spacing;
@@ -241,6 +247,12 @@ impl HStack {
             spacing,
             ..Self::new()
         }
+    }
+
+    /// Sets the spacing gap (builder).
+    pub fn spacing(mut self, gap: f32) -> Self {
+        self.spacing.gap = gap;
+        self
     }
 
     /// Sets the spacing configuration.
