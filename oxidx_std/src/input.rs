@@ -265,6 +265,32 @@ impl Input {
         self.fire_on_change();
     }
 
+    // === Test Helpers (public for headless testing) ===
+
+    /// Test helper: Insert a character at cursor (for headless unit testing)
+    #[cfg(test)]
+    pub fn test_insert_char(&mut self, ch: char) {
+        self.insert_at_cursor(&ch.to_string());
+    }
+
+    /// Test helper: Insert text at cursor (for headless unit testing)
+    #[cfg(test)]
+    pub fn test_insert_text(&mut self, text: &str) {
+        self.insert_at_cursor(text);
+    }
+
+    /// Test helper: Delete char before cursor (backspace) (for headless unit testing)
+    #[cfg(test)]
+    pub fn test_backspace(&mut self) {
+        self.delete_char_before_cursor();
+    }
+
+    /// Test helper: Focus the input (for headless unit testing)
+    #[cfg(test)]
+    pub fn test_focus(&mut self) {
+        self.is_focused = true;
+    }
+
     /// Deletes character before cursor (backspace)
     fn delete_char_before_cursor(&mut self) {
         if self.cursor_pos > 0 {
@@ -759,5 +785,99 @@ impl OxidXComponent for Input {
     fn set_size(&mut self, width: f32, height: f32) {
         self.bounds.width = width;
         self.bounds.height = height;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test 1: Text Entry
+    /// Simulate typing "A", "B", "C". Assert value == "ABC".
+    #[test]
+    fn test_text_entry() {
+        let mut input = Input::new("Enter text").with_id("test_input");
+
+        // Focus the input (headless)
+        input.test_focus();
+
+        // Type characters using test helper
+        input.test_insert_char('A');
+        input.test_insert_char('B');
+        input.test_insert_char('C');
+
+        // Assert value
+        assert_eq!(input.value(), "ABC");
+    }
+
+    /// Test 2: Password Mode
+    /// Set password_mode(true). Type "123".
+    /// Assert internal value == "123".
+    #[test]
+    fn test_password_mode() {
+        let mut input = Input::new("Password")
+            .with_id("password_input")
+            .password_mode(true);
+
+        // Focus the input
+        input.test_focus();
+
+        // Type characters
+        input.test_insert_text("123");
+
+        // Assert internal value is correct
+        assert_eq!(input.value(), "123");
+
+        // Verify password mode is enabled
+        assert!(input.is_password);
+    }
+
+    /// Test 3: Backspace
+    /// Type "A", press Backspace. Assert value == "".
+    #[test]
+    fn test_backspace() {
+        let mut input = Input::new("Test").with_id("test_input");
+
+        // Focus the input
+        input.test_focus();
+
+        // Type a character
+        input.test_insert_char('A');
+        assert_eq!(input.value(), "A");
+
+        // Press Backspace using test helper
+        input.test_backspace();
+
+        // Assert value is now empty
+        assert_eq!(input.value(), "");
+    }
+
+    /// Test: Multiple backspaces
+    #[test]
+    fn test_multiple_backspace() {
+        let mut input = Input::new("Test").with_id("test_input");
+
+        input.test_focus();
+
+        // Type "Hello"
+        input.test_insert_text("Hello");
+        assert_eq!(input.value(), "Hello");
+
+        // Press Backspace twice
+        input.test_backspace();
+        input.test_backspace();
+
+        // Assert value is "Hel"
+        assert_eq!(input.value(), "Hel");
+    }
+
+    /// Test: Set value programmatically
+    #[test]
+    fn test_set_value() {
+        let mut input = Input::new("Test");
+        assert_eq!(input.value(), "");
+
+        input.set_value("Hello World");
+        assert_eq!(input.value(), "Hello World");
     }
 }

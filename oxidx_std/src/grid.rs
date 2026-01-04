@@ -929,3 +929,105 @@ impl OxidXComponent for Grid {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oxidx_core::testing::OxidXTestHarness;
+
+    /// Test 1: Data Integrity
+    /// Add a row. Assert row count is 1.
+    #[test]
+    fn test_add_row() {
+        let mut grid = Grid::new("test_grid");
+        grid.add_column(Column::new("name", "Name"));
+        grid.add_column(Column::new("value", "Value"));
+
+        assert_eq!(grid.row_count(), 0);
+
+        // Add a row
+        grid.add_row(Row::new("row1").cell("name", "Test").cell("value", "123"));
+
+        assert_eq!(grid.row_count(), 1);
+    }
+
+    /// Test: Add multiple rows
+    #[test]
+    fn test_add_multiple_rows() {
+        let mut grid = Grid::new("test_grid");
+        grid.add_column(Column::new("id", "ID"));
+        grid.add_column(Column::new("name", "Name"));
+
+        assert_eq!(grid.row_count(), 0);
+
+        // Add rows
+        grid.add_row(Row::new("row1").cell("id", "1").cell("name", "Alice"));
+        grid.add_row(Row::new("row2").cell("id", "2").cell("name", "Bob"));
+        grid.add_row(Row::new("row3").cell("id", "3").cell("name", "Charlie"));
+
+        assert_eq!(grid.row_count(), 3);
+    }
+
+    /// Test 2: Selection
+    /// Select a row. Assert selected_rows contains the row ID.
+    #[test]
+    fn test_row_selection() {
+        let mut grid = Grid::new("test_grid");
+        grid.add_column(Column::new("name", "Name"));
+
+        grid.add_row(Row::new("row1").cell("name", "Test1"));
+        grid.add_row(Row::new("row2").cell("name", "Test2"));
+
+        // Initially no selection
+        assert!(grid.selected_rows().is_empty());
+
+        // Select a row programmatically
+        grid.select_row("row1");
+
+        // Verify selection
+        assert!(grid.selected_rows().contains("row1"));
+        assert!(!grid.selected_rows().contains("row2"));
+        assert_eq!(grid.selected_rows().len(), 1);
+    }
+
+    /// Test: Clear selection
+    #[test]
+    fn test_clear_selection() {
+        let mut grid = Grid::new("test_grid");
+        grid.add_column(Column::new("name", "Name"));
+
+        grid.add_row(Row::new("row1").cell("name", "Test1"));
+        grid.select_row("row1");
+        assert_eq!(grid.selected_rows().len(), 1);
+
+        // Clear selection
+        grid.clear_selection();
+        assert!(grid.selected_rows().is_empty());
+    }
+
+    /// Test: Column count
+    #[test]
+    fn test_column_count() {
+        let mut grid = Grid::new("test_grid");
+        grid.add_column(Column::new("col1", "Column 1"));
+        grid.add_column(Column::new("col2", "Column 2"));
+        grid.add_column(Column::new("col3", "Column 3"));
+
+        assert_eq!(grid.column_count(), 3);
+    }
+
+    /// Test: Harness setup for Grid
+    #[test]
+    fn test_harness_setup() {
+        let mut harness = OxidXTestHarness::new();
+        let mut grid = Grid::new("test_grid");
+        grid.add_column(Column::new("name", "Name"));
+
+        harness.setup_component(&mut grid);
+
+        // Verify component was set up with reasonable bounds
+        let bounds = grid.bounds();
+        assert!(bounds.width > 0.0);
+        assert!(bounds.height > 0.0);
+    }
+}

@@ -48,6 +48,7 @@ pub mod primitives;
 pub mod renderer;
 pub mod style;
 pub mod syntax;
+pub mod testing;
 pub mod theme;
 
 // Re-export primary types
@@ -61,6 +62,7 @@ pub use primitives::{Color, Rect, TextAlign, TextStyle};
 pub use renderer::Renderer;
 pub use style::{Background, Border, ComponentState, InteractiveStyle, Shadow, Style};
 pub use syntax::{SyntaxDefinition, SyntaxError};
+pub use testing::{MockContext, OxidXTestHarness};
 pub use theme::Theme;
 
 // Re-export glam types
