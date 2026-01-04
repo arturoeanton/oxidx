@@ -7,6 +7,8 @@
 //! - Keyboard activation (Enter/Space when focused)
 //! - Icon support (optional)
 //! - Loading state with animation
+//!
+//!
 
 use glam::Vec2;
 use oxidx_core::component::OxidXComponent;
@@ -55,7 +57,7 @@ pub struct Button {
     loading_rotation: f32,
 
     // === Callbacks ===
-    on_click: Option<Box<dyn Fn() + Send>>,
+    on_click: Option<Box<dyn Fn(&mut OxidXContext) + Send>>,
 
     // === Animation ===
     /// Press animation progress (0.0 to 1.0)
@@ -170,7 +172,7 @@ impl Button {
     }
 
     /// Sets the click callback.
-    pub fn on_click(mut self, callback: impl Fn() + Send + 'static) -> Self {
+    pub fn on_click(mut self, callback: impl Fn(&mut OxidXContext) + Send + 'static) -> Self {
         self.on_click = Some(Box::new(callback));
         self
     }
@@ -287,10 +289,10 @@ impl Button {
     }
 
     /// Triggers the click action.
-    fn trigger_click(&self) {
+    fn trigger_click(&self, ctx: &mut OxidXContext) {
         if !self.is_disabled && !self.is_loading {
             if let Some(ref callback) = self.on_click {
-                callback();
+                callback(ctx);
             }
         }
     }
@@ -473,7 +475,7 @@ impl OxidXComponent for Button {
             }
             OxidXEvent::Click { button, .. } => {
                 if matches!(button, MouseButton::Left) {
-                    self.trigger_click();
+                    self.trigger_click(ctx);
                     true
                 } else {
                     false
@@ -504,7 +506,7 @@ impl OxidXComponent for Button {
                 if *key == KeyCode::ENTER || *key == KeyCode::SPACE {
                     if self.is_pressed {
                         self.is_pressed = false;
-                        self.trigger_click();
+                        self.trigger_click(ctx);
                     }
                 }
             }

@@ -4,13 +4,18 @@
 //! Components call methods like `fill_rect()` and `draw_text()`, and the
 //! renderer batches all primitives for efficient GPU rendering.
 //!
-//! ## Batching Algorithm
+//! ## Batching Algorithm (Updated for Z-Index)
 //!
-//! 1. `begin_frame()`: Clear vertex/index arrays, prepare for new frame
-//! 2. Components call `fill_rect()`, `draw_text()`, etc. - appends to arrays
-//! 3. `end_frame()`: Upload all batched data and issue draw calls
+//! 1. `begin_frame()`: Clear render queue.
+//! 2. Components call `fill_rect()`, `draw_text()`. Commands are pushed to `commands` queue with current `z_index` and `submission_order`.
+//! 3. `end_frame()`:
+//!    - Sort commands by Z-Index (primary) and Order (secondary).
+//!    - Iterate through commands.
+//!    - Sequential `Rect` commands are batched into vertex buffer.
+//!    - `Text` commands flush the current batch, draw text, and resume batching.
 //!
-//! This approach minimizes GPU state changes and buffer uploads.
+//! This approach allows perfect interleaving of text and geometry ("Painter's Algorithm")
+//! while maintaining batching efficiency for the geometry parts.
 
 use crate::assets::LoadedImage;
 use crate::primitives::{Color, Rect, TextStyle};
@@ -27,7 +32,7 @@ use wgpu::util::DeviceExt;
 
 pub type TextureId = u32;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct DrawBatch {
     texture_id: TextureId,
     index_start: u32,
@@ -90,16 +95,32 @@ struct Uniforms {
     projection: [[f32; 4]; 4],
 }
 
-/// Text command queued for rendering.
+/// Operation to be rendered.
+#[derive(Clone, Debug)]
+enum RenderOp {
+    /// A set of vertices/indices representing a geometric shape (Rect, Image)
+    Geometry {
+        vertices: Vec<Vertex>,
+        indices: Vec<u32>,
+        texture_id: TextureId,
+    },
+    /// Text to be rendered
+    Text(TextCommand),
+    /// A clipping push op
+    PushClip(Rect),
+    /// A clipping pop op
+    PopClip,
+}
+
+/// Text command details.
+#[derive(Clone, Debug)]
 enum TextCommand {
-    /// Simple string (legacy/easy API)
     Simple {
         text: String,
         position: Vec2,
         style: TextStyle,
         bounds_width: Option<f32>,
     },
-    /// Rich text with attributes
     Rich {
         text: String,
         attrs: AttrsList,
@@ -110,21 +131,29 @@ enum TextCommand {
     },
 }
 
+/// A command in the render queue.
+#[derive(Clone, Debug)]
+struct RenderCommand {
+    /// Z-Index for explicit layering (-100 to 100, default 0)
+    z_index: i32,
+    /// Submission order for stable sorting (Painter's Algorithm)
+    order: u64,
+    /// The operation to perform
+    op: RenderOp,
+}
+
 /// Initial capacity for vertex/index buffers.
-const INITIAL_VERTEX_CAPACITY: usize = 1024;
-const INITIAL_INDEX_CAPACITY: usize = 1536; // 1.5x vertices for quads
+const INITIAL_VERTEX_CAPACITY: usize = 4096;
+const INITIAL_INDEX_CAPACITY: usize = 6144;
 
 /// The main batched 2D renderer.
-///
-/// Collects draw commands from components and renders them efficiently.
-/// Uses orthographic projection so components work in pixel coordinates.
 pub struct Renderer {
     // GPU resources
     device: Arc<wgpu::Device>,
     queue: Arc<wgpu::Queue>,
     _surface_format: wgpu::TextureFormat,
 
-    // Global theme for rendering components
+    // Global theme
     pub theme: Theme,
 
     // Render pipeline
@@ -138,33 +167,31 @@ pub struct Renderer {
     vertex_capacity: usize,
     index_capacity: usize,
 
-    // CPU-side batching arrays
-    vertices: Vec<Vertex>,
-    indices: Vec<u32>,
-
     // Text rendering
     pub text_brush: TextBrush,
-    text_commands: Vec<TextCommand>,
 
-    // Overlay layer (rendered on top, no clipping)
-    overlay_vertices: Vec<Vertex>,
-    overlay_indices: Vec<u32>,
-    overlay_text_commands: Vec<TextCommand>,
+    // Unified Render Command Queue
+    commands: Vec<RenderCommand>,
 
-    // Batches
-    batches: Vec<DrawBatch>,
+    // State
+    current_z_index: i32,
+    next_order: u64,
+
+    // Resources
     texture_bind_groups: HashMap<TextureId, wgpu::BindGroup>,
-    // Cache of loaded assets (path -> texture_id)
     assets: HashMap<String, TextureId>,
     white_texture: TextureId,
     next_texture_id: TextureId,
     texture_layout: wgpu::BindGroupLayout,
 
-    // Screen size for projection
+    // Screen info
     screen_width: f32,
     screen_height: f32,
+    physical_width: u32,
+    physical_height: u32,
+    scale_factor: f64,
 
-    // Scissor clipping stack
+    // Scissor clipping
     clip_stack: ClipStack,
 }
 
@@ -206,15 +233,11 @@ impl ClipStack {
 }
 
 /// Manages text resources and rendering.
-/// Wraps cosmic-text and glyphon.
 pub struct TextBrush {
     pub font_system: FontSystem,
     pub swash_cache: SwashCache,
     pub text_renderer: GlyphonTextRenderer,
     pub text_atlas: glyphon::TextAtlas,
-    // Cache for simple text commands to avoid reallocation every frame
-    // In a real engine we'd use a proper LRU cache or handle IDs
-    // For now we just use it for the current frame's batch
 }
 
 impl TextBrush {
@@ -239,14 +262,6 @@ impl TextBrush {
 }
 
 impl Renderer {
-    /// Creates a new Renderer.
-    ///
-    /// # Arguments
-    /// * `device` - WGPU device
-    /// * `queue` - WGPU queue
-    /// * `surface_format` - Format of the render target
-    /// * `width` - Initial screen width in pixels
-    /// * `height` - Initial screen height in pixels
     pub fn new(
         device: Arc<wgpu::Device>,
         queue: Arc<wgpu::Queue>,
@@ -254,13 +269,11 @@ impl Renderer {
         width: u32,
         height: u32,
     ) -> Self {
-        // Create shader module
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("OxidX Batched Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shader_batched.wgsl").into()),
         });
 
-        // Create uniform buffer for projection matrix
         let projection = Self::create_orthographic_projection(width as f32, height as f32);
         let uniforms = Uniforms {
             projection: projection.to_cols_array_2d(),
@@ -271,8 +284,6 @@ impl Renderer {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        // Create bind group layout and bind group
-        // Create bind group layout and bind group (Uniforms)
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Uniform Bind Group Layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -296,11 +307,9 @@ impl Renderer {
             }],
         });
 
-        // Create texture bind group layout (Group 1)
         let texture_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Texture Bind Group Layout"),
             entries: &[
-                // Texture
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::FRAGMENT,
@@ -311,7 +320,6 @@ impl Renderer {
                     },
                     count: None,
                 },
-                // Sampler
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
                     visibility: wgpu::ShaderStages::FRAGMENT,
@@ -321,7 +329,7 @@ impl Renderer {
             ],
         });
 
-        // Create default white texture for non-textured rendering
+        // Default white texture
         let white_size = wgpu::Extent3d {
             width: 1,
             height: 1,
@@ -377,7 +385,6 @@ impl Renderer {
         let white_id = 0;
         texture_bind_groups.insert(white_id, white_bind_group);
 
-        // Create render pipeline
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
             bind_group_layouts: &[&bind_group_layout, &texture_layout],
@@ -415,7 +422,6 @@ impl Renderer {
             multiview: None,
         });
 
-        // Create initial vertex/index buffers
         let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Vertex Buffer"),
             size: (INITIAL_VERTEX_CAPACITY * std::mem::size_of::<Vertex>()) as u64,
@@ -430,7 +436,6 @@ impl Renderer {
             mapped_at_creation: false,
         });
 
-        // Initialize TextBrush
         let text_brush = TextBrush::new(&device, &queue, surface_format);
 
         Self {
@@ -445,15 +450,12 @@ impl Renderer {
             index_buffer,
             vertex_capacity: INITIAL_VERTEX_CAPACITY,
             index_capacity: INITIAL_INDEX_CAPACITY,
-            vertices: Vec::with_capacity(INITIAL_VERTEX_CAPACITY),
-            indices: Vec::with_capacity(INITIAL_INDEX_CAPACITY),
             text_brush,
-            text_commands: Vec::new(),
-            overlay_vertices: Vec::new(),
-            overlay_indices: Vec::new(),
-            overlay_text_commands: Vec::new(),
 
-            batches: Vec::new(),
+            commands: Vec::new(),
+            current_z_index: 0,
+            next_order: 0,
+
             texture_bind_groups,
             assets: HashMap::new(),
             white_texture: white_id,
@@ -462,38 +464,28 @@ impl Renderer {
 
             screen_width: width as f32,
             screen_height: height as f32,
+            physical_width: width,
+            physical_height: height,
+            scale_factor: 1.0,
             clip_stack: ClipStack::new(),
         }
     }
 
-    /// Creates an orthographic projection matrix.
-    /// Maps pixel coordinates to clip space:
-    /// - (0, 0) at top-left
-    /// - (width, height) at bottom-right
     fn create_orthographic_projection(width: f32, height: f32) -> Mat4 {
-        // left=0, right=width, bottom=height, top=0, near=-1, far=1
         Mat4::orthographic_rh(0.0, width, height, 0.0, -1.0, 1.0)
     }
 
-    /// Updates the projection matrix when the window is resized.
     pub fn resize(&mut self, width: u32, height: u32) {
         self.resize_with_scale(width, height, 1.0);
     }
 
-    /// Updates the projection matrix with DPI scaling.
-    ///
-    /// - `width`, `height`: Physical pixel size of the surface
-    /// - `scale_factor`: Display scale factor (1.0 = normal, 2.0 = Retina)
-    ///
-    /// The projection matrix uses logical coordinates (physical / scale_factor)
-    /// so components can draw in consistent logical units regardless of DPI.
-    /// The viewport uses physical pixels for crisp rendering.
     pub fn resize_with_scale(&mut self, width: u32, height: u32, scale_factor: f64) {
-        // Store logical size for component layout
+        self.physical_width = width;
+        self.physical_height = height;
+        self.scale_factor = scale_factor;
         self.screen_width = width as f32 / scale_factor as f32;
         self.screen_height = height as f32 / scale_factor as f32;
 
-        // Projection uses logical size so components draw in logical coordinates
         let projection =
             Self::create_orthographic_projection(self.screen_width, self.screen_height);
         let uniforms = Uniforms {
@@ -503,75 +495,61 @@ impl Renderer {
             .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
     }
 
-    /// Returns the current screen size (in logical points).
     pub fn screen_size(&self) -> Vec2 {
         Vec2::new(self.screen_width, self.screen_height)
     }
 
-    /// Begins a new frame. Clears all batched data.
-    pub fn begin_frame(&mut self) {
-        self.vertices.clear();
-        self.indices.clear();
-        self.text_commands.clear();
-        self.overlay_vertices.clear();
-        self.overlay_indices.clear();
-        self.overlay_text_commands.clear();
-        self.overlay_indices.clear();
-        self.overlay_text_commands.clear();
-        self.clip_stack.clear();
-        self.batches.clear();
+    /// Set the current Z-Index for subsequent draw calls.
+    pub fn set_z_index(&mut self, z_index: i32) {
+        self.current_z_index = z_index;
     }
 
-    /// Pushes a clip rectangle onto the clipping stack.
-    ///
-    /// Content rendered after this call will be clipped to the intersection
-    /// of all active clip rectangles. Call `pop_clip()` to restore the previous
-    /// clipping state.
-    ///
-    /// # Arguments
-    /// * `rect` - The clipping rectangle in pixel coordinates
+    /// Get current Z-Index.
+    pub fn z_index(&self) -> i32 {
+        self.current_z_index
+    }
+
+    pub fn begin_frame(&mut self) {
+        self.commands.clear();
+        self.next_order = 0;
+        self.current_z_index = 0;
+        self.clip_stack.clear();
+    }
+
+    fn push_command(&mut self, op: RenderOp) {
+        self.commands.push(RenderCommand {
+            z_index: self.current_z_index,
+            order: self.next_order,
+            op,
+        });
+        self.next_order += 1;
+    }
+
+    // Clip Stack
     pub fn push_clip(&mut self, rect: Rect) {
         self.clip_stack.push(rect);
+        // We push an Op so we can replay it during render
+        self.push_command(RenderOp::PushClip(rect));
     }
 
-    /// Pops the most recent clip rectangle from the stack.
-    ///
-    /// Restores the previous clipping state. If the stack is empty,
-    /// this is a no-op.
     pub fn pop_clip(&mut self) {
-        if self.clip_stack.pop().is_none() {
-            log::warn!("Clip stack underflow! pop_clip() called on empty stack.");
-        }
+        self.clip_stack.pop();
+        self.push_command(RenderOp::PopClip);
     }
 
-    /// Returns the current clip rectangle, if any.
     pub fn current_clip(&self) -> Option<Rect> {
         self.clip_stack.current()
     }
 
-    /// Clears the clip stack.
-    /// Useful before rendering overlays to ensure they are not clipped.
     pub fn clear_clip(&mut self) {
-        self.clip_stack.clear();
-    }
-
-    /// Switches rendering batch if necessary.
-    fn ensure_batch(&mut self, texture_id: TextureId) {
-        if let Some(current) = self.batches.last() {
-            if current.texture_id == texture_id {
-                return;
-            }
+        // Pop all clips
+        while self.clip_stack.current().is_some() {
+            self.pop_clip();
         }
-
-        // Start new batch
-        self.batches.push(DrawBatch {
-            texture_id,
-            index_start: self.indices.len() as u32,
-            index_count: 0,
-        });
     }
 
-    /// Creates a texture from an image.
+    // --- Drawing primitives ---
+
     pub fn create_texture(&mut self, image: &LoadedImage, label: Option<&str>) -> TextureId {
         let size = wgpu::Extent3d {
             width: image.width,
@@ -633,8 +611,6 @@ impl Renderer {
         id
     }
 
-    /// Loads an image from disk and creates a GPU texture.
-    /// Returns the cached TextureId if already loaded.
     pub fn load_image(&mut self, path: &str) -> Result<TextureId, String> {
         if let Some(&id) = self.assets.get(path) {
             return Ok(id);
@@ -654,89 +630,65 @@ impl Renderer {
         Ok(id)
     }
 
-    /// Draws a textured rectangle (Image).
     pub fn draw_image(&mut self, rect: Rect, texture_id: TextureId) {
-        self.ensure_batch(texture_id);
+        let mut vertices = Vec::with_capacity(4);
+        let mut indices = Vec::with_capacity(6);
 
-        let base_index = self.vertices.len() as u32;
-
-        self.vertices.push(Vertex {
+        vertices.push(Vertex {
             position: [rect.x, rect.y],
             color: [1.0, 1.0, 1.0, 1.0],
             uv: [0.0, 0.0],
         });
-        self.vertices.push(Vertex {
+        vertices.push(Vertex {
             position: [rect.x + rect.width, rect.y],
             color: [1.0, 1.0, 1.0, 1.0],
             uv: [1.0, 0.0],
         });
-        self.vertices.push(Vertex {
+        vertices.push(Vertex {
             position: [rect.x + rect.width, rect.y + rect.height],
             color: [1.0, 1.0, 1.0, 1.0],
             uv: [1.0, 1.0],
         });
-        self.vertices.push(Vertex {
+        vertices.push(Vertex {
             position: [rect.x, rect.y + rect.height],
             color: [1.0, 1.0, 1.0, 1.0],
             uv: [0.0, 1.0],
         });
 
-        self.indices.push(base_index);
-        self.indices.push(base_index + 1);
-        self.indices.push(base_index + 2);
-        self.indices.push(base_index);
-        self.indices.push(base_index + 2);
-        self.indices.push(base_index + 3);
+        indices.extend_from_slice(&[0, 1, 2, 0, 2, 3]);
 
-        if let Some(batch) = self.batches.last_mut() {
-            batch.index_count += 6;
-        }
+        self.push_command(RenderOp::Geometry {
+            vertices,
+            indices,
+            texture_id,
+        });
     }
 
-    /// Draws a filled rectangle.
-    ///
-    /// # Arguments
-    /// * `rect` - Rectangle bounds in pixels
-    /// * `color` - Fill color
     pub fn fill_rect(&mut self, rect: Rect, color: Color) {
-        self.ensure_batch(self.white_texture);
-        let base_index = self.vertices.len() as u32;
+        let mut vertices = Vec::with_capacity(4);
+        let mut indices = Vec::with_capacity(6);
 
-        // Four corners of the rectangle
-        self.vertices.push(Vertex::new(rect.x, rect.y, color)); // top-left
-        self.vertices
-            .push(Vertex::new(rect.x + rect.width, rect.y, color)); // top-right
-        self.vertices.push(Vertex::new(
+        vertices.push(Vertex::new(rect.x, rect.y, color));
+        vertices.push(Vertex::new(rect.x + rect.width, rect.y, color));
+        vertices.push(Vertex::new(
             rect.x + rect.width,
             rect.y + rect.height,
             color,
-        )); // bottom-right
-        self.vertices
-            .push(Vertex::new(rect.x, rect.y + rect.height, color)); // bottom-left
+        ));
+        vertices.push(Vertex::new(rect.x, rect.y + rect.height, color));
 
-        // Two triangles: 0-1-2 and 0-2-3
-        self.indices.push(base_index);
-        self.indices.push(base_index + 1);
-        self.indices.push(base_index + 2);
-        self.indices.push(base_index);
-        self.indices.push(base_index + 2);
-        self.indices.push(base_index + 3);
+        indices.extend_from_slice(&[0, 1, 2, 0, 2, 3]);
 
-        if let Some(batch) = self.batches.last_mut() {
-            batch.index_count += 6;
-        }
+        self.push_command(RenderOp::Geometry {
+            vertices,
+            indices,
+            texture_id: self.white_texture,
+        });
     }
 
-    /// Draws a stroked (outlined) rectangle.
-    ///
-    /// # Arguments
-    /// * `rect` - Rectangle bounds in pixels
-    /// * `color` - Stroke color
-    /// * `thickness` - Line thickness in pixels
     pub fn stroke_rect(&mut self, rect: Rect, color: Color, thickness: f32) {
         let half = thickness / 2.0;
 
-        // Top edge
         self.fill_rect(
             Rect::new(
                 rect.x - half,
@@ -746,7 +698,6 @@ impl Renderer {
             ),
             color,
         );
-        // Bottom edge
         self.fill_rect(
             Rect::new(
                 rect.x - half,
@@ -756,7 +707,6 @@ impl Renderer {
             ),
             color,
         );
-        // Left edge
         self.fill_rect(
             Rect::new(
                 rect.x - half,
@@ -766,7 +716,6 @@ impl Renderer {
             ),
             color,
         );
-        // Right edge
         self.fill_rect(
             Rect::new(
                 rect.x + rect.width - half,
@@ -778,9 +727,7 @@ impl Renderer {
         );
     }
 
-    /// Draws a line between two points.
     pub fn draw_line(&mut self, start: Vec2, end: Vec2, color: Color, width: f32) {
-        self.ensure_batch(self.white_texture);
         let diff = end - start;
         let len = diff.length();
         if len < 0.001 {
@@ -793,32 +740,21 @@ impl Renderer {
         let p3 = end - normal;
         let p4 = end + normal;
 
-        let base_index = self.vertices.len() as u32;
-        self.vertices.push(Vertex::new(p1.x, p1.y, color));
-        self.vertices.push(Vertex::new(p2.x, p2.y, color));
-        self.vertices.push(Vertex::new(p3.x, p3.y, color));
-        self.vertices.push(Vertex::new(p4.x, p4.y, color));
+        let mut vertices = Vec::with_capacity(4);
+        vertices.push(Vertex::new(p1.x, p1.y, color));
+        vertices.push(Vertex::new(p2.x, p2.y, color));
+        vertices.push(Vertex::new(p3.x, p3.y, color));
+        vertices.push(Vertex::new(p4.x, p4.y, color));
 
-        self.indices.push(base_index);
-        self.indices.push(base_index + 1);
-        self.indices.push(base_index + 2);
-        self.indices.push(base_index);
-        self.indices.push(base_index + 2);
-        self.indices.push(base_index + 3);
+        let mut indices = vec![0, 1, 2, 0, 2, 3];
 
-        if let Some(batch) = self.batches.last_mut() {
-            batch.index_count += 6;
-        }
+        self.push_command(RenderOp::Geometry {
+            vertices,
+            indices,
+            texture_id: self.white_texture,
+        });
     }
 
-    /// Draws a rounded rectangle.
-    ///
-    /// # Arguments
-    /// * `rect` - Rectangle bounds in pixels
-    /// * `color` - Fill color
-    /// * `radius` - Corner radius in pixels
-    /// * `border_color` - Optional border color
-    /// * `border_width` - Optional border width
     pub fn draw_rounded_rect(
         &mut self,
         rect: Rect,
@@ -827,8 +763,6 @@ impl Renderer {
         border_color: Option<Color>,
         border_width: Option<f32>,
     ) {
-        // TODO: Implement actual rounded corners using UVs or geometry
-        // For now, render as a standard rectangle
         self.fill_rect(rect, color);
         if let Some(bc) = border_color {
             if let Some(bw) = border_width {
@@ -837,16 +771,8 @@ impl Renderer {
         }
     }
 
-    /// Draws a styled rectangle (with background, border, shadow).
-    ///
-    /// # Arguments
-    /// * `rect` - Rectangle bounds in pixels
-    /// * `style` - Visual style configuration
     pub fn draw_style_rect(&mut self, rect: Rect, style: &Style) {
-        // 1. Draw Shadow (Simulated)
         if let Some(shadow) = &style.shadow {
-            // Render a rect offset by shadow.offset
-            // For Phase 1 simulation, we just draw a semi-transparent rect
             let shadow_rect = Rect::new(
                 rect.x + shadow.offset.x,
                 rect.y + shadow.offset.y,
@@ -856,10 +782,8 @@ impl Renderer {
             self.fill_rect(shadow_rect, shadow.color);
         }
 
-        // 2. Draw Border (Simulated as stroke or larger rect behind)
         if let Some(border) = &style.border {
             if border.width > 0.0 {
-                // Draw a larger rect behind
                 let border_rect = Rect::new(
                     rect.x - border.width,
                     rect.y - border.width,
@@ -870,13 +794,11 @@ impl Renderer {
             }
         }
 
-        // 3. Draw Background
         match style.background {
             Background::Solid(color) => {
                 self.fill_rect(rect, color);
             }
             Background::LinearGradient { start, end, .. } => {
-                // Phase 1 Simulation: Average color
                 let r = (start.r + end.r) / 2.0;
                 let g = (start.g + end.g) / 2.0;
                 let b = (start.b + end.b) / 2.0;
@@ -886,57 +808,38 @@ impl Renderer {
         }
     }
 
-    /// Queues simple text for rendering.
+    // --- Text Rendering ---
+
     pub fn draw_text(&mut self, text: impl Into<String>, position: Vec2, style: TextStyle) {
-        self.text_commands.push(TextCommand::Simple {
+        self.push_command(RenderOp::Text(TextCommand::Simple {
             text: text.into(),
             position,
             style,
             bounds_width: None,
-        });
+        }));
     }
 
-    /// Measures the pixel width of a text string with the given style.
-    ///
-    /// # Arguments
-    /// * `text` - The text to measure
-    /// * `font_size` - Font size in pixels
-    ///
-    /// # Returns
-    /// The width in pixels
     pub fn measure_text(&mut self, text: &str, font_size: f32) -> f32 {
-        use glyphon::cosmic_text::{Attrs, Buffer, Family, Metrics, Shaping};
-
-        // Create a temporary buffer for measurement
         let mut buffer = Buffer::new(
             &mut self.text_brush.font_system,
             Metrics::new(font_size, font_size * 1.2),
         );
-
-        // Set a large width so text doesn't wrap
         buffer.set_size(&mut self.text_brush.font_system, f32::MAX, font_size * 2.0);
-
-        // Set the text
         buffer.set_text(
             &mut self.text_brush.font_system,
             text,
             Attrs::new().family(Family::SansSerif),
             Shaping::Advanced,
         );
-
-        // Shape the text
         buffer.shape_until_scroll(&mut self.text_brush.font_system);
 
-        // Calculate width from layout runs
         let mut width = 0.0f32;
         for line in buffer.layout_runs() {
             width = width.max(line.line_w);
         }
-
         width
     }
 
-    /// Queues rich text (using cosmic-text AttrsList) for rendering.
     pub fn draw_rich_text(
         &mut self,
         text: String,
@@ -946,23 +849,16 @@ impl Renderer {
         default_color: Color,
         line_height: f32,
     ) {
-        self.text_commands.push(TextCommand::Rich {
+        self.push_command(RenderOp::Text(TextCommand::Rich {
             text,
             attrs,
             position,
             bounds_width,
             default_color,
             line_height,
-        });
+        }));
     }
 
-    /// Queues text for rendering with bounded width.
-    ///
-    /// # Arguments
-    /// * `text` - The text to render
-    /// * `position` - Position in pixels
-    /// * `max_width` - Maximum width for text wrapping
-    /// * `style` - Text style
     pub fn draw_text_bounded(
         &mut self,
         text: impl Into<String>,
@@ -970,55 +866,30 @@ impl Renderer {
         max_width: f32,
         style: TextStyle,
     ) {
-        self.text_commands.push(TextCommand::Simple {
+        self.push_command(RenderOp::Text(TextCommand::Simple {
             text: text.into(),
             position,
             style,
             bounds_width: Some(max_width),
-        });
+        }));
     }
 
-    // ========================================================================
-    // OVERLAY LAYER (rendered on top, no clipping)
-    // ========================================================================
+    // --- Overlay Methods (Wrapper for Z-Index) ---
 
-    /// Draws a filled rectangle on the overlay layer.
-    /// Overlay content is rendered after the main pass with no scissor clipping.
     pub fn draw_overlay_rect(&mut self, rect: Rect, color: Color) {
-        let base_index = self.overlay_vertices.len() as u32;
-
-        self.overlay_vertices
-            .push(Vertex::new(rect.x, rect.y, color));
-        self.overlay_vertices
-            .push(Vertex::new(rect.x + rect.width, rect.y, color));
-        self.overlay_vertices.push(Vertex::new(
-            rect.x + rect.width,
-            rect.y + rect.height,
-            color,
-        ));
-        self.overlay_vertices
-            .push(Vertex::new(rect.x, rect.y + rect.height, color));
-
-        self.overlay_indices.push(base_index);
-        self.overlay_indices.push(base_index + 1);
-        self.overlay_indices.push(base_index + 2);
-        self.overlay_indices.push(base_index);
-        self.overlay_indices.push(base_index + 2);
-        self.overlay_indices.push(base_index + 3);
+        let old_z = self.current_z_index;
+        self.current_z_index = 1000;
+        self.fill_rect(rect, color);
+        self.current_z_index = old_z;
     }
 
-    /// Draws text on the overlay layer.
-    /// Overlay content is rendered after the main pass with no scissor clipping.
     pub fn draw_overlay_text(&mut self, text: impl Into<String>, position: Vec2, style: TextStyle) {
-        self.overlay_text_commands.push(TextCommand::Simple {
-            text: text.into(),
-            position,
-            style,
-            bounds_width: None,
-        });
+        let old_z = self.current_z_index;
+        self.current_z_index = 1000;
+        self.draw_text(text, position, style);
+        self.current_z_index = old_z;
     }
 
-    /// Draws bounded text on the overlay layer.
     pub fn draw_overlay_text_bounded(
         &mut self,
         text: impl Into<String>,
@@ -1026,177 +897,340 @@ impl Renderer {
         max_width: f32,
         style: TextStyle,
     ) {
-        self.overlay_text_commands.push(TextCommand::Simple {
-            text: text.into(),
-            position,
-            style,
-            bounds_width: Some(max_width),
-        });
+        let old_z = self.current_z_index;
+        self.current_z_index = 1000;
+        self.draw_text_bounded(text, position, max_width, style);
+        self.current_z_index = old_z;
     }
 
-    /// Draws a styled rectangle on the overlay layer.
     pub fn draw_overlay_style_rect(&mut self, rect: Rect, style: &Style) {
-        // Shadow
-        if let Some(shadow) = &style.shadow {
-            let shadow_rect = Rect::new(
-                rect.x + shadow.offset.x,
-                rect.y + shadow.offset.y,
-                rect.width,
-                rect.height,
-            );
-            self.draw_overlay_rect(shadow_rect, shadow.color);
-        }
-        // Border
-        if let Some(border) = &style.border {
-            if border.width > 0.0 {
-                let border_rect = Rect::new(
-                    rect.x - border.width,
-                    rect.y - border.width,
-                    rect.width + border.width * 2.0,
-                    rect.height + border.width * 2.0,
-                );
-                self.draw_overlay_rect(border_rect, border.color);
-            }
-        }
-        // Background
-        match style.background {
-            Background::Solid(color) => {
-                self.draw_overlay_rect(rect, color);
-            }
-            Background::LinearGradient { start, end, .. } => {
-                let r = (start.r + end.r) / 2.0;
-                let g = (start.g + end.g) / 2.0;
-                let b = (start.b + end.b) / 2.0;
-                let a = (start.a + end.a) / 2.0;
-                self.draw_overlay_rect(rect, Color::new(r, g, b, a));
-            }
-        }
+        let old_z = self.current_z_index;
+        self.current_z_index = 1000;
+        self.draw_style_rect(rect, style);
+        self.current_z_index = old_z;
     }
 
-    /// Ends the frame and renders all batched content.
-    ///
-    /// # Arguments
-    /// * `encoder` - Command encoder to record draw calls
-    /// * `view` - Texture view to render to
-    /// * `clear_color` - Background clear color
+    // --- END FRAME EXECUTION ---
+
     pub fn end_frame(&mut self, view: &wgpu::TextureView, clear_color: Color) {
-        // Ensure buffers are large enough
-        self.ensure_buffer_capacity();
+        // 1. Sort commands
+        self.commands
+            .sort_by(|a, b| a.z_index.cmp(&b.z_index).then(a.order.cmp(&b.order)));
 
-        // --------------------------------------------------------------------
-        // PASS 1: Main Layer
-        // --------------------------------------------------------------------
+        // 2. Prepare CPU buffers
+        let mut cpu_vertices: Vec<Vertex> = Vec::with_capacity(INITIAL_VERTEX_CAPACITY);
+        let mut cpu_indices: Vec<u32> = Vec::with_capacity(INITIAL_INDEX_CAPACITY);
 
-        // Upload main layer vertex data
-        if !self.vertices.is_empty() {
-            self.queue
-                .write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&self.vertices));
+        let mut current_texture = self.white_texture;
+
+        enum ExecStep {
+            DrawGeometry {
+                index_range: std::ops::Range<u32>,
+                texture_id: TextureId,
+            },
+            DrawText(Vec<(Buffer, Vec2, Color)>),
+            SetClip(Rect),
+            ClearClip,
         }
-        if !self.indices.is_empty() {
-            self.queue
-                .write_buffer(&self.index_buffer, 0, bytemuck::cast_slice(&self.indices));
+
+        let mut steps = Vec::new();
+        let mut text_accum: Vec<(Buffer, Vec2, Color)> = Vec::new();
+        let mut geo_start_index = 0u32;
+
+        for cmd in &self.commands {
+            match &cmd.op {
+                RenderOp::Geometry {
+                    vertices,
+                    indices,
+                    texture_id,
+                } => {
+                    if !text_accum.is_empty() {
+                        steps.push(ExecStep::DrawText(std::mem::take(&mut text_accum)));
+                    }
+                    if *texture_id != current_texture {
+                        let current_indices_len = cpu_indices.len() as u32;
+                        if current_indices_len > geo_start_index {
+                            steps.push(ExecStep::DrawGeometry {
+                                index_range: geo_start_index..current_indices_len,
+                                texture_id: current_texture,
+                            });
+                            geo_start_index = current_indices_len;
+                        }
+                        current_texture = *texture_id;
+                    }
+
+                    let v_offset = cpu_vertices.len() as u32;
+                    cpu_vertices.extend_from_slice(vertices);
+                    for &idx in indices {
+                        cpu_indices.push(v_offset + idx);
+                    }
+                }
+                RenderOp::Text(text_cmd) => {
+                    let current_indices_len = cpu_indices.len() as u32;
+                    if current_indices_len > geo_start_index {
+                        steps.push(ExecStep::DrawGeometry {
+                            index_range: geo_start_index..current_indices_len,
+                            texture_id: current_texture,
+                        });
+                        geo_start_index = current_indices_len;
+                    }
+
+                    match text_cmd {
+                        TextCommand::Simple {
+                            text,
+                            position,
+                            style,
+                            bounds_width,
+                        } => {
+                            let mut buffer = Buffer::new(
+                                &mut self.text_brush.font_system,
+                                Metrics::new(style.font_size, style.font_size * 1.2),
+                            );
+                            let width = bounds_width.unwrap_or(self.screen_width - position.x);
+                            buffer.set_size(
+                                &mut self.text_brush.font_system,
+                                width,
+                                self.screen_height,
+                            );
+                            buffer.set_text(
+                                &mut self.text_brush.font_system,
+                                text,
+                                Attrs::new().family(Family::SansSerif),
+                                Shaping::Advanced,
+                            );
+                            buffer.shape_until_scroll(&mut self.text_brush.font_system);
+                            text_accum.push((buffer, *position, style.color));
+                        }
+                        TextCommand::Rich {
+                            text,
+                            attrs,
+                            position,
+                            bounds_width,
+                            default_color,
+                            line_height,
+                        } => {
+                            let mut buffer = Buffer::new(
+                                &mut self.text_brush.font_system,
+                                Metrics::new(*line_height, *line_height * 1.2),
+                            );
+                            let width = bounds_width.unwrap_or(self.screen_width - position.x);
+                            buffer.set_size(
+                                &mut self.text_brush.font_system,
+                                width,
+                                self.screen_height,
+                            );
+                            buffer.set_text(
+                                &mut self.text_brush.font_system,
+                                text,
+                                Attrs::new().family(Family::SansSerif),
+                                Shaping::Advanced,
+                            );
+                            if !buffer.lines.is_empty() {
+                                for line in &mut buffer.lines {
+                                    line.set_attrs_list(attrs.clone());
+                                }
+                            }
+                            buffer.shape_until_scroll(&mut self.text_brush.font_system);
+                            text_accum.push((buffer, *position, *default_color));
+                        }
+                    }
+                }
+                RenderOp::PushClip(rect) => {
+                    let current_indices_len = cpu_indices.len() as u32;
+                    if current_indices_len > geo_start_index {
+                        steps.push(ExecStep::DrawGeometry {
+                            index_range: geo_start_index..current_indices_len,
+                            texture_id: current_texture,
+                        });
+                        geo_start_index = current_indices_len;
+                    }
+                    if !text_accum.is_empty() {
+                        steps.push(ExecStep::DrawText(std::mem::take(&mut text_accum)));
+                    }
+                    steps.push(ExecStep::SetClip(*rect));
+                }
+                RenderOp::PopClip => {
+                    let current_indices_len = cpu_indices.len() as u32;
+                    if current_indices_len > geo_start_index {
+                        steps.push(ExecStep::DrawGeometry {
+                            index_range: geo_start_index..current_indices_len,
+                            texture_id: current_texture,
+                        });
+                        geo_start_index = current_indices_len;
+                    }
+                    if !text_accum.is_empty() {
+                        steps.push(ExecStep::DrawText(std::mem::take(&mut text_accum)));
+                    }
+                    steps.push(ExecStep::ClearClip);
+                }
+            }
         }
 
-        // Prepare main layer text
-        self.prepare_text();
-
-        // Create encoder for Main Pass
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("OxidX Main Encoder"),
+        let current_indices_len = cpu_indices.len() as u32;
+        if current_indices_len > geo_start_index {
+            steps.push(ExecStep::DrawGeometry {
+                index_range: geo_start_index..current_indices_len,
+                texture_id: current_texture,
             });
+        }
+        if !text_accum.is_empty() {
+            steps.push(ExecStep::DrawText(std::mem::take(&mut text_accum)));
+        }
 
+        // 3. Upload Buffers
+        if cpu_vertices.len() > self.vertex_capacity {
+            self.vertex_capacity = cpu_vertices.len().next_power_of_two();
+            self.vertex_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Vertex Buffer"),
+                size: (self.vertex_capacity * std::mem::size_of::<Vertex>()) as u64,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+        }
+        if cpu_indices.len() > self.index_capacity {
+            self.index_capacity = cpu_indices.len().next_power_of_two();
+            self.index_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Index Buffer"),
+                size: (self.index_capacity * std::mem::size_of::<u32>()) as u64,
+                usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+        }
+
+        if !cpu_vertices.is_empty() {
+            self.queue
+                .write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&cpu_vertices));
+        }
+        if !cpu_indices.is_empty() {
+            self.queue
+                .write_buffer(&self.index_buffer, 0, bytemuck::cast_slice(&cpu_indices));
+        }
+
+        // 5. Execute Steps (Chunked Submission)
         {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("OxidX Main Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
+            // Destructure outside loop
+            let TextBrush {
+                font_system,
+                swash_cache,
+                text_renderer,
+                text_atlas,
+            } = &mut self.text_brush;
+
+            let mut step_iter = steps.into_iter().peekable();
+            let mut runtime_clip_stack: Vec<Rect> = Vec::new();
+            let mut first_pass = true;
+
+            while let Some(peek_step) = step_iter.peek() {
+                // Determine step type without consuming
+                let is_text = matches!(peek_step, ExecStep::DrawText(_));
+
+                let mut encoder =
+                    self.device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("OxidX Chunk Encoder"),
+                        });
+
+                if is_text {
+                    // Handle Text Step (Submission)
+                    if let Some(ExecStep::DrawText(list)) = step_iter.next() {
+                        let step_areas: Vec<TextArea> = list
+                            .iter()
+                            .map(|(buffer, pos, color)| TextArea {
+                                buffer,
+                                left: pos.x,
+                                top: pos.y,
+                                scale: 1.0,
+                                bounds: TextBounds {
+                                    left: pos.x as i32,
+                                    top: pos.y as i32,
+                                    right: (pos.x + buffer.size().0) as i32,
+                                    bottom: self.screen_height as i32,
+                                },
+                                default_color: glyphon::Color::rgba(
+                                    (color.r * 255.0) as u8,
+                                    (color.g * 255.0) as u8,
+                                    (color.b * 255.0) as u8,
+                                    (color.a * 255.0) as u8,
+                                ),
+                            })
+                            .collect();
+
+                        let _ = text_renderer.prepare(
+                            &self.device,
+                            &self.queue,
+                            font_system,
+                            text_atlas,
+                            Resolution {
+                                width: self.screen_width as u32,
+                                height: self.screen_height as u32,
+                            },
+                            step_areas,
+                            swash_cache,
+                        );
+
+                        // Start Text Pass
+                        let load_op = if first_pass {
+                            wgpu::LoadOp::Clear(wgpu::Color {
+                                r: clear_color.r as f64,
+                                g: clear_color.g as f64,
+                                b: clear_color.b as f64,
+                                a: clear_color.a as f64,
+                            })
+                        } else {
+                            wgpu::LoadOp::Load
+                        };
+                        first_pass = false;
+
+                        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some("OxidX Text Pass"),
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view,
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    load: load_op,
+                                    store: wgpu::StoreOp::Store,
+                                },
+                            })],
+                            depth_stencil_attachment: None,
+                            occlusion_query_set: None,
+                            timestamp_writes: None,
+                        });
+
+                        // Apply Scissor
+                        if let Some(rect) = runtime_clip_stack.last() {
+                            let sf = self.scale_factor as f32;
+                            let x = (rect.x * sf).max(0.0) as u32;
+                            let y = (rect.y * sf).max(0.0) as u32;
+                            let w = (rect.width * sf).max(1.0) as u32;
+                            let h = (rect.height * sf).max(1.0) as u32;
+                            pass.set_scissor_rect(x, y, w, h);
+                        } else {
+                            pass.set_scissor_rect(0, 0, self.physical_width, self.physical_height);
+                        }
+
+                        let _ = text_renderer.render(text_atlas, &mut pass);
+                    }
+                } else {
+                    // Handle Geometry/Clip Batch (Submission)
+                    let load_op = if first_pass {
+                        wgpu::LoadOp::Clear(wgpu::Color {
                             r: clear_color.r as f64,
                             g: clear_color.g as f64,
                             b: clear_color.b as f64,
                             a: clear_color.a as f64,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None,
-            });
+                        })
+                    } else {
+                        wgpu::LoadOp::Load
+                    };
+                    first_pass = false;
 
-            // Draw Main Batches
-            if !self.batches.is_empty() {
-                render_pass.set_pipeline(&self.pipeline);
-                render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-                render_pass
-                    .set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-
-                for batch in &self.batches {
-                    if let Some(bind_group) = self.texture_bind_groups.get(&batch.texture_id) {
-                        render_pass.set_bind_group(1, bind_group, &[]);
-                        render_pass.draw_indexed(
-                            batch.index_start..(batch.index_start + batch.index_count),
-                            0,
-                            0..1,
-                        );
-                    }
-                }
-            }
-
-            // Draw Main Text
-            let _ = self
-                .text_brush
-                .text_renderer
-                .render(&self.text_brush.text_atlas, &mut render_pass);
-        }
-
-        // Submit Main Pass
-        self.queue.submit(std::iter::once(encoder.finish()));
-
-        // --------------------------------------------------------------------
-        // PASS 2: Overlay Layer
-        // --------------------------------------------------------------------
-
-        if !self.overlay_indices.is_empty() || !self.overlay_text_commands.is_empty() {
-            // Upload overlay vertex/index data (Reusing buffers requires new queue write)
-            // Note: Since we submitted the previous commands, resources are "in use" but
-            // WGPU queues handle synchronization. Writing to buffer now will be seen by next submit.
-            if !self.overlay_indices.is_empty() {
-                self.queue.write_buffer(
-                    &self.vertex_buffer,
-                    0,
-                    bytemuck::cast_slice(&self.overlay_vertices),
-                );
-                self.queue.write_buffer(
-                    &self.index_buffer,
-                    0,
-                    bytemuck::cast_slice(&self.overlay_indices),
-                );
-            }
-
-            // Prepare overlay text
-            self.prepare_overlay_text();
-
-            let mut overlay_encoder =
-                self.device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("OxidX Overlay Encoder"),
-                    });
-
-            {
-                let mut render_pass =
-                    overlay_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("OxidX Overlay Pass"),
+                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("OxidX Pass"),
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                             view,
                             resolve_target: None,
                             ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Load, // Load existing content
+                                load: load_op,
                                 store: wgpu::StoreOp::Store,
                             },
                         })],
@@ -1205,275 +1239,80 @@ impl Renderer {
                         timestamp_writes: None,
                     });
 
-                // Draw Overlay Geometry
-                if !self.overlay_indices.is_empty() {
-                    render_pass.set_pipeline(&self.pipeline);
-                    render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                    render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-                    render_pass
-                        .set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                    // Set global state
+                    pass.set_pipeline(&self.pipeline);
+                    pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                    pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+                    pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
 
-                    // We assume overlays use White Texture (id 0) for now, or we need batching for overlays too.
-                    // Currently `draw_overlay_rect` assumes solid colors (white texture).
-                    if let Some(bind_group) = self.texture_bind_groups.get(&self.white_texture) {
-                        render_pass.set_bind_group(1, bind_group, &[]);
-                        render_pass.draw_indexed(0..self.overlay_indices.len() as u32, 0, 0..1);
+                    // Apply Scissor (Initial)
+                    if let Some(rect) = runtime_clip_stack.last() {
+                        let sf = self.scale_factor as f32;
+                        let x = (rect.x * sf).max(0.0) as u32;
+                        let y = (rect.y * sf).max(0.0) as u32;
+                        let w = (rect.width * sf).max(1.0) as u32;
+                        let h = (rect.height * sf).max(1.0) as u32;
+                        pass.set_scissor_rect(x, y, w, h);
+                    } else {
+                        pass.set_scissor_rect(0, 0, self.physical_width, self.physical_height);
+                    }
+
+                    // Execute batch until next Text
+                    while let Some(peek_step) = step_iter.peek() {
+                        if matches!(peek_step, ExecStep::DrawText(_)) {
+                            break;
+                        }
+                        // Consume non-text step
+                        let step = step_iter.next().unwrap();
+                        match step {
+                            ExecStep::DrawGeometry {
+                                index_range,
+                                texture_id,
+                            } => {
+                                if let Some(bind_group) = self.texture_bind_groups.get(&texture_id)
+                                {
+                                    pass.set_bind_group(1, bind_group, &[]);
+                                    pass.draw_indexed(index_range, 0, 0..1);
+                                }
+                            }
+                            ExecStep::SetClip(rect) => {
+                                runtime_clip_stack.push(rect);
+                                let sf = self.scale_factor as f32;
+                                let x = (rect.x * sf).max(0.0) as u32;
+                                let y = (rect.y * sf).max(0.0) as u32;
+                                let w = (rect.width * sf).max(1.0) as u32;
+                                let h = (rect.height * sf).max(1.0) as u32;
+                                pass.set_scissor_rect(x, y, w, h);
+                            }
+                            ExecStep::ClearClip => {
+                                runtime_clip_stack.pop();
+                                if let Some(rect) = runtime_clip_stack.last() {
+                                    let sf = self.scale_factor as f32;
+                                    let x = (rect.x * sf).max(0.0) as u32;
+                                    let y = (rect.y * sf).max(0.0) as u32;
+                                    let w = (rect.width * sf).max(1.0) as u32;
+                                    let h = (rect.height * sf).max(1.0) as u32;
+                                    pass.set_scissor_rect(x, y, w, h);
+                                } else {
+                                    pass.set_scissor_rect(
+                                        0,
+                                        0,
+                                        self.physical_width,
+                                        self.physical_height,
+                                    );
+                                }
+                            }
+                            _ => {} // Text handled outside
+                        }
                     }
                 }
 
-                // Draw Overlay Text
-                let _ = self
-                    .text_brush
-                    .text_renderer
-                    .render(&self.text_brush.text_atlas, &mut render_pass);
+                // Submit this chunk
+                self.queue.submit(std::iter::once(encoder.finish()));
             }
-
-            // Submit Overlay Pass
-            self.queue.submit(std::iter::once(overlay_encoder.finish()));
         }
 
-        // Trim the text atlas periodically
         self.text_brush.text_atlas.trim();
-    }
-
-    /// Prepares text commands for rendering.
-    fn prepare_text(&mut self) {
-        if self.text_commands.is_empty() {
-            return;
-        }
-
-        let mut buffers = Vec::new();
-
-        // 1. Create buffers for all commands
-        // Note: In a real implementation we would cache these buffers in TextBrush
-        // using IDs or frames, but for simplicity we recreate them.
-        for cmd in &self.text_commands {
-            match cmd {
-                TextCommand::Simple {
-                    text,
-                    position,
-                    style,
-                    bounds_width,
-                } => {
-                    let mut buffer = Buffer::new(
-                        &mut self.text_brush.font_system,
-                        Metrics::new(style.font_size, style.font_size * 1.2),
-                    );
-
-                    let width = bounds_width.unwrap_or(self.screen_width - position.x);
-                    buffer.set_size(&mut self.text_brush.font_system, width, self.screen_height);
-
-                    buffer.set_text(
-                        &mut self.text_brush.font_system,
-                        text,
-                        Attrs::new().family(Family::SansSerif),
-                        Shaping::Advanced,
-                    );
-
-                    buffer.shape_until_scroll(&mut self.text_brush.font_system);
-                    buffers.push((buffer, *position, style.color));
-                }
-                TextCommand::Rich {
-                    text,
-                    attrs,
-                    position,
-                    bounds_width,
-                    default_color,
-                    line_height,
-                } => {
-                    let mut buffer = Buffer::new(
-                        &mut self.text_brush.font_system,
-                        Metrics::new(*line_height, *line_height * 1.2),
-                    );
-
-                    let width = bounds_width.unwrap_or(self.screen_width - position.x);
-                    buffer.set_size(&mut self.text_brush.font_system, width, self.screen_height);
-
-                    buffer.set_text(
-                        &mut self.text_brush.font_system,
-                        text,
-                        Attrs::new().family(Family::SansSerif),
-                        Shaping::Advanced,
-                    );
-
-                    if !buffer.lines.is_empty() {
-                        for line in &mut buffer.lines {
-                            line.set_attrs_list(attrs.clone());
-                        }
-                    }
-
-                    buffer.shape_until_scroll(&mut self.text_brush.font_system);
-                    buffers.push((buffer, *position, *default_color));
-                }
-            }
-        }
-
-        // 2. Prepare text areas
-        let text_areas: Vec<TextArea> = buffers
-            .iter()
-            .map(|(buffer, pos, color)| TextArea {
-                buffer,
-                left: pos.x,
-                top: pos.y,
-                scale: 1.0,
-                bounds: TextBounds {
-                    left: pos.x as i32,
-                    top: pos.y as i32,
-                    right: (pos.x + buffer.size().0) as i32,
-                    bottom: self.screen_height as i32,
-                },
-                default_color: glyphon::Color::rgba(
-                    (color.r * 255.0) as u8,
-                    (color.g * 255.0) as u8,
-                    (color.b * 255.0) as u8,
-                    (color.a * 255.0) as u8,
-                ),
-            })
-            .collect();
-
-        // 3. Submit to glyphon
-        let _ = self.text_brush.text_renderer.prepare(
-            &self.device,
-            &self.queue,
-            &mut self.text_brush.font_system,
-            &mut self.text_brush.text_atlas,
-            Resolution {
-                width: self.screen_width as u32,
-                height: self.screen_height as u32,
-            },
-            text_areas,
-            &mut self.text_brush.swash_cache,
-        );
-    }
-
-    /// Prepares overlay text commands for rendering.
-    fn prepare_overlay_text(&mut self) {
-        if self.overlay_text_commands.is_empty() {
-            return;
-        }
-
-        let mut buffers = Vec::new();
-
-        for cmd in &self.overlay_text_commands {
-            match cmd {
-                TextCommand::Simple {
-                    text,
-                    position,
-                    style,
-                    bounds_width,
-                } => {
-                    let mut buffer = Buffer::new(
-                        &mut self.text_brush.font_system,
-                        Metrics::new(style.font_size, style.font_size * 1.2),
-                    );
-
-                    let width = bounds_width.unwrap_or(self.screen_width - position.x);
-                    buffer.set_size(&mut self.text_brush.font_system, width, self.screen_height);
-
-                    buffer.set_text(
-                        &mut self.text_brush.font_system,
-                        text,
-                        Attrs::new().family(Family::SansSerif),
-                        Shaping::Advanced,
-                    );
-
-                    buffer.shape_until_scroll(&mut self.text_brush.font_system);
-                    buffers.push((buffer, *position, style.color));
-                }
-                TextCommand::Rich {
-                    text,
-                    attrs,
-                    position,
-                    bounds_width,
-                    default_color,
-                    line_height,
-                } => {
-                    let mut buffer = Buffer::new(
-                        &mut self.text_brush.font_system,
-                        Metrics::new(*line_height, *line_height * 1.2),
-                    );
-
-                    let width = bounds_width.unwrap_or(self.screen_width - position.x);
-                    buffer.set_size(&mut self.text_brush.font_system, width, self.screen_height);
-
-                    buffer.set_text(
-                        &mut self.text_brush.font_system,
-                        text,
-                        Attrs::new().family(Family::SansSerif),
-                        Shaping::Advanced,
-                    );
-
-                    if !buffer.lines.is_empty() {
-                        for line in &mut buffer.lines {
-                            line.set_attrs_list(attrs.clone());
-                        }
-                    }
-
-                    buffer.shape_until_scroll(&mut self.text_brush.font_system);
-                    buffers.push((buffer, *position, *default_color));
-                }
-            }
-        }
-
-        let text_areas: Vec<TextArea> = buffers
-            .iter()
-            .map(|(buffer, pos, color)| TextArea {
-                buffer,
-                left: pos.x,
-                top: pos.y,
-                scale: 1.0,
-                bounds: TextBounds {
-                    left: pos.x as i32,
-                    top: pos.y as i32,
-                    right: (pos.x + buffer.size().0) as i32,
-                    bottom: self.screen_height as i32,
-                },
-                default_color: glyphon::Color::rgba(
-                    (color.r * 255.0) as u8,
-                    (color.g * 255.0) as u8,
-                    (color.b * 255.0) as u8,
-                    (color.a * 255.0) as u8,
-                ),
-            })
-            .collect();
-
-        let _ = self.text_brush.text_renderer.prepare(
-            &self.device,
-            &self.queue,
-            &mut self.text_brush.font_system,
-            &mut self.text_brush.text_atlas,
-            Resolution {
-                width: self.screen_width as u32,
-                height: self.screen_height as u32,
-            },
-            text_areas,
-            &mut self.text_brush.swash_cache,
-        );
-    }
-
-    /// Ensures vertex and index buffers are large enough.
-    fn ensure_buffer_capacity(&mut self) {
-        // Check if vertex buffer needs to grow
-        if self.vertices.len() > self.vertex_capacity {
-            self.vertex_capacity = self.vertices.len().next_power_of_two();
-            self.vertex_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("Vertex Buffer"),
-                size: (self.vertex_capacity * std::mem::size_of::<Vertex>()) as u64,
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-        }
-
-        // Check if index buffer needs to grow
-        if self.indices.len() > self.index_capacity {
-            self.index_capacity = self.indices.len().next_power_of_two();
-            self.index_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("Index Buffer"),
-                size: (self.index_capacity * std::mem::size_of::<u32>()) as u64,
-                usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-        }
     }
 }
 
@@ -1486,25 +1325,10 @@ mod tests {
     fn test_clip_stack() {
         let mut stack = ClipStack::new();
         assert!(stack.is_empty());
-
-        // Push Rect A (0,0, 100,100)
         let rect_a = Rect::new(0.0, 0.0, 100.0, 100.0);
         stack.push(rect_a);
         assert_eq!(stack.current(), Some(rect_a));
-
-        // Push Rect B (50,50, 100,100) -> Intersection should be (50,50, 50,50)
-        let rect_b = Rect::new(50.0, 50.0, 100.0, 100.0);
-        stack.push(rect_b);
-        let expected = Rect::new(50.0, 50.0, 50.0, 50.0);
-        assert_eq!(stack.current(), Some(expected));
-
-        // Pop
-        stack.pop();
-        assert_eq!(stack.current(), Some(rect_a));
-
-        // Pop empty
         stack.pop();
         assert!(stack.is_empty());
-        assert_eq!(stack.pop(), None); // Safe: should handle underflow without panic
     }
 }

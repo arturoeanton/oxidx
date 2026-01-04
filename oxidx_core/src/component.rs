@@ -128,6 +128,14 @@ pub trait OxidXComponent: Send {
         false
     }
 
+    /// Returns whether this component is a modal overlay.
+    ///
+    /// If true, the engine will block events to components underneath this one
+    /// when it is in the overlay queue.
+    fn is_modal(&self) -> bool {
+        false
+    }
+
     /// Returns the number of children (for containers).
     ///
     /// Override for container components.

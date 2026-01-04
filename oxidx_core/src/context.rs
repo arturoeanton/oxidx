@@ -58,6 +58,8 @@ pub struct OxidXContext {
     pub overlay_queue: Vec<Box<dyn OxidXComponent>>,
     /// Flag indicating if overlays were cleared during event processing
     pub(crate) pending_overlay_clear: bool,
+    /// Number of overlays to pop from the stack after event processing
+    pub(crate) pending_overlay_removals: usize,
 }
 
 /// Manages focus state for components.
@@ -282,6 +284,7 @@ impl OxidXContext {
             modifiers: Modifiers::default(),
             overlay_queue: Vec::new(),
             pending_overlay_clear: false,
+            pending_overlay_removals: 0,
         })
     }
 
@@ -311,6 +314,7 @@ impl OxidXContext {
             modifiers: Modifiers::default(),
             overlay_queue: Vec::new(),
             pending_overlay_clear: false,
+            pending_overlay_removals: 0,
         }
     }
 
@@ -501,12 +505,50 @@ impl OxidXContext {
         self.pending_overlay_clear = true;
     }
 
+    /// Removes the top-most overlay (LIFO).
+    pub fn remove_overlay(&mut self) {
+        if !self.overlay_queue.is_empty() {
+            self.overlay_queue.pop();
+        } else {
+            // Queue is empty, likely taken by engine for event loop.
+            // Mark for removal during restore.
+            self.pending_overlay_removals += 1;
+        }
+    }
+
     /// Checks and resets the pending overlay clear flag.
     /// Internal use only.
     pub(crate) fn check_and_reset_overlay_clear(&mut self) -> bool {
         let cleared = self.pending_overlay_clear;
         self.pending_overlay_clear = false;
         cleared
+    }
+
+    /// Restores processed overlays to the queue, handling pending removals/clears.
+    pub fn restore_overlays(&mut self, mut processed: Vec<Box<dyn OxidXComponent>>) {
+        // Handle clear flag
+        if self.pending_overlay_clear {
+            self.pending_overlay_clear = false;
+            self.pending_overlay_removals = 0;
+            // processed queue is discarded. self.overlay_queue has new items.
+            return;
+        }
+
+        // Handle removals
+        if self.pending_overlay_removals > 0 {
+            let count = self.pending_overlay_removals;
+            self.pending_overlay_removals = 0;
+
+            // "Remove Top" -> Pop from end of 'processed'
+            // processed is passed in [Bottom ... Top] order (from mem::take)
+            let len = processed.len();
+            let keep = len.saturating_sub(count);
+            processed.truncate(keep);
+        }
+
+        // Restore: processed (Old) + self.overlay_queue (New)
+        processed.append(&mut self.overlay_queue);
+        self.overlay_queue = processed;
     }
 }
 

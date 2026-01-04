@@ -8,6 +8,7 @@ pub mod charts;
 pub mod checkbox;
 pub mod combobox;
 pub mod containers;
+pub mod dialog;
 pub mod grid;
 pub mod groupbox;
 pub mod image;
@@ -23,6 +24,7 @@ pub mod scroll;
 pub mod split;
 pub mod textarea;
 pub mod tree;
+
 // Re-export components
 pub use button::Button;
 pub use calendar::*;
@@ -30,6 +32,7 @@ pub use charts::*;
 pub use checkbox::Checkbox;
 pub use combobox::ComboBox;
 pub use containers::{HStack, VStack, ZStack};
+pub use dialog::{Alert, Confirm, Modal};
 pub use grid::{Column, ColumnType, Grid, GridSelectionMode, Row};
 pub use groupbox::GroupBox;
 pub use image::Image;

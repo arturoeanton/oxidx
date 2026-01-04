@@ -144,7 +144,11 @@ impl OxidXComponent for VStack {
             y_offset -= gap;
         }
 
-        Vec2::new(max_child_width + padding * 2.0, y_offset + padding)
+        let width = max_child_width + padding * 2.0;
+        let height = y_offset + padding;
+        self.bounds = Rect::new(available.x, available.y, width, height);
+
+        Vec2::new(width, height)
     }
 
     fn render(&self, renderer: &mut Renderer) {
@@ -206,8 +210,15 @@ impl OxidXComponent for VStack {
     }
 
     fn set_position(&mut self, x: f32, y: f32) {
+        let dx = x - self.bounds.x;
+        let dy = y - self.bounds.y;
         self.bounds.x = x;
         self.bounds.y = y;
+
+        for child in &mut self.children {
+            let b = child.bounds();
+            child.set_position(b.x + dx, b.y + dy);
+        }
     }
 
     fn set_size(&mut self, width: f32, height: f32) {
@@ -339,7 +350,11 @@ impl OxidXComponent for HStack {
             x_offset -= gap;
         }
 
-        Vec2::new(x_offset + padding, max_child_height + padding * 2.0)
+        let width = x_offset + padding;
+        let height = max_child_height + padding * 2.0;
+        self.bounds = Rect::new(available.x, available.y, width, height);
+
+        Vec2::new(width, height)
     }
 
     fn render(&self, renderer: &mut Renderer) {
@@ -395,8 +410,15 @@ impl OxidXComponent for HStack {
     }
 
     fn set_position(&mut self, x: f32, y: f32) {
+        let dx = x - self.bounds.x;
+        let dy = y - self.bounds.y;
         self.bounds.x = x;
         self.bounds.y = y;
+
+        for child in &mut self.children {
+            let b = child.bounds();
+            child.set_position(b.x + dx, b.y + dy);
+        }
     }
 
     fn set_size(&mut self, width: f32, height: f32) {
@@ -547,8 +569,15 @@ impl OxidXComponent for ZStack {
     }
 
     fn set_position(&mut self, x: f32, y: f32) {
+        let dx = x - self.bounds.x;
+        let dy = y - self.bounds.y;
         self.bounds.x = x;
         self.bounds.y = y;
+
+        for child in &mut self.children {
+            let b = child.bounds();
+            child.set_position(b.x + dx, b.y + dy);
+        }
     }
 
     fn set_size(&mut self, width: f32, height: f32) {

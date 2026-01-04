@@ -72,7 +72,7 @@ fn main() {
             let a = num_a.clone();
             let b = num_b.clone();
             let result = result_text.clone();
-            move || {
+            move |_| {
                 let a_val = *a.lock().unwrap();
                 let b_val = *b.lock().unwrap();
                 let sum = a_val + b_val;

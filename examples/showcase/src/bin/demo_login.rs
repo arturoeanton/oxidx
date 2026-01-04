@@ -53,7 +53,7 @@ fn main() {
         .on_click({
             let email = email_value.clone();
             let password = password_value.clone();
-            move || {
+            move |_| {
                 let email = email.lock().unwrap();
                 let password = password.lock().unwrap();
 

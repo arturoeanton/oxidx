@@ -341,8 +341,6 @@ fn process_window_event<C: OxidXComponent>(
 
             // Iterate reverse to hit topmost first
             for overlay in overlays.iter_mut().rev() {
-                // Determine if we should filter this event
-                // Only mouse events are strictly localized to overlays usually,
                 // but for now we offer all.
                 let handled = overlay.on_event(
                     &OxidXEvent::MouseWheel {
@@ -357,19 +355,8 @@ fn process_window_event<C: OxidXComponent>(
                 }
             }
 
-            // Restore overlays if not cleared
-            if !ctx.check_and_reset_overlay_clear() {
-                // Prepend old overlays (processed) to any new ones added during processing
-                // To maintain order: old...new
-                // Current ctx.overlay_queue contains NEW stuff.
-                // We want: [old_overlays] + [new_overlays]
-                let mut new_queue = overlays;
-                new_queue.append(&mut ctx.overlay_queue);
-                ctx.overlay_queue = new_queue;
-            } else {
-                // If cleared, we drop `overlays` (the old ones).
-                // `ctx.overlay_queue` contains only new ones added after clear.
-            }
+            // Restore overlays
+            ctx.restore_overlays(overlays);
 
             if !event_handled {
                 component.on_event(
@@ -395,6 +382,9 @@ fn process_window_event<C: OxidXComponent>(
                     let mut overlays = std::mem::take(&mut ctx.overlay_queue);
                     ctx.check_and_reset_overlay_clear();
 
+                    // Check if top overlay is modal (BEFORE event processing might change interactions)
+                    let is_modal = overlays.last().map(|o| o.is_modal()).unwrap_or(false);
+
                     for overlay in overlays.iter_mut().rev() {
                         let handled = overlay.on_event(
                             &OxidXEvent::MouseDown {
@@ -411,34 +401,19 @@ fn process_window_event<C: OxidXComponent>(
                     }
 
                     // Restore logic
-                    if !ctx.check_and_reset_overlay_clear() {
-                        let mut new_queue = overlays;
-                        new_queue.append(&mut ctx.overlay_queue);
-                        ctx.overlay_queue = new_queue;
-                    }
+                    ctx.restore_overlays(overlays);
 
                     // 2. Click-outside logic
-                    // If we had overlays, but none handled the click, it's a click outside.
-                    // We should close them.
-                    // Note: If event_handled is true, we clicked ON an overlay.
-                    // If event_handled is false, we clicked on main app OR empty space.
-                    // BUT, if we *had* overlays (overlays.len() > 0) and !event_handled,
-                    // it means we clicked outside the overlays.
-                    // Wait, we need to check if we had overlays *before* restoring.
-                    // Since we just restored them (or not), we can check ctx.overlay_queue.
-                    // But effectively: if !event_handled && !ctx.overlay_queue.is_empty(),
-                    // it implies click went through.
-                    // However, we need to do this BEFORE main component handles it?
-                    // Usually "Click Outside" consumes the event or just closes overlays and lets event propagate.
-                    // Requirement: "If the user clicks anywhere else... overlay should close."
-                    // If I click a button in main app, overlay should close AND button should click.
-                    // So we do NOT stop propagation?
-                    // "If event_handled is false" -> dispatch to main.
-                    // But we should `clear_overlays` if !event_handled.
-
-                    let had_overlays = !ctx.overlay_queue.is_empty();
+                    let had_overlays = is_modal || !ctx.overlay_queue.is_empty(); // Approximate check
 
                     if !event_handled {
+                        // If top overlay was modal, BLOCK everything else.
+                        if is_modal {
+                            // Do not dispatch to root.
+                            // Do not clear overlays (because it's modal, must be explicitly dismissed).
+                            return;
+                        }
+
                         // Dispatch to root
                         let root_handled = component.on_event(
                             &OxidXEvent::MouseDown {
@@ -469,6 +444,8 @@ fn process_window_event<C: OxidXComponent>(
                     let mut overlays = std::mem::take(&mut ctx.overlay_queue);
                     ctx.check_and_reset_overlay_clear();
 
+                    let is_modal = overlays.last().map(|o| o.is_modal()).unwrap_or(false);
+
                     for overlay in overlays.iter_mut().rev() {
                         let handled = overlay.on_event(
                             &OxidXEvent::MouseUp {
@@ -491,14 +468,10 @@ fn process_window_event<C: OxidXComponent>(
                     }
 
                     // Restore
-                    if !ctx.check_and_reset_overlay_clear() {
-                        let mut new_queue = overlays;
-                        new_queue.append(&mut ctx.overlay_queue);
-                        ctx.overlay_queue = new_queue;
-                    }
+                    ctx.restore_overlays(overlays);
 
-                    if !event_handled {
-                        // Always dispatch MouseUp to root
+                    if !event_handled && !is_modal {
+                        // Always dispatch MouseUp to root (unless modal)
                         component.on_event(
                             &OxidXEvent::MouseUp {
                                 button: mouse_button,
@@ -533,11 +506,7 @@ fn process_window_event<C: OxidXComponent>(
                         }
 
                         // Restore
-                        if !ctx.check_and_reset_overlay_clear() {
-                            let mut new_queue = overlays;
-                            new_queue.append(&mut ctx.overlay_queue);
-                            ctx.overlay_queue = new_queue;
-                        }
+                        ctx.restore_overlays(overlays);
 
                         if !click_handled && !event_handled {
                             // If Up was handled, maybe Click shouldn't? Usually independent.
