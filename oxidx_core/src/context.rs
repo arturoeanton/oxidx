@@ -45,17 +45,38 @@ pub struct OxidXContext {
     window: Option<Arc<Window>>,
     /// Clipboard instance (lazy initialized)
     clipboard: Option<arboard::Clipboard>,
+    /// Display scale factor (1.0 = normal, 2.0 = Retina)
+    scale_factor: f64,
 }
 
 /// Manages focus state for components.
 #[derive(Debug, Clone, Default)]
 pub struct FocusManager {
     focused_id: Option<String>,
+    /// Registry mapping focus_order -> component ID (BTreeMap keeps keys sorted)
+    focus_registry: std::collections::BTreeMap<usize, String>,
 }
 
 impl FocusManager {
     pub fn new() -> Self {
-        Self { focused_id: None }
+        Self {
+            focused_id: None,
+            focus_registry: std::collections::BTreeMap::new(),
+        }
+    }
+
+    /// Registers a component as focusable with explicit order.
+    /// Lower order values are focused first. Call this in component update().
+    pub fn register(&mut self, id: impl Into<String>, order: usize) {
+        let id = id.into();
+        if !id.is_empty() {
+            self.focus_registry.insert(order, id);
+        }
+    }
+
+    /// Clears focus registry (call at start of each frame before update)
+    pub fn clear_focus_registry(&mut self) {
+        self.focus_registry.clear();
     }
 
     pub fn request(&mut self, id: impl Into<String>) {
@@ -72,6 +93,50 @@ impl FocusManager {
 
     pub fn focused_id(&self) -> Option<&str> {
         self.focused_id.as_deref()
+    }
+
+    /// Cycles focus to next/previous component based on focus_order.
+    /// If reverse is true, goes to previous; otherwise goes to next.
+    pub fn cycle_focus(&mut self, reverse: bool) {
+        if self.focus_registry.is_empty() {
+            return;
+        }
+
+        // Get ordered list of (order, id) pairs
+        let entries: Vec<_> = self.focus_registry.iter().collect();
+
+        // Find current position
+        let current_idx = self
+            .focused_id
+            .as_ref()
+            .and_then(|id| entries.iter().position(|(_, v)| *v == id));
+
+        let next_idx = if reverse {
+            match current_idx {
+                Some(idx) if idx > 0 => idx - 1,
+                Some(_) => entries.len() - 1, // Wrap to end
+                None => entries.len() - 1,    // Start from end if nothing focused
+            }
+        } else {
+            match current_idx {
+                Some(idx) => (idx + 1) % entries.len(),
+                None => 0, // Start from beginning if nothing focused
+            }
+        };
+
+        if let Some((_, next_id)) = entries.get(next_idx) {
+            self.focused_id = Some((*next_id).clone());
+        }
+    }
+
+    /// Moves focus to the next component (Tab)
+    pub fn focus_next(&mut self) {
+        self.cycle_focus(false);
+    }
+
+    /// Moves focus to the previous component (Shift+Tab)
+    pub fn focus_previous(&mut self) {
+        self.cycle_focus(true);
     }
 }
 
@@ -150,6 +215,8 @@ impl OxidXContext {
             size.height.max(1),
         );
 
+        let scale_factor = window.scale_factor();
+
         Ok(Self {
             device,
             queue,
@@ -161,6 +228,7 @@ impl OxidXContext {
             time: 0.0,
             window: Some(window),
             clipboard: None,
+            scale_factor,
         })
     }
 
@@ -185,6 +253,7 @@ impl OxidXContext {
             time: 0.0,
             window: None,
             clipboard: None,
+            scale_factor: 1.0,
         }
     }
 
@@ -198,8 +267,43 @@ impl OxidXContext {
                 surface.configure(&self.device, config);
             }
 
-            self.renderer.resize(new_size.width, new_size.height);
+            // Pass scale factor to renderer for DPI-aware projection
+            self.renderer
+                .resize_with_scale(new_size.width, new_size.height, self.scale_factor);
         }
+    }
+
+    /// Updates the scale factor (called on ScaleFactorChanged event).
+    pub fn set_scale_factor(&mut self, scale_factor: f64) {
+        self.scale_factor = scale_factor;
+        // Trigger a resize to update the renderer's projection matrix
+        self.renderer
+            .resize_with_scale(self.size.width, self.size.height, scale_factor);
+    }
+
+    /// Returns the current display scale factor.
+    pub fn scale_factor(&self) -> f64 {
+        self.scale_factor
+    }
+
+    /// Converts physical pixels to logical points.
+    #[inline]
+    pub fn to_logical(&self, physical: f32) -> f32 {
+        physical / self.scale_factor as f32
+    }
+
+    /// Converts logical points to physical pixels.
+    #[inline]
+    pub fn to_physical(&self, logical: f32) -> f32 {
+        logical * self.scale_factor as f32
+    }
+
+    /// Returns the logical window size (physical size / scale factor).
+    pub fn logical_size(&self) -> (f32, f32) {
+        (
+            self.size.width as f32 / self.scale_factor as f32,
+            self.size.height as f32 / self.scale_factor as f32,
+        )
     }
 
     /// Requests focus for a component by ID.
@@ -215,6 +319,27 @@ impl OxidXContext {
     /// Checks if the given ID is currently focused.
     pub fn is_focused(&self, id: &str) -> bool {
         self.focus.is_focused(id)
+    }
+
+    /// Registers a component as focusable for Tab navigation with explicit order.
+    /// Lower order values are focused first. Call this in component update().
+    pub fn register_focusable(&mut self, id: impl Into<String>, order: usize) {
+        self.focus.register(id, order);
+    }
+
+    /// Moves focus to the next focusable component (Tab).
+    pub fn focus_next(&mut self) {
+        self.focus.focus_next();
+    }
+
+    /// Moves focus to the previous focusable component (Shift+Tab).
+    pub fn focus_previous(&mut self) {
+        self.focus.focus_previous();
+    }
+
+    /// Clears the focus registry (call at start of each frame before update).
+    pub fn clear_focus_registry(&mut self) {
+        self.focus.clear_focus_registry();
     }
 
     // =========================================================================

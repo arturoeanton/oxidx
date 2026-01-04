@@ -11,4 +11,8 @@ pub use oxidx_core::{
 pub use crate::button::Button;
 pub use crate::containers::{HStack, VStack, ZStack};
 pub use crate::input::Input;
-pub use crate::label::Label;
+
+pub use crate::label::{Label, LabelStyle, TextOverflow};
+
+// Re-export derive macro
+pub use oxidx_derive::OxidXWidget;

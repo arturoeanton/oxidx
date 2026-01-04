@@ -56,6 +56,7 @@ impl KeyCode {
     pub const KEY_C: KeyCode = KeyCode(winit::keyboard::KeyCode::KeyC);
     pub const KEY_V: KeyCode = KeyCode(winit::keyboard::KeyCode::KeyV);
     pub const KEY_X: KeyCode = KeyCode(winit::keyboard::KeyCode::KeyX);
+    pub const KEY_Y: KeyCode = KeyCode(winit::keyboard::KeyCode::KeyY);
     pub const KEY_Z: KeyCode = KeyCode(winit::keyboard::KeyCode::KeyZ);
 
     pub const HOME: KeyCode = KeyCode(winit::keyboard::KeyCode::Home);
@@ -141,7 +142,10 @@ pub enum OxidXEvent {
 
     /// Character was typed while component has focus.
     /// Used for text input fields.
-    CharInput { character: char },
+    CharInput {
+        character: char,
+        modifiers: Modifiers,
+    },
 
     /// IME Composition (Pre-edit)
     /// Text explicitly being composed by the IME.

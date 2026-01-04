@@ -62,6 +62,10 @@ pub struct Button {
     press_animation: f32,
     /// Cached center for ripple effect
     press_origin: Cell<Vec2>,
+
+    // === Focus Order ===
+    /// Tab navigation order (lower values are focused first)
+    focus_order: usize,
 }
 
 impl Button {
@@ -85,6 +89,7 @@ impl Button {
             on_click: None,
             press_animation: 0.0,
             press_origin: Cell::new(Vec2::ZERO),
+            focus_order: usize::MAX, // Default to very high (last in tab order)
         }
     }
 
@@ -167,6 +172,12 @@ impl Button {
     /// Sets the click callback.
     pub fn on_click(mut self, callback: impl Fn() + Send + 'static) -> Self {
         self.on_click = Some(Box::new(callback));
+        self
+    }
+
+    /// Sets focus order for Tab navigation (lower values are focused first).
+    pub fn with_focus_order(mut self, order: usize) -> Self {
+        self.focus_order = order;
         self
     }
 
@@ -413,6 +424,11 @@ impl OxidXComponent for Button {
     }
 
     fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
+        // Register as focusable for Tab navigation
+        if !self.id.is_empty() {
+            ctx.register_focusable(&self.id, self.focus_order);
+        }
+
         if self.is_disabled {
             return false;
         }

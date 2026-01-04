@@ -209,16 +209,30 @@ pub fn run_with_config<C: OxidXComponent + 'static>(mut component: C, config: Ap
 
                         WindowEvent::Resized(physical_size) => {
                             context.resize(physical_size);
-                            // Update window size for layout
-                            window_size =
-                                Vec2::new(physical_size.width as f32, physical_size.height as f32);
+                            // Update window size for layout (logical coordinates)
+                            let (w, h) = context.logical_size();
+                            window_size = Vec2::new(w, h);
+                        }
+
+                        WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                            context.set_scale_factor(scale_factor);
+                            // Update window size for layout (logical coordinates)
+                            let (w, h) = context.logical_size();
+                            window_size = Vec2::new(w, h);
                         }
 
                         WindowEvent::RedrawRequested => {
                             // Step 1: Calculate delta time
                             let delta_time = timing.update();
 
-                            // Step 2: Update (animations/game logic)
+                            // Step 2: Clear focus registry BEFORE update()
+                            // IMPORTANT TIMING: Tab events are processed BEFORE RedrawRequested,
+                            // so they can use the registry from the previous frame.
+                            // We clear here so components can re-register during update().
+                            context.clear_focus_registry();
+
+                            // Step 3: Update (animations/game logic)
+                            // Components register themselves as focusable during update()
                             component.update(delta_time);
 
                             // Step 3: Layout pass
@@ -268,10 +282,12 @@ fn process_window_event<C: OxidXComponent>(
     ctx: &mut OxidXContext,
 ) {
     match event {
-        // Track mouse position
+        // Track mouse position (convert physical to logical for DPI independence)
         WindowEvent::CursorMoved { position, .. } => {
             input.prev_mouse_position = input.mouse_position;
-            input.mouse_position = Vec2::new(position.x as f32, position.y as f32);
+            // Convert physical pixels to logical points
+            let scale = ctx.scale_factor() as f32;
+            input.mouse_position = Vec2::new(position.x as f32 / scale, position.y as f32 / scale);
 
             // Always dispatch MouseMove to root - let components handle hit-testing
             let delta = input.mouse_position - input.prev_mouse_position;
@@ -348,6 +364,20 @@ fn process_window_event<C: OxidXComponent>(
         // Handle keyboard input (routed via Context focus)
         // Handle keyboard input (routed via Context focus)
         WindowEvent::KeyboardInput { event, .. } => {
+            // Handle Tab for focus navigation (works even without focus)
+            if event.state == ElementState::Pressed {
+                if let PhysicalKey::Code(code) = event.physical_key {
+                    if code == winit::keyboard::KeyCode::Tab {
+                        if input.modifiers.shift {
+                            ctx.focus_previous();
+                        } else {
+                            ctx.focus_next();
+                        }
+                        return; // Don't send Tab to focused component
+                    }
+                }
+            }
+
             if ctx.focus.focused_id().is_some() {
                 // 👈 Todo dentro de este if
 
@@ -371,8 +401,13 @@ fn process_window_event<C: OxidXComponent>(
                 if event.state == ElementState::Pressed {
                     if let Some(text) = &event.text {
                         for ch in text.chars() {
-                            component
-                                .on_keyboard_input(&OxidXEvent::CharInput { character: ch }, ctx);
+                            component.on_keyboard_input(
+                                &OxidXEvent::CharInput {
+                                    character: ch,
+                                    modifiers: input.modifiers,
+                                },
+                                ctx,
+                            );
                         }
                     }
                 }
@@ -399,8 +434,13 @@ fn process_window_event<C: OxidXComponent>(
                         component.on_event(&OxidXEvent::ImeCommit(text.to_string()), ctx);
                         // Also fire CharInput for compatibility if needed, but components should prefer ImeCommit for blocks
                         for ch in text.chars() {
-                            component
-                                .on_keyboard_input(&OxidXEvent::CharInput { character: ch }, ctx);
+                            component.on_keyboard_input(
+                                &OxidXEvent::CharInput {
+                                    character: ch,
+                                    modifiers: input.modifiers,
+                                },
+                                ctx,
+                            );
                         }
                     }
                     _ => {}

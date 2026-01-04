@@ -56,6 +56,14 @@ pub struct Input {
     // === Cached values for IME positioning ===
     cached_cursor_x: Cell<f32>,
     cached_text_y: Cell<f32>,
+
+    // === Callbacks ===
+    on_change: Option<Box<dyn Fn(&str) + Send>>,
+    on_blur: Option<Box<dyn Fn(&str) + Send>>,
+
+    // === Focus Order ===
+    /// Tab navigation order (lower values are focused first)
+    focus_order: usize,
 }
 
 impl Input {
@@ -109,6 +117,9 @@ impl Input {
             is_selecting: false,
             cached_cursor_x: Cell::new(0.0),
             cached_text_y: Cell::new(0.0),
+            on_change: None,
+            on_blur: None,
+            focus_order: usize::MAX, // Default to very high (last in tab order)
         }
     }
 
@@ -132,6 +143,24 @@ impl Input {
         self
     }
 
+    /// Builder: Set on_change callback (called whenever value changes)
+    pub fn with_on_change(mut self, callback: impl Fn(&str) + Send + 'static) -> Self {
+        self.on_change = Some(Box::new(callback));
+        self
+    }
+
+    /// Builder: Set on_blur callback (called when input loses focus)
+    pub fn with_on_blur(mut self, callback: impl Fn(&str) + Send + 'static) -> Self {
+        self.on_blur = Some(Box::new(callback));
+        self
+    }
+
+    /// Builder: Set focus order for Tab navigation (lower values are focused first)
+    pub fn with_focus_order(mut self, order: usize) -> Self {
+        self.focus_order = order;
+        self
+    }
+
     // === Public API ===
 
     /// Returns the current text value
@@ -144,6 +173,21 @@ impl Input {
         self.value = value.into();
         self.clamp_cursor();
         self.clear_selection();
+        self.fire_on_change();
+    }
+
+    /// Fires the on_change callback if set
+    fn fire_on_change(&self) {
+        if let Some(ref callback) = self.on_change {
+            callback(&self.value);
+        }
+    }
+
+    /// Fires the on_blur callback if set
+    fn fire_on_blur(&self) {
+        if let Some(ref callback) = self.on_blur {
+            callback(&self.value);
+        }
     }
 
     // === Selection Helpers ===
@@ -182,6 +226,7 @@ impl Input {
             self.value.replace_range(byte_start..byte_end, "");
             self.cursor_pos = start;
             self.selection_anchor = None;
+            self.fire_on_change();
         }
     }
 
@@ -218,6 +263,7 @@ impl Input {
         let byte_pos = self.char_to_byte_index(self.cursor_pos);
         self.value.insert_str(byte_pos, text);
         self.cursor_pos += text.chars().count();
+        self.fire_on_change();
     }
 
     /// Deletes character before cursor (backspace)
@@ -230,6 +276,7 @@ impl Input {
                 self.value
                     .replace_range(byte_pos..byte_pos + ch.len_utf8(), "");
                 self.cursor_pos -= 1;
+                self.fire_on_change();
             }
         }
     }
@@ -243,6 +290,7 @@ impl Input {
                 let (byte_pos, ch) = char_indices[self.cursor_pos];
                 self.value
                     .replace_range(byte_pos..byte_pos + ch.len_utf8(), "");
+                self.fire_on_change();
             }
         }
     }
@@ -436,6 +484,11 @@ impl OxidXComponent for Input {
     }
 
     fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
+        // Register as focusable for Tab navigation (every event ensures we're in registry)
+        if !self.id.is_empty() {
+            ctx.register_focusable(&self.id, self.focus_order);
+        }
+
         // Strict bounds check for mouse events
         match event {
             OxidXEvent::MouseDown { position, .. }
@@ -469,6 +522,7 @@ impl OxidXComponent for Input {
                 self.clear_selection();
                 self.is_selecting = false;
                 self.ime_preedit.clear();
+                self.fire_on_blur();
                 true
             }
             OxidXEvent::MouseDown {
@@ -476,7 +530,7 @@ impl OxidXComponent for Input {
                 modifiers,
                 ..
             } => {
-                // Request focus
+                // Request focus on click
                 if !self.id.is_empty() {
                     ctx.request_focus(&self.id);
                 }
@@ -552,6 +606,14 @@ impl OxidXComponent for Input {
                 true
             }
             OxidXEvent::Click { .. } => true,
+            OxidXEvent::KeyDown { .. } | OxidXEvent::CharInput { .. } => {
+                if self.is_focused {
+                    self.on_keyboard_input(event, ctx);
+                    true
+                } else {
+                    false
+                }
+            }
             OxidXEvent::ImePreedit { text, .. } => {
                 self.ime_preedit = text.clone();
                 self.update_ime_position(ctx);
@@ -577,7 +639,14 @@ impl OxidXComponent for Input {
         }
 
         match event {
-            OxidXEvent::CharInput { character } => {
+            OxidXEvent::CharInput {
+                character,
+                modifiers,
+            } => {
+                // Skip character input when primary modifier (Cmd/Ctrl) is held - these are shortcuts
+                if modifiers.is_primary() {
+                    return;
+                }
                 if !character.is_control() {
                     if self.has_selection() {
                         self.delete_selection();

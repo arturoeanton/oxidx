@@ -362,9 +362,23 @@ impl Renderer {
 
     /// Updates the projection matrix when the window is resized.
     pub fn resize(&mut self, width: u32, height: u32) {
-        self.screen_width = width as f32;
-        self.screen_height = height as f32;
+        self.resize_with_scale(width, height, 1.0);
+    }
 
+    /// Updates the projection matrix with DPI scaling.
+    ///
+    /// - `width`, `height`: Physical pixel size of the surface
+    /// - `scale_factor`: Display scale factor (1.0 = normal, 2.0 = Retina)
+    ///
+    /// The projection matrix uses logical coordinates (physical / scale_factor)
+    /// so components can draw in consistent logical units regardless of DPI.
+    /// The viewport uses physical pixels for crisp rendering.
+    pub fn resize_with_scale(&mut self, width: u32, height: u32, scale_factor: f64) {
+        // Store logical size for component layout
+        self.screen_width = width as f32 / scale_factor as f32;
+        self.screen_height = height as f32 / scale_factor as f32;
+
+        // Projection uses logical size so components draw in logical coordinates
         let projection =
             Self::create_orthographic_projection(self.screen_width, self.screen_height);
         let uniforms = Uniforms {
@@ -374,7 +388,7 @@ impl Renderer {
             .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
     }
 
-    /// Returns the current screen size.
+    /// Returns the current screen size (in logical points).
     pub fn screen_size(&self) -> Vec2 {
         Vec2::new(self.screen_width, self.screen_height)
     }

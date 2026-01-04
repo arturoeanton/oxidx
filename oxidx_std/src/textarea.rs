@@ -1209,6 +1209,14 @@ impl OxidXComponent for TextArea {
                 true
             }
             OxidXEvent::Click { .. } => true,
+            OxidXEvent::KeyDown { .. } | OxidXEvent::CharInput { .. } => {
+                if self.is_focused {
+                    self.on_keyboard_input(event, ctx);
+                    true
+                } else {
+                    false
+                }
+            }
             OxidXEvent::ImePreedit { text, .. } => {
                 self.ime_preedit = text.clone();
                 self.update_ime_position(ctx);
@@ -1235,7 +1243,14 @@ impl OxidXComponent for TextArea {
         }
 
         match event {
-            OxidXEvent::CharInput { character } => {
+            OxidXEvent::CharInput {
+                character,
+                modifiers,
+            } => {
+                // Skip character input when primary modifier (Cmd/Ctrl) is held - these are shortcuts
+                if modifiers.is_primary() {
+                    return;
+                }
                 if !character.is_control() {
                     if self.has_selection() {
                         self.delete_selection();
