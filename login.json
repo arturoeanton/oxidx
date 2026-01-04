@@ -1,19 +1,56 @@
 {
-  "name": "LoginForm",
-  "root": {
-    "type": "ZStack",
-    "children": [
-      { "type": "Container", "id": "bg_layer", "style": { "bg": "#1a1a1a" } },
-      { 
-        "type": "VStack", 
-        "props": { "spacing": 20, "alignment": "Center" },
-        "children": [
-          { "type": "Label", "props": { "text": "Welcome Back", "size": 24 } },
-          { "type": "Input", "id": "username", "props": { "placeholder": "User" } },
-          { "type": "Input", "id": "password", "props": { "placeholder": "Pass" } },
-          { "type": "Button", "id": "btn_login", "props": { "text": "Sign In", "variant": "Primary" } }
-        ]
-      }
-    ]
-  }
+  "type": "ZStack",
+  "props": {
+    "id": "main_window"
+  },
+  "children": [
+    {
+      "type": "ZStack",
+      "props": {
+        "id": "bg_layer"
+      },
+      "children": []
+    },
+    {
+      "type": "VStack",
+      "props": {
+        "spacing": 20,
+        "alignment": "Center"
+      },
+      "children": [
+        {
+          "type": "Label",
+          "props": {
+            "text": "Welcome Back",
+            "size": 24
+          },
+          "children": []
+        },
+        {
+          "type": "Input",
+          "props": {
+            "placeholder": "User",
+            "id": "username"
+          },
+          "children": []
+        },
+        {
+          "type": "Input",
+          "props": {
+            "placeholder": "Pass",
+            "id": "password"
+          },
+          "children": []
+        },
+        {
+          "type": "Button",
+          "props": {
+            "text": "Sign In",
+            "id": "btn_login"
+          },
+          "children": []
+        }
+      ]
+    }
+  ]
 }

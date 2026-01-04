@@ -12,11 +12,15 @@ use anyhow::{Context, Result};
 use chrono::Local;
 use clap::{Parser, Subcommand};
 use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode};
-use oxidx_codegen::{generate_json_schema, CodeGenerator, RustGenerator, WindowSchema};
+use oxidx_codegen::generate_json_schema;
 use std::path::PathBuf;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 use std::{fs, io};
+
+mod codegen;
+mod schema;
+use schema::ComponentNode;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -161,13 +165,10 @@ fn generate_code(input: &PathBuf) -> Result<String> {
     let json_content =
         fs::read_to_string(input).with_context(|| format!("Failed to read: {:?}", input))?;
 
-    let schema: WindowSchema =
-        serde_json::from_str(&json_content).context("Invalid JSON schema")?;
+    let node: ComponentNode = serde_json::from_str(&json_content).context("Invalid JSON schema")?;
 
-    let generator = RustGenerator;
-    generator
-        .generate(&schema)
-        .context("Code generation failed")
+    let code = codegen::generate_rust_code(&node);
+    Ok(code)
 }
 
 /// Clear terminal screen.

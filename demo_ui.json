@@ -1,0 +1,118 @@
+{
+    "type": "ZStack",
+    "props": {
+        "id": "main_window"
+    },
+    "children": [
+        {
+            "type": "VStack",
+            "props": {
+                "spacing": 0
+            },
+            "children": [
+                {
+                    "type": "HStack",
+                    "props": {
+                        "spacing": 10,
+                        "id": "top_bar"
+                    },
+                    "children": [
+                        {
+                            "type": "Label",
+                            "props": {
+                                "text": "OxidX Dashboard",
+                                "id": "app_title"
+                            },
+                            "children": []
+                        },
+                        {
+                            "type": "Button",
+                            "props": {
+                                "text": "Settings",
+                                "id": "btn_settings"
+                            },
+                            "children": []
+                        }
+                    ]
+                },
+                {
+                    "type": "SplitView",
+                    "props": {
+                        "orientation": "Horizontal",
+                        "id": "main_split"
+                    },
+                    "children": [
+                        {
+                            "type": "VStack",
+                            "props": {
+                                "id": "sidebar"
+                            },
+                            "children": [
+                                {
+                                    "type": "Button",
+                                    "props": {
+                                        "text": "Files"
+                                    },
+                                    "children": []
+                                },
+                                {
+                                    "type": "Button",
+                                    "props": {
+                                        "text": "Search"
+                                    },
+                                    "children": []
+                                },
+                                {
+                                    "type": "Button",
+                                    "props": {
+                                        "text": "Extensions"
+                                    },
+                                    "children": []
+                                }
+                            ]
+                        },
+                        {
+                            "type": "VStack",
+                            "props": {
+                                "id": "content_area"
+                            },
+                            "children": [
+                                {
+                                    "type": "Label",
+                                    "props": {
+                                        "text": "Welcome to the specific demo",
+                                        "id": "welcome_msg"
+                                    },
+                                    "children": []
+                                },
+                                {
+                                    "type": "Input",
+                                    "props": {
+                                        "text": "Type here...",
+                                        "id": "main_input"
+                                    },
+                                    "children": []
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "type": "HStack",
+                    "props": {
+                        "id": "status_bar"
+                    },
+                    "children": [
+                        {
+                            "type": "Label",
+                            "props": {
+                                "text": "Ready"
+                            },
+                            "children": []
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
