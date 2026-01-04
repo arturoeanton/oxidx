@@ -556,6 +556,46 @@ impl Renderer {
         });
     }
 
+    /// Measures the pixel width of a text string with the given style.
+    ///
+    /// # Arguments
+    /// * `text` - The text to measure
+    /// * `font_size` - Font size in pixels
+    ///
+    /// # Returns
+    /// The width in pixels
+    pub fn measure_text(&mut self, text: &str, font_size: f32) -> f32 {
+        use glyphon::cosmic_text::{Attrs, Buffer, Family, Metrics, Shaping};
+
+        // Create a temporary buffer for measurement
+        let mut buffer = Buffer::new(
+            &mut self.text_brush.font_system,
+            Metrics::new(font_size, font_size * 1.2),
+        );
+
+        // Set a large width so text doesn't wrap
+        buffer.set_size(&mut self.text_brush.font_system, f32::MAX, font_size * 2.0);
+
+        // Set the text
+        buffer.set_text(
+            &mut self.text_brush.font_system,
+            text,
+            Attrs::new().family(Family::SansSerif),
+            Shaping::Advanced,
+        );
+
+        // Shape the text
+        buffer.shape_until_scroll(&mut self.text_brush.font_system);
+
+        // Calculate width from layout runs
+        let mut width = 0.0f32;
+        for line in buffer.layout_runs() {
+            width = width.max(line.line_w);
+        }
+
+        width
+    }
+
     /// Queues rich text (using cosmic-text AttrsList) for rendering.
     pub fn draw_rich_text(
         &mut self,

@@ -57,6 +57,12 @@ impl KeyCode {
     pub const KEY_V: KeyCode = KeyCode(winit::keyboard::KeyCode::KeyV);
     pub const KEY_X: KeyCode = KeyCode(winit::keyboard::KeyCode::KeyX);
     pub const KEY_Z: KeyCode = KeyCode(winit::keyboard::KeyCode::KeyZ);
+
+    pub const HOME: KeyCode = KeyCode(winit::keyboard::KeyCode::Home);
+    pub const END: KeyCode = KeyCode(winit::keyboard::KeyCode::End);
+
+    pub const PAGE_UP: KeyCode = KeyCode(winit::keyboard::KeyCode::PageUp);
+    pub const PAGE_DOWN: KeyCode = KeyCode(winit::keyboard::KeyCode::PageDown);
 }
 
 /// Keyboard modifier state.
@@ -66,6 +72,22 @@ pub struct Modifiers {
     pub ctrl: bool,
     pub alt: bool,
     pub meta: bool, // Command on macOS, Windows key on Windows
+}
+
+impl Modifiers {
+    /// Returns true if the primary shortcut modifier is pressed.
+    /// On macOS, this is Command (meta). On Windows/Linux, this is Ctrl.
+    #[inline]
+    pub fn is_primary(&self) -> bool {
+        #[cfg(target_os = "macos")]
+        {
+            self.meta
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            self.ctrl
+        }
+    }
 }
 
 /// High-level UI events that components receive.

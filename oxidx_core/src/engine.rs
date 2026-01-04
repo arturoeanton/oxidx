@@ -346,38 +346,38 @@ fn process_window_event<C: OxidXComponent>(
         }
 
         // Handle keyboard input (routed via Context focus)
+        // Handle keyboard input (routed via Context focus)
         WindowEvent::KeyboardInput { event, .. } => {
-            // Find focused component via traversing?
-            // Since we can't easily find the component by ID in the tree without a map,
-            // we will dispatch the event to the root, and if the root implements routing logic
-            // it will find the child.
-            // BUT, the trait on_keyboard_input implementation in containers needs to know.
+            if ctx.focus.focused_id().is_some() {
+                // 👈 Todo dentro de este if
 
-            // Actually, the simplest way for a tree-based framework without a separate registry
-            // is to let the root dispatch.
-            // We'll call on_keyboard_input on the root. Containers should propagate if they contain the focused ID.
-
-            if let PhysicalKey::Code(code) = event.physical_key {
-                let key = KeyCode::from(code);
-                let cx_event = match event.state {
-                    ElementState::Pressed => OxidXEvent::KeyDown {
-                        key,
-                        modifiers: input.modifiers,
-                    },
-                    ElementState::Released => OxidXEvent::KeyUp {
-                        key,
-                        modifiers: input.modifiers,
-                    },
-                };
-
-                // Dispatch to focused component only?
-                // We'll use on_keyboard_input which is intended for this.
-                if ctx.focus.focused_id().is_some() {
+                // 1. Enviar KeyDown/KeyUp
+                if let PhysicalKey::Code(code) = event.physical_key {
+                    let key = KeyCode::from(code);
+                    let cx_event = match event.state {
+                        ElementState::Pressed => OxidXEvent::KeyDown {
+                            key,
+                            modifiers: input.modifiers,
+                        },
+                        ElementState::Released => OxidXEvent::KeyUp {
+                            key,
+                            modifiers: input.modifiers,
+                        },
+                    };
                     component.on_keyboard_input(&cx_event, ctx);
+                }
+
+                // 2. Enviar CharInput para texto (DENTRO del if de focus)
+                if event.state == ElementState::Pressed {
+                    if let Some(text) = &event.text {
+                        for ch in text.chars() {
+                            component
+                                .on_keyboard_input(&OxidXEvent::CharInput { character: ch }, ctx);
+                        }
+                    }
                 }
             }
         }
-
         // Handle IME input
         WindowEvent::Ime(ime_event) => {
             if ctx.focus.focused_id().is_some() {

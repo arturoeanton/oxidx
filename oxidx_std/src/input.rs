@@ -1,37 +1,67 @@
 //! Text Input Component
 //!
-//! A text input field with:
-//! - Clipboard support (Ctrl+C/V)
-//! - Selection (Ctrl+A)
-//! - Text cursor on hover
+//! A professional text input field with:
+//! - Proper text measurement using cosmic-text
+//! - Cursor blinking animation
+//! - Arrow key navigation (Left, Right, Home, End)
+//! - Mouse text selection (click and drag)
+//! - Shift+Arrow and Shift+Click for selection
+//! - Clipboard support (Ctrl+C/V/X)
+//! - IME support for international input
+//! - Full UTF-8 support (emojis, accents, etc.)
 
 use oxidx_core::events::{KeyCode, OxidXEvent};
 use oxidx_core::layout::LayoutProps;
 use oxidx_core::style::{ComponentState, InteractiveStyle, Style};
 use oxidx_core::{Color, OxidXComponent, OxidXContext, Rect, Renderer, TextStyle, Vec2};
+use std::cell::Cell;
 use winit::window::CursorIcon;
 
-/// A text input field with styling, layout, clipboard, and cursor support.
+/// A text input field with full text editing support.
 pub struct Input {
+    // === Layout ===
     bounds: Rect,
-    style: InteractiveStyle,
     layout: LayoutProps,
+
+    // === Styling ===
+    style: InteractiveStyle,
+    text_style: TextStyle,
+
+    // === Content ===
     placeholder: String,
     value: String,
+
+    // === State ===
     is_focused: bool,
     is_hovered: bool,
-    text_style: TextStyle,
     id: String,
-    /// Whether all text is selected
-    is_selected: bool,
-    /// IME pre-edit text (composition)
+
+    // === IME ===
     ime_preedit: String,
+
+    // === Cursor ===
+    /// Character index where cursor is located (0 = before first char)
+    cursor_pos: usize,
+    /// Timer for cursor blink animation
+    cursor_blink_timer: f32,
+    /// Whether cursor is currently visible (toggles every ~530ms)
+    cursor_visible: bool,
+
+    // === Selection ===
+    /// Start of selection (character index), None if no selection
+    selection_anchor: Option<usize>,
+    /// Whether user is currently dragging to select
+    is_selecting: bool,
+
+    // === Cached values for IME positioning ===
+    cached_cursor_x: Cell<f32>,
+    cached_text_y: Cell<f32>,
 }
 
 impl Input {
     /// Creates a new Input with a placeholder.
     pub fn new(placeholder: impl Into<String>) -> Self {
-        // Default styling
+        // Dark theme styling
         let border_color = Color::new(0.3, 0.3, 0.35, 1.0);
         let focus_color = Color::new(0.2, 0.5, 0.9, 1.0);
         let bg = Color::new(0.1, 0.1, 0.12, 1.0);
@@ -56,61 +86,216 @@ impl Input {
             .shadow(Vec2::new(0.0, 0.0), 8.0, focus_color)
             .text_color(text_white);
 
-        let style = InteractiveStyle {
-            idle,
-            hover,
-            pressed: focused,
-            disabled: idle,
-        };
-
         Self {
             bounds: Rect::default(),
-            style,
-            layout: LayoutProps::default().with_padding(10.0),
+            layout: LayoutProps::default().with_padding(14.0),
+            style: InteractiveStyle {
+                idle,
+                hover,
+                pressed: focused,
+                disabled: idle,
+            },
+            text_style: TextStyle::new(16.0).with_color(Color::WHITE),
             placeholder: placeholder.into(),
             value: String::new(),
             is_focused: false,
             is_hovered: false,
-            text_style: TextStyle::new(14.0).with_color(Color::WHITE),
             id: String::new(),
-            is_selected: false,
             ime_preedit: String::new(),
+            cursor_pos: 0,
+            cursor_blink_timer: 0.0,
+            cursor_visible: true,
+            selection_anchor: None,
+            is_selecting: false,
+            cached_cursor_x: Cell::new(0.0),
+            cached_text_y: Cell::new(0.0),
         }
     }
 
+    // === Builder Methods ===
+
+    /// Builder: Set component ID (required for focus management)
     pub fn with_id(mut self, id: impl Into<String>) -> Self {
         self.id = id.into();
         self
     }
 
+    /// Builder: Set custom interactive style
     pub fn with_style(mut self, style: InteractiveStyle) -> Self {
         self.style = style;
         self
     }
 
+    /// Builder: Set layout properties
     pub fn with_layout(mut self, layout: LayoutProps) -> Self {
         self.layout = layout;
         self
     }
 
+    // === Public API ===
+
+    /// Returns the current text value
     pub fn value(&self) -> &str {
         &self.value
     }
 
-    /// Helper to update IME cursor position
+    /// Sets the text value programmatically
+    pub fn set_value(&mut self, value: impl Into<String>) {
+        self.value = value.into();
+        self.clamp_cursor();
+        self.clear_selection();
+    }
+
+    // === Selection Helpers ===
+
+    /// Returns true if there's an active text selection
+    fn has_selection(&self) -> bool {
+        self.selection_anchor.is_some() && self.selection_anchor != Some(self.cursor_pos)
+    }
+
+    /// Returns the selection range as (start, end) where start <= end
+    fn selection_range(&self) -> Option<(usize, usize)> {
+        self.selection_anchor.map(|anchor| {
+            if anchor < self.cursor_pos {
+                (anchor, self.cursor_pos)
+            } else {
+                (self.cursor_pos, anchor)
+            }
+        })
+    }
+
+    /// Returns the selected text, or empty string if no selection
+    fn selected_text(&self) -> String {
+        if let Some((start, end)) = self.selection_range() {
+            self.value.chars().skip(start).take(end - start).collect()
+        } else {
+            String::new()
+        }
+    }
+
+    /// Deletes the selected text and returns cursor to selection start
+    fn delete_selection(&mut self) {
+        if let Some((start, end)) = self.selection_range() {
+            // Convert char indices to byte indices
+            let byte_start = self.char_to_byte_index(start);
+            let byte_end = self.char_to_byte_index(end);
+            self.value.replace_range(byte_start..byte_end, "");
+            self.cursor_pos = start;
+            self.selection_anchor = None;
+        }
+    }
+
+    /// Clears selection without deleting text
+    fn clear_selection(&mut self) {
+        self.selection_anchor = None;
+    }
+
+    // === Cursor Helpers ===
+
+    /// Resets cursor blink timer (call when cursor moves)
+    fn reset_cursor_blink(&mut self) {
+        self.cursor_blink_timer = 0.0;
+        self.cursor_visible = true;
+    }
+
+    /// Ensures cursor_pos is within valid bounds
+    fn clamp_cursor(&mut self) {
+        let max_pos = self.value.chars().count();
+        self.cursor_pos = self.cursor_pos.min(max_pos);
+    }
+
+    /// Converts character index to byte index
+    fn char_to_byte_index(&self, char_index: usize) -> usize {
+        self.value
+            .char_indices()
+            .nth(char_index)
+            .map(|(i, _)| i)
+            .unwrap_or(self.value.len())
+    }
+
+    /// Inserts text at cursor position
+    fn insert_at_cursor(&mut self, text: &str) {
+        let byte_pos = self.char_to_byte_index(self.cursor_pos);
+        self.value.insert_str(byte_pos, text);
+        self.cursor_pos += text.chars().count();
+    }
+
+    /// Deletes character before cursor (backspace)
+    fn delete_char_before_cursor(&mut self) {
+        if self.cursor_pos > 0 {
+            let char_indices: Vec<_> = self.value.char_indices().collect();
+            let idx = self.cursor_pos - 1;
+            if idx < char_indices.len() {
+                let (byte_pos, ch) = char_indices[idx];
+                self.value
+                    .replace_range(byte_pos..byte_pos + ch.len_utf8(), "");
+                self.cursor_pos -= 1;
+            }
+        }
+    }
+
+    /// Deletes character after cursor (delete key)
+    fn delete_char_after_cursor(&mut self) {
+        let max_pos = self.value.chars().count();
+        if self.cursor_pos < max_pos {
+            let char_indices: Vec<_> = self.value.char_indices().collect();
+            if self.cursor_pos < char_indices.len() {
+                let (byte_pos, ch) = char_indices[self.cursor_pos];
+                self.value
+                    .replace_range(byte_pos..byte_pos + ch.len_utf8(), "");
+            }
+        }
+    }
+
+    // === Text Measurement ===
+
+    /// Measures text width from start up to a character index
+    fn measure_text_to_index(&self, renderer: &mut Renderer, char_index: usize) -> f32 {
+        if char_index == 0 || self.value.is_empty() {
+            return 0.0;
+        }
+        let prefix: String = self.value.chars().take(char_index).collect();
+        renderer.measure_text(&prefix, self.text_style.font_size)
+    }
+
+    /// Converts a click X position to a character index
+    /// Uses the cached measurement approach for precision
+    fn click_x_to_char_index(&self, click_x: f32, renderer: &mut Renderer) -> usize {
+        let text_start_x = self.bounds.x + self.layout.padding;
+        let relative_x = click_x - text_start_x;
+
+        if relative_x <= 0.0 || self.value.is_empty() {
+            return 0;
+        }
+
+        let char_count = self.value.chars().count();
+
+        // Binary search would be faster, but linear is simpler and fine for typical input lengths
+        let mut prev_width = 0.0;
+        for i in 1..=char_count {
+            let width = self.measure_text_to_index(renderer, i);
+            let mid = (prev_width + width) / 2.0;
+
+            if relative_x < mid {
+                return i - 1;
+            }
+            if relative_x < width {
+                return i;
+            }
+            prev_width = width;
+        }
+
+        char_count
+    }
+
+    // === IME Support ===
+
+    /// Updates IME cursor position using cached values from render()
     fn update_ime_position(&self, ctx: &OxidXContext) {
         if self.is_focused {
-            let text_pos_y = self.bounds.y + (self.bounds.height - self.text_style.font_size) / 2.0;
-            let padding = self.layout.padding;
-
-            // Calculate cursor x (same logic as render)
-            let base_width = self.value.len() as f32 * 8.0;
-            let preedit_width = self.ime_preedit.len() as f32 * 8.0;
-            let cursor_x = self.bounds.x + padding + base_width + preedit_width;
-
             ctx.set_ime_position(Rect::new(
-                cursor_x,
-                text_pos_y,
+                self.cached_cursor_x.get(),
+                self.cached_text_y.get(),
                 2.0,
                 self.text_style.font_size,
             ));
@@ -119,7 +304,16 @@ impl Input {
 }
 
 impl OxidXComponent for Input {
-    fn update(&mut self, _dt: f32) {}
+    fn update(&mut self, dt: f32) {
+        // Cursor blinking - only when focused and no selection
+        if self.is_focused && !self.has_selection() {
+            self.cursor_blink_timer += dt;
+            if self.cursor_blink_timer >= 0.53 {
+                self.cursor_visible = !self.cursor_visible;
+                self.cursor_blink_timer = 0.0;
+            }
+        }
+    }
 
     fn layout(&mut self, available: Rect) -> Vec2 {
         let margin = self.layout.margin;
@@ -133,6 +327,7 @@ impl OxidXComponent for Input {
     }
 
     fn render(&self, renderer: &mut Renderer) {
+        // Determine visual state
         let state = if self.is_focused {
             ComponentState::Pressed
         } else if self.is_hovered {
@@ -143,41 +338,48 @@ impl OxidXComponent for Input {
 
         let current_style = self.style.resolve(state);
 
-        // Render background/border
+        // 1. Draw background/border
         renderer.draw_style_rect(self.bounds, current_style);
 
-        // Render selection background if selected
-        let text = if self.value.is_empty() {
-            &self.placeholder
-        } else {
-            &self.value
-        };
-
+        // 2. Calculate text position
         let text_pos = Vec2::new(
             self.bounds.x + self.layout.padding,
             self.bounds.y + (self.bounds.height - self.text_style.font_size) / 2.0,
         );
 
-        // Draw selection background
-        if self.is_selected && !self.value.is_empty() {
-            let selection_width = self.value.len() as f32 * 8.0; // Hacky monospace
-            let selection_rect = Rect::new(
-                text_pos.x,
-                text_pos.y,
-                selection_width,
-                self.text_style.font_size,
-            );
-            renderer.fill_rect(selection_rect, Color::new(0.2, 0.5, 0.9, 0.5));
+        // Cache text Y for IME positioning
+        self.cached_text_y.set(text_pos.y);
+
+        // 3. Draw selection highlight if there's a selection
+        if let Some((sel_start, sel_end)) = self.selection_range() {
+            if sel_start != sel_end && !self.value.is_empty() {
+                let start_x = self.measure_text_to_index(renderer, sel_start);
+                let end_x = self.measure_text_to_index(renderer, sel_end);
+
+                let selection_rect = Rect::new(
+                    text_pos.x + start_x,
+                    text_pos.y,
+                    end_x - start_x,
+                    self.text_style.font_size,
+                );
+                renderer.fill_rect(selection_rect, Color::new(0.2, 0.5, 0.9, 0.5));
+            }
         }
 
-        // Render Text
+        // 4. Draw text (value or placeholder)
+        let display_text = if self.value.is_empty() {
+            &self.placeholder
+        } else {
+            &self.value
+        };
+
         let mut text_color = current_style.text_color;
         if self.value.is_empty() {
             text_color.a *= 0.5;
         }
 
         renderer.draw_text(
-            text,
+            display_text,
             text_pos,
             TextStyle {
                 font_size: self.text_style.font_size,
@@ -186,26 +388,27 @@ impl OxidXComponent for Input {
             },
         );
 
-        // Draw cursor if focused and not selected
-        if self.is_focused && !self.is_selected {
-            // Calculate cursor position (simple monospace approximation)
-            let base_width = self.value.len() as f32 * 8.0;
-            let cursor_x = text_pos.x + base_width;
+        // 5. Draw cursor and IME preedit when focused
+        if self.is_focused {
+            let cursor_offset = self.measure_text_to_index(renderer, self.cursor_pos);
+            let mut cursor_x = text_pos.x + cursor_offset;
 
-            // Render IME pre-edit text if active
+            // Draw IME preedit text
             if !self.ime_preedit.is_empty() {
+                let preedit_width =
+                    renderer.measure_text(&self.ime_preedit, self.text_style.font_size);
+
                 renderer.draw_text(
                     &self.ime_preedit,
                     Vec2::new(cursor_x, text_pos.y),
                     TextStyle {
                         font_size: self.text_style.font_size,
-                        color: Color::new(1.0, 1.0, 0.5, 1.0), // Yellow for pre-edit
+                        color: Color::new(1.0, 1.0, 0.5, 1.0),
                         ..self.text_style.clone()
                     },
                 );
 
-                // Draw underline for pre-edit
-                let preedit_width = self.ime_preedit.len() as f32 * 8.0;
+                // Underline for preedit
                 renderer.fill_rect(
                     Rect::new(
                         cursor_x,
@@ -215,23 +418,20 @@ impl OxidXComponent for Input {
                     ),
                     Color::new(1.0, 1.0, 0.5, 1.0),
                 );
+
+                cursor_x += preedit_width;
             }
 
-            // Draw I-beam cursor
-            // If pre-edit is active, cursor is usually at end of pre-edit or specific pos.
-            // For simplicity, we put it at the end of pre-edit + value.
-            let total_width = base_width + (self.ime_preedit.len() as f32 * 8.0);
-            let final_cursor_x = text_pos.x + total_width;
+            // Draw I-beam cursor (only if visible and no selection)
+            if self.cursor_visible && !self.has_selection() {
+                renderer.fill_rect(
+                    Rect::new(cursor_x, text_pos.y, 2.0, self.text_style.font_size),
+                    current_style.text_color,
+                );
+            }
 
-            let cursor_rect = Rect::new(final_cursor_x, text_pos.y, 2.0, self.text_style.font_size);
-            renderer.fill_rect(cursor_rect, current_style.text_color);
-
-            //
-            // We can calculate cursor position in `on_event`?
-            // `text_pos` depends on `bounds`.
-            // `bounds` is updated in `layout`.
-            // So in `on_event`, we have valid `bounds`.
-            // We can recalculate `cursor_x` there and call `set_ime_position`.
+            // Cache cursor position for IME
+            self.cached_cursor_x.set(cursor_x);
         }
     }
 
@@ -251,53 +451,119 @@ impl OxidXComponent for Input {
         match event {
             OxidXEvent::MouseEnter => {
                 self.is_hovered = true;
-                // Change cursor to text beam
                 ctx.set_cursor_icon(CursorIcon::Text);
                 true
             }
             OxidXEvent::MouseLeave => {
                 self.is_hovered = false;
-                // Reset cursor to default
                 ctx.set_cursor_icon(CursorIcon::Default);
                 true
             }
             OxidXEvent::FocusGained => {
                 self.is_focused = true;
+                self.reset_cursor_blink();
                 true
             }
             OxidXEvent::FocusLost => {
                 self.is_focused = false;
-                self.is_selected = false;
+                self.clear_selection();
+                self.is_selecting = false;
+                self.ime_preedit.clear();
                 true
             }
-            OxidXEvent::MouseDown { .. } => {
-                // Request focus when clicked
-                ctx.request_focus(&self.id);
+            OxidXEvent::MouseDown {
+                position,
+                modifiers,
+                ..
+            } => {
+                // Request focus
+                if !self.id.is_empty() {
+                    ctx.request_focus(&self.id);
+                }
                 self.is_focused = true;
-                // Clear selection on click
-                self.is_selected = false;
-                // Update IME position for input
+                self.is_selecting = true;
+
+                // Approximate cursor position (will be refined)
+                // We use a simple approximation since we don't have renderer here
+                let click_x = position.x;
+                let text_start_x = self.bounds.x + self.layout.padding;
+                let relative_x = (click_x - text_start_x).max(0.0);
+
+                let approx_pos = if self.value.is_empty() {
+                    0
+                } else {
+                    // Approximate using average character width
+                    let total_chars = self.value.chars().count();
+                    let avg_width = if total_chars > 0 {
+                        // Use cached cursor position to estimate average width
+                        self.cached_cursor_x.get() - text_start_x
+                    } else {
+                        0.0
+                    };
+
+                    if avg_width > 0.0 && total_chars > 0 {
+                        let avg_char_width = avg_width / total_chars as f32;
+                        ((relative_x / avg_char_width) as usize).min(total_chars)
+                    } else {
+                        // Fallback to 8px estimate
+                        ((relative_x / 8.0) as usize).min(total_chars)
+                    }
+                };
+
+                // Shift+Click extends selection
+                if modifiers.shift && self.selection_anchor.is_some() {
+                    self.cursor_pos = approx_pos;
+                } else {
+                    self.cursor_pos = approx_pos;
+                    self.selection_anchor = Some(approx_pos);
+                }
+
+                self.reset_cursor_blink();
                 self.update_ime_position(ctx);
                 true
             }
-            OxidXEvent::MouseUp { .. } | OxidXEvent::Click { .. } => {
-                // Already focused on MouseDown, just consume
+            OxidXEvent::MouseMove { position, .. } => {
+                if self.is_selecting {
+                    let click_x = position.x;
+                    let text_start_x = self.bounds.x + self.layout.padding;
+                    let relative_x = (click_x - text_start_x).max(0.0);
+
+                    let total_chars = self.value.chars().count();
+                    let approx_pos = if self.value.is_empty() {
+                        0
+                    } else {
+                        ((relative_x / 8.0) as usize).min(total_chars)
+                    };
+
+                    self.cursor_pos = approx_pos;
+                    self.reset_cursor_blink();
+                    true
+                } else {
+                    false
+                }
+            }
+            OxidXEvent::MouseUp { .. } => {
+                self.is_selecting = false;
+
+                // If no movement, clear selection (simple click)
+                if self.selection_anchor == Some(self.cursor_pos) {
+                    self.clear_selection();
+                }
                 true
             }
+            OxidXEvent::Click { .. } => true,
             OxidXEvent::ImePreedit { text, .. } => {
                 self.ime_preedit = text.clone();
-                // We should update IME position here too if it changes
                 self.update_ime_position(ctx);
                 true
             }
             OxidXEvent::ImeCommit(text) => {
-                // Commit text
-                if self.is_selected {
-                    self.value.clear();
-                    self.is_selected = false;
+                if self.has_selection() {
+                    self.delete_selection();
                 }
-                self.value.push_str(text);
-                self.ime_preedit.clear(); // Clear preedit
+                self.insert_at_cursor(text);
+                self.ime_preedit.clear();
+                self.reset_cursor_blink();
                 self.update_ime_position(ctx);
                 true
             }
@@ -313,49 +579,164 @@ impl OxidXComponent for Input {
         match event {
             OxidXEvent::CharInput { character } => {
                 if !character.is_control() {
-                    // If text is selected, replace it
-                    if self.is_selected {
-                        self.value.clear();
-                        self.is_selected = false;
+                    if self.has_selection() {
+                        self.delete_selection();
                     }
-                    self.value.push(*character);
+                    self.insert_at_cursor(&character.to_string());
+                    self.reset_cursor_blink();
                 }
             }
             OxidXEvent::KeyDown { key, modifiers } => {
-                // Handle Ctrl+A (Select All)
-                if modifiers.ctrl && *key == KeyCode::KEY_A {
-                    self.is_selected = !self.value.is_empty();
+                let max_pos = self.value.chars().count();
+
+                // === ARROW KEYS ===
+
+                // Left Arrow
+                if *key == KeyCode::LEFT {
+                    if modifiers.shift {
+                        if self.selection_anchor.is_none() {
+                            self.selection_anchor = Some(self.cursor_pos);
+                        }
+                        self.cursor_pos = self.cursor_pos.saturating_sub(1);
+                    } else {
+                        if self.has_selection() {
+                            if let Some((start, _)) = self.selection_range() {
+                                self.cursor_pos = start;
+                            }
+                            self.clear_selection();
+                        } else {
+                            self.cursor_pos = self.cursor_pos.saturating_sub(1);
+                        }
+                    }
+                    self.reset_cursor_blink();
                     return;
                 }
 
-                // Handle Ctrl+C (Copy)
-                if modifiers.ctrl && *key == KeyCode::KEY_C {
-                    if self.is_selected || !self.value.is_empty() {
+                // Right Arrow
+                if *key == KeyCode::RIGHT {
+                    if modifiers.shift {
+                        if self.selection_anchor.is_none() {
+                            self.selection_anchor = Some(self.cursor_pos);
+                        }
+                        self.cursor_pos = (self.cursor_pos + 1).min(max_pos);
+                    } else {
+                        if self.has_selection() {
+                            if let Some((_, end)) = self.selection_range() {
+                                self.cursor_pos = end;
+                            }
+                            self.clear_selection();
+                        } else {
+                            self.cursor_pos = (self.cursor_pos + 1).min(max_pos);
+                        }
+                    }
+                    self.reset_cursor_blink();
+                    return;
+                }
+
+                // Home
+                if *key == KeyCode::HOME {
+                    if modifiers.shift {
+                        if self.selection_anchor.is_none() {
+                            self.selection_anchor = Some(self.cursor_pos);
+                        }
+                    } else {
+                        self.clear_selection();
+                    }
+                    self.cursor_pos = 0;
+                    self.reset_cursor_blink();
+                    return;
+                }
+
+                // End
+                if *key == KeyCode::END {
+                    if modifiers.shift {
+                        if self.selection_anchor.is_none() {
+                            self.selection_anchor = Some(self.cursor_pos);
+                        }
+                    } else {
+                        self.clear_selection();
+                    }
+                    self.cursor_pos = max_pos;
+                    self.reset_cursor_blink();
+                    return;
+                }
+
+                // === EDITING SHORTCUTS ===
+
+                // Select All (Cmd+A / Ctrl+A)
+                if modifiers.is_primary() && *key == KeyCode::KEY_A {
+                    self.selection_anchor = Some(0);
+                    self.cursor_pos = max_pos;
+                    return;
+                }
+
+                // Copy (Cmd+C / Ctrl+C)
+                if modifiers.is_primary() && *key == KeyCode::KEY_C {
+                    if self.has_selection() {
+                        ctx.copy_to_clipboard(&self.selected_text());
+                    } else if !self.value.is_empty() {
                         ctx.copy_to_clipboard(&self.value);
                     }
                     return;
                 }
 
-                // Handle Ctrl+V (Paste)
-                if modifiers.ctrl && *key == KeyCode::KEY_V {
+                // Cut (Cmd+X / Ctrl+X)
+                if modifiers.is_primary() && *key == KeyCode::KEY_X {
+                    if self.has_selection() {
+                        ctx.copy_to_clipboard(&self.selected_text());
+                        self.delete_selection();
+                    } else if !self.value.is_empty() {
+                        ctx.copy_to_clipboard(&self.value);
+                        self.value.clear();
+                        self.cursor_pos = 0;
+                    }
+                    self.reset_cursor_blink();
+                    return;
+                }
+
+                // Paste (Cmd+V / Ctrl+V)
+                if modifiers.is_primary() && *key == KeyCode::KEY_V {
                     if let Some(text) = ctx.paste_from_clipboard() {
-                        if self.is_selected {
-                            self.value.clear();
-                            self.is_selected = false;
+                        if self.has_selection() {
+                            self.delete_selection();
                         }
-                        self.value.push_str(&text);
+                        let clean: String = text
+                            .chars()
+                            .filter(|c| !c.is_control() || *c == '\t')
+                            .collect();
+                        self.insert_at_cursor(&clean);
+                        self.reset_cursor_blink();
                     }
                     return;
                 }
 
-                // Handle Backspace
+                // Backspace
                 if *key == KeyCode::BACKSPACE {
-                    if self.is_selected {
-                        self.value.clear();
-                        self.is_selected = false;
+                    if self.has_selection() {
+                        self.delete_selection();
                     } else {
-                        self.value.pop();
+                        self.delete_char_before_cursor();
                     }
+                    self.reset_cursor_blink();
+                    return;
+                }
+
+                // Delete
+                if *key == KeyCode::DELETE {
+                    if self.has_selection() {
+                        self.delete_selection();
+                    } else {
+                        self.delete_char_after_cursor();
+                    }
+                    self.reset_cursor_blink();
+                    return;
+                }
+
+                // Escape
+                if *key == KeyCode::ESCAPE {
+                    self.clear_selection();
+                    self.ime_preedit.clear();
+                    return;
                 }
             }
             _ => {}

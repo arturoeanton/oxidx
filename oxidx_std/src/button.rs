@@ -1,148 +1,423 @@
-//! # Button Component
+//! Button Component
 //!
-//! A simple rectangular button with hover, press, and click handling.
-//! Supports the new styling system.
-//!
-//! This component demonstrates the use of `#[derive(OxidXWidget)]` macro.
+//! A professional button with:
+//! - Hover, press, and disabled states
+//! - Interactive styling with theme support
+//! - Click callbacks
+//! - Keyboard activation (Enter/Space when focused)
+//! - Icon support (optional)
+//! - Loading state with animation
 
 use glam::Vec2;
 use oxidx_core::component::OxidXComponent;
-use oxidx_core::events::OxidXEvent;
-use oxidx_core::primitives::{Rect, TextStyle};
+use oxidx_core::events::{KeyCode, MouseButton, OxidXEvent};
+use oxidx_core::primitives::{Color, Rect, TextStyle};
 use oxidx_core::renderer::Renderer;
 use oxidx_core::style::{ComponentState, InteractiveStyle};
 use oxidx_core::theme::Theme;
 use oxidx_core::OxidXContext;
-use oxidx_derive::OxidXWidget;
+use std::cell::Cell;
 
-/// A simple button component with interactive styles.
-///
-/// # Example using the derive macro-generated builder
-///
-/// ```ignore
-/// let button = Button::new()
-///     .label("Click me")
-///     .style(Theme::dark().primary_button)
-///     .on_click(|| println!("Clicked!"));
-/// ```
-#[derive(OxidXWidget)]
+/// Button variant for quick styling
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ButtonVariant {
+    #[default]
+    Primary,
+    Secondary,
+    Danger,
+    Ghost,
+}
+
+/// A clickable button component with full interaction support.
 pub struct Button {
-    /// Bounding rectangle
-    #[oxidx(default = Rect::default())]
+    // === Layout ===
     bounds: Rect,
-
-    /// Preferred size (used in layout)
-    #[oxidx(prop, default = Vec2::new(100.0, 40.0))]
     preferred_size: Vec2,
 
-    /// Visual style configuration
-    #[oxidx(prop, default = Theme::dark().primary_button)]
-    style: InteractiveStyle,
-
-    /// Label text
-    #[oxidx(prop)]
+    // === Content ===
     label: Option<String>,
+    icon: Option<String>, // Icon character or emoji
 
-    /// Hover state
-    #[oxidx(default = false)]
+    // === Styling ===
+    style: InteractiveStyle,
+    text_style: TextStyle,
+    variant: ButtonVariant,
+
+    // === State ===
+    id: String,
     is_hovered: bool,
-
-    /// Pressed state
-    #[oxidx(default = false)]
     is_pressed: bool,
+    is_disabled: bool,
+    is_focused: bool,
 
-    /// Click callback
-    #[oxidx(default = None)]
+    // === Loading State ===
+    is_loading: bool,
+    loading_rotation: f32,
+
+    // === Callbacks ===
     on_click: Option<Box<dyn Fn() + Send>>,
+
+    // === Animation ===
+    /// Press animation progress (0.0 to 1.0)
+    press_animation: f32,
+    /// Cached center for ripple effect
+    press_origin: Cell<Vec2>,
 }
 
 impl Button {
-    // Note: new(), preferred_size(), style(), and label() are now generated
-    // by the OxidXWidget derive macro!
+    /// Creates a new button with default styling.
+    pub fn new() -> Self {
+        Self {
+            bounds: Rect::default(),
+            preferred_size: Vec2::new(120.0, 48.0),
+            label: None,
+            icon: None,
+            style: Theme::dark().primary_button,
+            text_style: TextStyle::new(16.0).with_color(Color::WHITE),
+            variant: ButtonVariant::Primary,
+            id: String::new(),
+            is_hovered: false,
+            is_pressed: false,
+            is_disabled: false,
+            is_focused: false,
+            is_loading: false,
+            loading_rotation: 0.0,
+            on_click: None,
+            press_animation: 0.0,
+            press_origin: Cell::new(Vec2::ZERO),
+        }
+    }
 
-    /// Creates a new button at a specific position with size (legacy API).
+    // === Builder Methods ===
+
+    /// Creates a button with specific bounds (legacy API).
     pub fn with_bounds(x: f32, y: f32, width: f32, height: f32) -> Self {
-        Self {
-            bounds: Rect::new(x, y, width, height),
-            preferred_size: Vec2::new(width, height),
-            ..Self::new()
-        }
+        let mut btn = Self::new();
+        btn.bounds = Rect::new(x, y, width, height);
+        btn.preferred_size = Vec2::new(width, height);
+        btn
     }
 
-    /// Creates a new button with a label at a specific position (legacy API).
+    /// Creates a button with label at specific bounds (legacy API).
     pub fn with_label(x: f32, y: f32, width: f32, height: f32, label: impl Into<String>) -> Self {
-        Self {
-            bounds: Rect::new(x, y, width, height),
-            preferred_size: Vec2::new(width, height),
-            label: Some(label.into()),
-            ..Self::new()
-        }
+        Self::with_bounds(x, y, width, height).label(label)
     }
 
-    /// Sets the interactive style (mutable reference version).
-    pub fn set_style(&mut self, style: InteractiveStyle) {
-        self.style = style;
-    }
-
-    /// Sets the label text (mutable reference version).
-    pub fn set_label(&mut self, label: impl Into<String>) {
+    /// Sets the button label text.
+    pub fn label(mut self, label: impl Into<String>) -> Self {
         self.label = Some(label.into());
+        self
     }
 
-    /// Helper to set click callback (fluent API).
+    /// Sets an icon (emoji or icon font character).
+    pub fn icon(mut self, icon: impl Into<String>) -> Self {
+        self.icon = Some(icon.into());
+        self
+    }
+
+    /// Sets the preferred size.
+    pub fn preferred_size(mut self, size: Vec2) -> Self {
+        self.preferred_size = size;
+        self
+    }
+
+    /// Sets the width (keeps current height).
+    pub fn width(mut self, width: f32) -> Self {
+        self.preferred_size.x = width;
+        self
+    }
+
+    /// Sets the height (keeps current width).
+    pub fn height(mut self, height: f32) -> Self {
+        self.preferred_size.y = height;
+        self
+    }
+
+    /// Sets the component ID.
+    pub fn with_id(mut self, id: impl Into<String>) -> Self {
+        self.id = id.into();
+        self
+    }
+
+    /// Sets the interactive style.
+    pub fn style(mut self, style: InteractiveStyle) -> Self {
+        self.style = style;
+        self
+    }
+
+    /// Sets the button variant (applies predefined styling).
+    pub fn variant(mut self, variant: ButtonVariant) -> Self {
+        self.variant = variant;
+        self.style = Self::style_for_variant(variant);
+        self
+    }
+
+    /// Sets the disabled state.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.is_disabled = disabled;
+        self
+    }
+
+    /// Sets the loading state.
+    pub fn loading(mut self, loading: bool) -> Self {
+        self.is_loading = loading;
+        self
+    }
+
+    /// Sets the click callback.
     pub fn on_click(mut self, callback: impl Fn() + Send + 'static) -> Self {
         self.on_click = Some(Box::new(callback));
         self
     }
+
+    // === Mutable Setters ===
+
+    /// Sets the label (mutable reference).
+    pub fn set_label(&mut self, label: impl Into<String>) {
+        self.label = Some(label.into());
+    }
+
+    /// Sets the icon (mutable reference).
+    pub fn set_icon(&mut self, icon: impl Into<String>) {
+        self.icon = Some(icon.into());
+    }
+
+    /// Sets disabled state (mutable reference).
+    pub fn set_disabled(&mut self, disabled: bool) {
+        self.is_disabled = disabled;
+    }
+
+    /// Sets loading state (mutable reference).
+    pub fn set_loading(&mut self, loading: bool) {
+        self.is_loading = loading;
+    }
+
+    /// Sets the style (mutable reference).
+    pub fn set_style(&mut self, style: InteractiveStyle) {
+        self.style = style;
+    }
+
+    // === Helper Methods ===
+
+    /// Returns the style for a given variant.
+    fn style_for_variant(variant: ButtonVariant) -> InteractiveStyle {
+        let theme = Theme::dark();
+        match variant {
+            ButtonVariant::Primary => theme.primary_button,
+            ButtonVariant::Secondary => theme.secondary_button,
+            ButtonVariant::Danger => Self::danger_style(),
+            ButtonVariant::Ghost => Self::ghost_style(),
+        }
+    }
+
+    /// Creates a danger button style.
+    fn danger_style() -> InteractiveStyle {
+        use oxidx_core::style::Style;
+
+        let danger_color = Color::new(0.9, 0.2, 0.2, 1.0);
+        let danger_hover = Color::new(1.0, 0.3, 0.3, 1.0);
+        let danger_pressed = Color::new(0.7, 0.15, 0.15, 1.0);
+
+        InteractiveStyle {
+            idle: Style::new()
+                .bg_solid(danger_color)
+                .rounded(4.0)
+                .text_color(Color::WHITE),
+            hover: Style::new()
+                .bg_solid(danger_hover)
+                .rounded(4.0)
+                .text_color(Color::WHITE),
+            pressed: Style::new()
+                .bg_solid(danger_pressed)
+                .rounded(4.0)
+                .text_color(Color::WHITE),
+            disabled: Style::new()
+                .bg_solid(Color::new(0.3, 0.15, 0.15, 1.0))
+                .rounded(4.0)
+                .text_color(Color::new(0.6, 0.4, 0.4, 1.0)),
+        }
+    }
+
+    /// Creates a ghost button style (transparent background).
+    fn ghost_style() -> InteractiveStyle {
+        use oxidx_core::style::Style;
+
+        InteractiveStyle {
+            idle: Style::new()
+                .bg_solid(Color::TRANSPARENT)
+                .rounded(4.0)
+                .text_color(Color::WHITE),
+            hover: Style::new()
+                .bg_solid(Color::new(1.0, 1.0, 1.0, 0.1))
+                .rounded(4.0)
+                .text_color(Color::WHITE),
+            pressed: Style::new()
+                .bg_solid(Color::new(1.0, 1.0, 1.0, 0.2))
+                .rounded(4.0)
+                .text_color(Color::WHITE),
+            disabled: Style::new()
+                .bg_solid(Color::TRANSPARENT)
+                .rounded(4.0)
+                .text_color(Color::new(0.5, 0.5, 0.5, 1.0)),
+        }
+    }
+
+    /// Returns the current component state.
+    fn current_state(&self) -> ComponentState {
+        if self.is_disabled {
+            ComponentState::Disabled
+        } else if self.is_pressed {
+            ComponentState::Pressed
+        } else if self.is_hovered || self.is_focused {
+            ComponentState::Hover
+        } else {
+            ComponentState::Idle
+        }
+    }
+
+    /// Triggers the click action.
+    fn trigger_click(&self) {
+        if !self.is_disabled && !self.is_loading {
+            if let Some(ref callback) = self.on_click {
+                callback();
+            }
+        }
+    }
+
+    /// Draws a loading spinner.
+    fn draw_loading_spinner(&self, renderer: &mut Renderer, center: Vec2, radius: f32) {
+        let segments = 8;
+        let segment_angle = std::f32::consts::TAU / segments as f32;
+
+        for i in 0..segments {
+            let angle = self.loading_rotation + (i as f32 * segment_angle);
+            let alpha = (i as f32 / segments as f32) * 0.8 + 0.2;
+
+            let x = center.x + angle.cos() * radius;
+            let y = center.y + angle.sin() * radius;
+
+            let dot_size = 3.0;
+            renderer.fill_rect(
+                Rect::new(x - dot_size / 2.0, y - dot_size / 2.0, dot_size, dot_size),
+                Color::new(1.0, 1.0, 1.0, alpha),
+            );
+        }
+    }
+}
+
+impl Default for Button {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl OxidXComponent for Button {
-    fn update(&mut self, _delta_time: f32) {
-        // Button doesn't animate yet
+    fn update(&mut self, dt: f32) {
+        // Loading spinner animation
+        if self.is_loading {
+            self.loading_rotation += dt * 5.0; // ~5 rad/s
+            if self.loading_rotation > std::f32::consts::TAU {
+                self.loading_rotation -= std::f32::consts::TAU;
+            }
+        }
+
+        // Press animation (subtle scale effect could be added here)
+        if self.is_pressed {
+            self.press_animation = (self.press_animation + dt * 8.0).min(1.0);
+        } else {
+            self.press_animation = (self.press_animation - dt * 4.0).max(0.0);
+        }
     }
 
     fn layout(&mut self, available: Rect) -> Vec2 {
-        self.bounds.x = available.x;
-        self.bounds.y = available.y;
-        self.bounds.width = self.preferred_size.x.min(available.width);
-        self.bounds.height = self.preferred_size.y.min(available.height);
+        self.bounds = Rect::new(
+            available.x,
+            available.y,
+            self.preferred_size.x.min(available.width),
+            self.preferred_size.y.min(available.height),
+        );
         Vec2::new(self.bounds.width, self.bounds.height)
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        // Determine current state
-        let state = if self.is_pressed {
-            ComponentState::Pressed
-        } else if self.is_hovered {
-            ComponentState::Hover
-        } else {
-            ComponentState::Idle
-        };
-
-        // Resolve style for state
+        let state = self.current_state();
         let current_style = self.style.resolve(state);
 
-        // Draw styled background/border/shadow
+        // 1. Draw background/border/shadow
         renderer.draw_style_rect(self.bounds, current_style);
 
-        // Draw label if exists
-        if let Some(ref label) = self.label {
-            // Simple center text (hacky centering for now)
-            let text_pos = Vec2::new(
-                self.bounds.x + 10.0,
-                self.bounds.y + self.bounds.height / 2.0 - 8.0,
+        // 2. Draw focus ring if focused
+        if self.is_focused && !self.is_disabled {
+            let focus_rect = Rect::new(
+                self.bounds.x - 2.0,
+                self.bounds.y - 2.0,
+                self.bounds.width + 4.0,
+                self.bounds.height + 4.0,
             );
-            renderer.draw_text(
-                label.clone(),
-                text_pos,
-                TextStyle::new(16.0).with_color(current_style.text_color),
-            );
+            renderer.stroke_rect(focus_rect, Color::new(0.4, 0.6, 1.0, 0.8), 2.0);
+        }
+
+        let center = self.bounds.center();
+
+        // 3. Draw loading spinner OR content
+        if self.is_loading {
+            self.draw_loading_spinner(renderer, center, 10.0);
+        } else {
+            // Calculate content layout
+            let has_icon = self.icon.is_some();
+            let has_label = self.label.is_some();
+            let icon_size = self.text_style.font_size;
+            let gap = 8.0;
+
+            // Measure total content width
+            let icon_width = if has_icon { icon_size } else { 0.0 };
+            let label_width = if let Some(ref label) = self.label {
+                renderer.measure_text(label, self.text_style.font_size)
+            } else {
+                0.0
+            };
+            let gap_width = if has_icon && has_label { gap } else { 0.0 };
+            let total_width = icon_width + gap_width + label_width;
+
+            // Start position (centered)
+            let mut x = center.x - total_width / 2.0;
+            let y = center.y - self.text_style.font_size / 2.0;
+
+            // Draw icon
+            if let Some(ref icon) = self.icon {
+                renderer.draw_text(
+                    icon,
+                    Vec2::new(x, y),
+                    TextStyle {
+                        font_size: icon_size,
+                        color: current_style.text_color,
+                        ..self.text_style.clone()
+                    },
+                );
+                x += icon_size + gap;
+            }
+
+            // Draw label
+            if let Some(ref label) = self.label {
+                renderer.draw_text(
+                    label,
+                    Vec2::new(x, y),
+                    TextStyle {
+                        font_size: self.text_style.font_size,
+                        color: current_style.text_color,
+                        ..self.text_style.clone()
+                    },
+                );
+            }
         }
     }
 
-    fn on_event(&mut self, event: &OxidXEvent, _ctx: &mut OxidXContext) -> bool {
-        // Strict Hit-Testing Safety check
-        // Prevents ghost clicks if engine broadcasts
+    fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
+        if self.is_disabled {
+            return false;
+        }
+
+        // Bounds check for mouse events
         match event {
             OxidXEvent::MouseDown { position, .. }
             | OxidXEvent::MouseUp { position, .. }
@@ -164,8 +439,15 @@ impl OxidXComponent for Button {
                 self.is_pressed = false;
                 true
             }
-            OxidXEvent::MouseDown { .. } => {
+            OxidXEvent::MouseDown { position, .. } => {
                 self.is_pressed = true;
+                self.press_origin.set(*position);
+
+                // Request focus
+                if !self.id.is_empty() {
+                    ctx.request_focus(&self.id);
+                }
+                self.is_focused = true;
                 true
             }
             OxidXEvent::MouseUp { .. } => {
@@ -173,17 +455,52 @@ impl OxidXComponent for Button {
                 true
             }
             OxidXEvent::Click { button, .. } => {
-                if matches!(button, oxidx_core::events::MouseButton::Left) {
-                    if let Some(ref callback) = self.on_click {
-                        callback();
-                    }
+                if matches!(button, MouseButton::Left) {
+                    self.trigger_click();
                     true
                 } else {
                     false
                 }
             }
+            OxidXEvent::FocusGained => {
+                self.is_focused = true;
+                true
+            }
+            OxidXEvent::FocusLost => {
+                self.is_focused = false;
+                self.is_pressed = false;
+                true
+            }
             _ => false,
         }
+    }
+
+    fn on_keyboard_input(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) {
+        if !ctx.is_focused(&self.id) || self.is_disabled {
+            return;
+        }
+
+        match event {
+            OxidXEvent::KeyDown { key, .. } => {
+                // Enter or Space activates button
+                if *key == KeyCode::ENTER || *key == KeyCode::SPACE {
+                    self.is_pressed = true;
+                }
+            }
+            OxidXEvent::KeyUp { key, .. } => {
+                if *key == KeyCode::ENTER || *key == KeyCode::SPACE {
+                    if self.is_pressed {
+                        self.is_pressed = false;
+                        self.trigger_click();
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn id(&self) -> &str {
+        &self.id
     }
 
     fn bounds(&self) -> Rect {
@@ -202,6 +519,6 @@ impl OxidXComponent for Button {
     }
 
     fn is_focusable(&self) -> bool {
-        true
+        !self.is_disabled
     }
 }
