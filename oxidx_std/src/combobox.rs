@@ -74,8 +74,8 @@ impl OxidXComponent for ComboBoxDropdown {
     fn render(&self, renderer: &mut Renderer) {
         // Extract theme
         let theme = &renderer.theme;
-        let surface = theme.surface; // Use surface instead of surface_alt for better visibility
-        let surface_hover = theme.surface_hover;
+        // let surface = theme.surface; // Unused
+        // let surface_hover = theme.surface_hover; // Unused
         let border = theme.border;
         let primary = theme.primary;
         let text_color = theme.text;
@@ -87,14 +87,48 @@ impl OxidXComponent for ComboBoxDropdown {
             self.bounds.width,
             self.bounds.height,
         );
-        renderer.fill_rect(shadow_rect, Color::new(0.0, 0.0, 0.0, 0.5));
+        renderer.draw_overlay_rect(shadow_rect, Color::new(0.0, 0.0, 0.0, 0.5));
 
-        // Background
-        renderer.fill_rect(self.bounds, surface);
-        renderer.stroke_rect(self.bounds, border, 1.0);
+        // Background - Force opaque black for overlay
+        renderer.draw_overlay_rect(self.bounds, Color::BLACK);
 
-        // Clip content
-        renderer.push_clip(self.bounds);
+        // Border
+        // draw_overlay_style_rect could handle this but we do it manually for now
+        // Overlay stroke simulation: draw 4 thin rects
+        let bw = 1.0;
+        // Top
+        renderer.draw_overlay_rect(
+            Rect::new(self.bounds.x, self.bounds.y, self.bounds.width, bw),
+            border,
+        );
+        // Bottom
+        renderer.draw_overlay_rect(
+            Rect::new(
+                self.bounds.x,
+                self.bounds.y + self.bounds.height - bw,
+                self.bounds.width,
+                bw,
+            ),
+            border,
+        );
+        // Left
+        renderer.draw_overlay_rect(
+            Rect::new(self.bounds.x, self.bounds.y, bw, self.bounds.height),
+            border,
+        );
+        // Right
+        renderer.draw_overlay_rect(
+            Rect::new(
+                self.bounds.x + self.bounds.width - bw,
+                self.bounds.y,
+                bw,
+                self.bounds.height,
+            ),
+            border,
+        );
+
+        // Clip content (Not supported in Overlay pass yet, removed for now)
+        // renderer.push_clip(self.bounds);
 
         let visible_start = (self.scroll_offset / self.item_height).floor() as usize;
         let visible_count = (self.bounds.height / self.item_height).ceil() as usize;
@@ -107,15 +141,26 @@ impl OxidXComponent for ComboBoxDropdown {
         for i in visible_start..visible_end {
             let item_rect = Rect::new(self.bounds.x, y, self.bounds.width, self.item_height);
 
-            // Highlight
-            if self.hovered_item == Some(i) {
-                renderer.fill_rect(item_rect, surface_hover);
-            } else if current_selection == i {
-                renderer.fill_rect(item_rect, primary.with_alpha(0.2));
+            // Bounds Check (Software Clip)
+            // Just basic check: if item is partially outside, we might want to skip or clamp
+            // For now let's just render what visible_count determined.
+
+            // Highlight Logic
+            let is_selected = current_selection == i;
+            let is_hovered = self.hovered_item == Some(i);
+
+            // Draw selection background (Blue)
+            if is_selected {
+                renderer.draw_overlay_rect(item_rect, primary.with_alpha(0.6));
+            }
+
+            // Draw hover overlay (White sheen)
+            if is_hovered {
+                renderer.draw_overlay_rect(item_rect, Color::WHITE.with_alpha(0.1));
             }
 
             // Text
-            renderer.draw_text_bounded(
+            renderer.draw_overlay_text_bounded(
                 &self.items[i],
                 Vec2::new(item_rect.x + 8.0, item_rect.y + 6.0),
                 item_rect.width - 16.0,
@@ -129,7 +174,9 @@ impl OxidXComponent for ComboBoxDropdown {
             y += self.item_height;
         }
 
-        renderer.pop_clip();
+        // renderer.pop_clip();
+
+        // renderer.pop_clip(); // Not needed for overlay pass
     }
 
     fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {

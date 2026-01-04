@@ -675,13 +675,6 @@ fn render_frame<C: OxidXComponent>(
         .texture
         .create_view(&wgpu::TextureViewDescriptor::default());
 
-    // Create command encoder
-    let mut encoder = ctx
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("OxidX Render Encoder"),
-        });
-
     // Begin frame - clears batched data
     ctx.renderer.begin_frame();
 
@@ -689,19 +682,6 @@ fn render_frame<C: OxidXComponent>(
     component.render(&mut ctx.renderer);
 
     // Render Overlays
-    // We want overlays to ignore the previous clip rect (usually) or at least be on top.
-    // The renderer uses a changing clip rect. We should reset it to full screen for overlays?
-    // The component render might have left a clip rect.
-    // We should assume Renderer provides a way to reset or we just set it.
-    // For now we assume overlays render on top.
-    // Since we are not batched strictly by Z yet (painter's algorithm), drawing last works.
-
-    // NOTE: We need to iterate mutable queue while using mutable renderer.
-    // Since they are disjoint fields in OxidXContext, we can do this by splitting the borrow
-    // OR just iterating. Rust 2021+ captures partial fields.
-    // But `ctx.renderer` and `ctx.overlay_queue` are fields of `ctx`.
-    // `render` needs `&mut Renderer`.
-
     let renderer = &mut ctx.renderer;
     let queue = &mut ctx.overlay_queue;
 
@@ -712,11 +692,10 @@ fn render_frame<C: OxidXComponent>(
         overlay.render(renderer);
     }
 
-    // End frame - flushes all draw calls
-    ctx.renderer.end_frame(&mut encoder, &view, clear_color);
+    // End frame - flushes all draw calls and submits
+    ctx.renderer.end_frame(&view, clear_color);
 
-    // Submit and present
-    ctx.queue.submit(std::iter::once(encoder.finish()));
+    // Present
     output.present();
 
     Ok(())

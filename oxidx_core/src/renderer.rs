@@ -1018,6 +1018,22 @@ impl Renderer {
         });
     }
 
+    /// Draws bounded text on the overlay layer.
+    pub fn draw_overlay_text_bounded(
+        &mut self,
+        text: impl Into<String>,
+        position: Vec2,
+        max_width: f32,
+        style: TextStyle,
+    ) {
+        self.overlay_text_commands.push(TextCommand::Simple {
+            text: text.into(),
+            position,
+            style,
+            bounds_width: Some(max_width),
+        });
+    }
+
     /// Draws a styled rectangle on the overlay layer.
     pub fn draw_overlay_style_rect(&mut self, rect: Rect, style: &Style) {
         // Shadow
@@ -1063,37 +1079,37 @@ impl Renderer {
     /// * `encoder` - Command encoder to record draw calls
     /// * `view` - Texture view to render to
     /// * `clear_color` - Background clear color
-    pub fn end_frame(
-        &mut self,
-        encoder: &mut wgpu::CommandEncoder,
-        view: &wgpu::TextureView,
-        clear_color: Color,
-    ) {
+    pub fn end_frame(&mut self, view: &wgpu::TextureView, clear_color: Color) {
         // Ensure buffers are large enough
         self.ensure_buffer_capacity();
+
+        // --------------------------------------------------------------------
+        // PASS 1: Main Layer
+        // --------------------------------------------------------------------
 
         // Upload main layer vertex data
         if !self.vertices.is_empty() {
             self.queue
                 .write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&self.vertices));
         }
-
-        // Upload main layer index data
         if !self.indices.is_empty() {
             self.queue
                 .write_buffer(&self.index_buffer, 0, bytemuck::cast_slice(&self.indices));
         }
 
-        // Prepare main layer text for rendering
+        // Prepare main layer text
         self.prepare_text();
 
-        // Prepare overlay text for rendering (before render pass to avoid borrow issues)
-        self.prepare_overlay_text();
+        // Create encoder for Main Pass
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("OxidX Main Encoder"),
+            });
 
-        // Begin render pass (main layer + overlay layer in same pass)
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("OxidX Render Pass"),
+                label: Some("OxidX Main Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view,
                     resolve_target: None,
@@ -1112,9 +1128,7 @@ impl Renderer {
                 timestamp_writes: None,
             });
 
-            // =============================================
-            // MAIN PASS (subject to scissor clipping)
-            // =============================================
+            // Draw Main Batches
             if !self.batches.is_empty() {
                 render_pass.set_pipeline(&self.pipeline);
                 render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
@@ -1134,19 +1148,25 @@ impl Renderer {
                 }
             }
 
-            // Render main layer text
+            // Draw Main Text
             let _ = self
                 .text_brush
                 .text_renderer
                 .render(&self.text_brush.text_atlas, &mut render_pass);
+        }
 
-            // =============================================
-            // OVERLAY PASS (no scissor clipping)
-            // =============================================
+        // Submit Main Pass
+        self.queue.submit(std::iter::once(encoder.finish()));
+
+        // --------------------------------------------------------------------
+        // PASS 2: Overlay Layer
+        // --------------------------------------------------------------------
+
+        if !self.overlay_indices.is_empty() || !self.overlay_text_commands.is_empty() {
+            // Upload overlay vertex/index data (Reusing buffers requires new queue write)
+            // Note: Since we submitted the previous commands, resources are "in use" but
+            // WGPU queues handle synchronization. Writing to buffer now will be seen by next submit.
             if !self.overlay_indices.is_empty() {
-                // Upload overlay vertex/index data
-                // Note: We reuse the same buffers for simplicity, overwriting main data
-                // A production engine would use separate buffers or offset
                 self.queue.write_buffer(
                     &self.vertex_buffer,
                     0,
@@ -1157,20 +1177,59 @@ impl Renderer {
                     0,
                     bytemuck::cast_slice(&self.overlay_indices),
                 );
-
-                render_pass.set_pipeline(&self.pipeline);
-                render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-                render_pass
-                    .set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-                render_pass.draw_indexed(0..self.overlay_indices.len() as u32, 0, 0..1);
             }
 
-            // Note: Overlay text was prepared before render pass, just render it
-            let _ = self
-                .text_brush
-                .text_renderer
-                .render(&self.text_brush.text_atlas, &mut render_pass);
+            // Prepare overlay text
+            self.prepare_overlay_text();
+
+            let mut overlay_encoder =
+                self.device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("OxidX Overlay Encoder"),
+                    });
+
+            {
+                let mut render_pass =
+                    overlay_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("OxidX Overlay Pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load, // Load existing content
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: None,
+                        occlusion_query_set: None,
+                        timestamp_writes: None,
+                    });
+
+                // Draw Overlay Geometry
+                if !self.overlay_indices.is_empty() {
+                    render_pass.set_pipeline(&self.pipeline);
+                    render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                    render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+                    render_pass
+                        .set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+
+                    // We assume overlays use White Texture (id 0) for now, or we need batching for overlays too.
+                    // Currently `draw_overlay_rect` assumes solid colors (white texture).
+                    if let Some(bind_group) = self.texture_bind_groups.get(&self.white_texture) {
+                        render_pass.set_bind_group(1, bind_group, &[]);
+                        render_pass.draw_indexed(0..self.overlay_indices.len() as u32, 0, 0..1);
+                    }
+                }
+
+                // Draw Overlay Text
+                let _ = self
+                    .text_brush
+                    .text_renderer
+                    .render(&self.text_brush.text_atlas, &mut render_pass);
+            }
+
+            // Submit Overlay Pass
+            self.queue.submit(std::iter::once(overlay_encoder.finish()));
         }
 
         // Trim the text atlas periodically
