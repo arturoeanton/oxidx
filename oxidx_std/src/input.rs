@@ -374,8 +374,14 @@ impl OxidXComponent for Input {
             renderer.theme.colors.text_main
         };
 
+        // Generate display text - mask password characters
+        let masked_value: String;
         let display_text = if self.value.is_empty() {
             &self.placeholder
+        } else if self.is_password {
+            // Mask all characters with bullet points
+            masked_value = "•".repeat(self.value.chars().count());
+            &masked_value
         } else {
             &self.value
         };

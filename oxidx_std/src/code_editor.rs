@@ -1,15 +1,15 @@
-//! TextArea Component
+//! CodeEditor Component
 //!
-//! A simple multiline text editor for plain text with:
+//! A full-featured code editor with:
+//! - Syntax highlighting (Rust, extensible)
+//! - Line numbers with gutter
+//! - Minimap (VS Code style)
 //! - Multiple line support with scrolling
-//! - Cursor navigation (arrows, Home, End, Page Up/Down)
-//! - Text selection (mouse and keyboard)
+//! - Cursor navigation and text selection
 //! - Word wrap (optional)
 //! - Clipboard support
 //! - IME support
 //! - Undo/Redo
-//!
-//! For syntax highlighting and line numbers, use `CodeEditor` instead.
 
 use glam::Vec2;
 use oxidx_core::component::OxidXComponent;
@@ -22,10 +22,76 @@ use oxidx_core::OxidXContext;
 use std::cell::Cell;
 use winit::window::CursorIcon;
 
-// Re-export for backward compatibility (moved to code_editor)
-pub use crate::code_editor::{SyntaxTheme, TextSpan};
+/// Syntax theme for code highlighting.
+#[derive(Debug, Clone)]
+pub struct SyntaxTheme {
+    /// Keywords (fn, let, pub, struct, impl, use, etc.)
+    pub keyword: Color,
+    /// Strings (text inside quotes)
+    pub string: Color,
+    /// Comments (after //)
+    pub comment: Color,
+    /// Numbers (digits)
+    pub number: Color,
+    /// Normal text
+    pub normal: Color,
+    /// Types (uppercase identifiers like String, Vec, Option)
+    pub type_name: Color,
+    /// Macros (ending with !)
+    pub macro_call: Color,
+    /// Function names
+    pub function: Color,
+    /// Whether syntax highlighting is enabled
+    pub enabled: bool,
+}
 
-/// Rust keywords for syntax highlighting (legacy - use CodeEditor for code)
+impl Default for SyntaxTheme {
+    fn default() -> Self {
+        Self::dark_rust()
+    }
+}
+
+impl SyntaxTheme {
+    /// VS Code Dark / Monokai-style theme for Rust
+    /// Note: syntax highlighting is disabled by default. Use with_syntax_highlighting(true) to enable.
+    pub fn dark_rust() -> Self {
+        Self {
+            keyword: Color::new(0.78, 0.47, 0.82, 1.0),   // Purple
+            string: Color::new(0.8, 0.68, 0.47, 1.0),     // Orange/Yellow
+            comment: Color::new(0.45, 0.55, 0.45, 1.0),   // Green-gray
+            number: Color::new(0.71, 0.84, 0.67, 1.0),    // Light green
+            normal: Color::new(0.85, 0.85, 0.9, 1.0),     // Light gray
+            type_name: Color::new(0.4, 0.75, 0.85, 1.0),  // Cyan
+            macro_call: Color::new(0.4, 0.75, 0.85, 1.0), // Cyan
+            function: Color::new(0.88, 0.88, 0.62, 1.0),  // Yellow
+            enabled: false,                               // Disabled by default for performance
+        }
+    }
+
+    /// No syntax highlighting
+    pub fn none() -> Self {
+        Self {
+            keyword: Color::WHITE,
+            string: Color::WHITE,
+            comment: Color::WHITE,
+            number: Color::WHITE,
+            normal: Color::WHITE,
+            type_name: Color::WHITE,
+            macro_call: Color::WHITE,
+            function: Color::WHITE,
+            enabled: false,
+        }
+    }
+}
+
+/// A text span with its color for syntax highlighting
+#[derive(Debug, Clone)]
+pub struct TextSpan {
+    pub text: String,
+    pub color: Color,
+}
+
+/// Rust keywords for syntax highlighting
 const RUST_KEYWORDS: &[&str] = &[
     "fn", "let", "mut", "pub", "struct", "impl", "use", "mod", "crate", "super", "self", "Self",
     "const", "static", "enum", "trait", "type", "where", "for", "while", "loop", "if", "else",
@@ -48,8 +114,8 @@ impl CursorPosition {
     }
 }
 
-/// A simple multiline text editor for plain text.
-pub struct TextArea {
+/// A full-featured code editor with syntax highlighting, line numbers, and minimap.
+pub struct CodeEditor {
     // === Layout ===
     bounds: Rect,
     layout: LayoutProps,
@@ -143,8 +209,8 @@ enum UndoAction {
     },
 }
 
-impl TextArea {
-    /// Creates a new empty TextArea.
+impl CodeEditor {
+    /// Creates a new empty CodeEditor.
     pub fn new() -> Self {
         let border_color = Color::new(0.3, 0.3, 0.35, 1.0);
         let focus_color = Color::new(0.2, 0.5, 0.9, 1.0);
@@ -1120,13 +1186,13 @@ impl TextArea {
     }
 }
 
-impl Default for TextArea {
+impl Default for CodeEditor {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl OxidXComponent for TextArea {
+impl OxidXComponent for CodeEditor {
     fn update(&mut self, dt: f32) {
         // Cursor blinking
         if self.is_focused && !self.has_selection() {
