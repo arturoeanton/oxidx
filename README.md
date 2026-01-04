@@ -13,7 +13,7 @@ OxidX is a modern GUI framework for Rust designed for high performance and devel
 - **Runtime Capabilities**:
   - **Scissor Clipping**: Full support for clipping logic (e.g., ScrollViews).
   - **OS Integration**: Native Clipboard support (Copy/Paste) and Cursor management.
-  - **Focus Management**: Centralized event routing for keyboard focus and mouse interactions.
+  - **Focus Management**: Centralized Tab navigation and keyboard focus routing with event-based notifications.
 - **Developer Experience (DX)**:
   - **Procedural Macros**: `#[derive(OxidXWidget)]` removes 90% of boilerplate.
   - **Hot-Reload**: Watch mode instantly recompiles layout changes.
@@ -21,11 +21,13 @@ OxidX is a modern GUI framework for Rust designed for high performance and devel
 
 ## 📦 Project Structure
 
-- **`oxidx_core`**: The engine heart. Render Loop, `OxidXContext`, `Renderer` (w/ Clipping), Events, and base Primitives.
-- **`oxidx_std`**: The standard library. Widgets (`Button`, `Input`, `Label`) and Layout Containers.
-- **`oxidx_derive`**: Procedural macros for generating builder patterns and boilerplate.
-- **`oxidx_codegen`**: Code generation logic for converting JSON layouts to Rust.
-- **`oxidx_cli`**: The command-line toolchain (`generate`, `schema`, `watch`).
+| Crate | Description |
+|-------|-------------|
+| **`oxidx_core`** | The engine heart: Render Loop, `OxidXContext`, `Renderer`, Events, Primitives |
+| **`oxidx_std`** | Standard library: Widgets (`Button`, `Input`, `Label`, `TextArea`) and Containers |
+| **`oxidx_derive`** | Procedural macros for builder patterns and boilerplate |
+| **`oxidx_codegen`** | Code generation for converting JSON layouts to Rust |
+| **`oxidx_cli`** | Command-line toolchain (`generate`, `schema`, `watch`) |
 
 ## 🛠️ The OxidX Toolchain
 
@@ -56,37 +58,83 @@ oxidx generate -i login.json -o src/generated_login.rs
 
 OxidX comes with a polished standard library:
 
-- **Containers**: `VStack`, `HStack`, `ZStack` (with Padding/Gap/Alignment support)
-- **Input**: Complete text input with **Cursors**, **Selection**, **Clipboard (Ctrl+C/V)**, and Focus visuals.
-- **Button**: Interactive buttons with state-based styling and fluent builder API.
-- **Label**: Typography support with configurable size, weight, and color.
+| Component | Description |
+|-----------|-------------|
+| **VStack / HStack / ZStack** | Layout containers with Padding, Gap, and Alignment |
+| **Button** | Interactive buttons with state-based styling, variants, and click callbacks |
+| **Input** | Single-line text input with cursor, selection, clipboard, and IME support |
+| **TextArea** | Multi-line text editor with line numbers, word wrap, and undo/redo |
+| **Label** | Typography with configurable size, alignment, overflow, and text selection |
 
-## 👩‍💻 Example Code
+## 👩‍💻 Quick Start
 
 ```rust
 use oxidx_std::prelude::*;
 
 fn main() {
+    let button = Button::new()
+        .label("Click Me!")
+        .with_id("my_button")
+        .on_click(|| println!("Hello, OxidX!"));
+    
+    run(button);
+}
+```
+
+## 📚 Documentation
+
+- **[API Reference (English)](docs/DOC_API.md)** — Complete public API documentation
+- **[API Reference (Español)](docs/DOC_API.es.md)** — Documentación completa en español
+
+## 🎨 Example: Login Form
+
+```rust
+use oxidx_std::prelude::*;
+use std::sync::{Arc, Mutex};
+
+fn main() {
     let theme = Theme::dark();
     
-    // Create a vertical stack
-    let mut vstack = VStack::new();
+    let username = Arc::new(Mutex::new(String::new()));
+    let password = Arc::new(Mutex::new(String::new()));
+    
+    let mut vstack = VStack::with_spacing(Spacing::new(20.0, 12.0));
     vstack.set_alignment(StackAlignment::Center);
     
-    // Add a label
+    // Title
     vstack.add_child(Box::new(
-        Label::new("Hello OxidX!")
-            .with_size(32.0)
+        Label::new("Login")
+            .with_style(LabelStyle::Heading)
             .with_color(Color::WHITE)
     ));
-
-    // Add a button using the Fluent API (Powered by Macros)
-    let btn = Button::new()
-        .preferred_size(Vec2::new(120.0, 40.0))
-        .label("Click Me")
-        .style(theme.primary_button);
     
-    vstack.add_child(Box::new(btn));
+    // Username input
+    let u = username.clone();
+    vstack.add_child(Box::new(
+        Input::new("Username")
+            .with_id("username")
+            .with_on_change(move |v| *u.lock().unwrap() = v.to_string())
+            .with_focus_order(1)
+    ));
+    
+    // Password input  
+    let p = password.clone();
+    vstack.add_child(Box::new(
+        Input::new("Password")
+            .with_id("password")
+            .with_on_change(move |v| *p.lock().unwrap() = v.to_string())
+            .with_focus_order(2)
+    ));
+    
+    // Submit button
+    vstack.add_child(Box::new(
+        Button::new()
+            .label("Sign In")
+            .variant(ButtonVariant::Primary)
+            .with_id("submit")
+            .with_focus_order(3)
+            .on_click(|| println!("Logging in..."))
+    ));
 
     run(vstack);
 }
@@ -96,10 +144,16 @@ fn main() {
 
 - [x] Core WGPU Renderer
 - [x] Basic Event Loop
-- [x] Standard Widget Library (Input, Button, Label)
-- [x] Focus Management System
+- [x] Standard Widget Library (Input, Button, Label, TextArea)
+- [x] Focus Management System with Tab Navigation
 - [x] **Procedural Macros** (`oxidx_derive`)
 - [x] **CLI Toolchain** (CodeGen, Schema, Watch)
-- [x] **Runtime Capabilities** (Clipping, Clipboard, Cursors)
-- [ ] Text Layout & Shaping (Cosmic Text)
+- [x] **Runtime Capabilities** (Clipping, Clipboard, Cursors, IME)
+- [x] Text Layout & Shaping (Cosmic Text)
 - [ ] Asset Loading (Images/Fonts)
+- [ ] Theming System Expansion
+- [ ] Accessibility (a11y)
+
+## 📄 License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.

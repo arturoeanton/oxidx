@@ -201,6 +201,9 @@ pub fn run_with_config<C: OxidXComponent + 'static>(mut component: C, config: Ap
                     // Process window events and dispatch UI events
                     process_window_event(&event, &mut component, &mut input, &mut context);
 
+                    // Process pending focus changes and dispatch FocusLost/FocusGained
+                    process_focus_changes(&mut component, &mut context);
+
                     match event {
                         WindowEvent::CloseRequested => {
                             log::info!("Close requested, exiting...");
@@ -234,14 +237,17 @@ pub fn run_with_config<C: OxidXComponent + 'static>(mut component: C, config: Ap
                             // Step 3: Dispatch Tick event to let components register as focusable
                             component.on_event(&OxidXEvent::Tick, &mut context);
 
-                            // Step 4: Update (animations/game logic)
+                            // Step 4: Process any focus changes from Tick (unlikely but possible)
+                            process_focus_changes(&mut component, &mut context);
+
+                            // Step 5: Update (animations/game logic)
                             component.update(delta_time);
 
-                            // Step 5: Layout pass
+                            // Step 6: Layout pass
                             let available = Rect::new(0.0, 0.0, window_size.x, window_size.y);
                             component.layout(available);
 
-                            // Step 4: Render
+                            // Step 7: Render
                             match render_frame(&mut context, &component, clear_color) {
                                 Ok(_) => {}
                                 Err(wgpu::SurfaceError::Lost) => {
@@ -492,4 +498,27 @@ fn render_frame<C: OxidXComponent>(
     output.present();
 
     Ok(())
+}
+
+/// Processes pending focus changes and dispatches FocusLost/FocusGained events.
+///
+/// This function ensures that focus is a true singleton:
+/// - When focus changes, the OLD component receives FocusLost
+/// - Then the NEW component receives FocusGained
+///
+/// The events include the target ID so components can check if they are the target.
+/// This should be called after any event processing that might change focus.
+fn process_focus_changes<C: OxidXComponent>(component: &mut C, ctx: &mut OxidXContext) {
+    // Take any pending focus change
+    if let Some((old_focus, new_focus)) = ctx.focus.take_pending_focus_change() {
+        // First, send FocusLost to the old focused component (if any)
+        if let Some(old_id) = old_focus {
+            component.on_event(&OxidXEvent::FocusLost { id: old_id }, ctx);
+        }
+
+        // Then, send FocusGained to the new focused component (if any)
+        if let Some(new_id) = new_focus {
+            component.on_event(&OxidXEvent::FocusGained { id: new_id }, ctx);
+        }
+    }
 }

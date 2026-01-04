@@ -128,11 +128,13 @@ pub enum OxidXEvent {
     /// Mouse moved while over this component.
     MouseMove { position: Vec2, delta: Vec2 },
 
-    /// Component gained focus.
-    FocusGained,
+    /// Component gained focus. Contains the ID of the focused component.
+    /// Components should check if the ID matches their own before responding.
+    FocusGained { id: String },
 
-    /// Component lost focus.
-    FocusLost,
+    /// Component lost focus. Contains the ID of the component that lost focus.
+    /// Components should check if the ID matches their own before responding.
+    FocusLost { id: String },
 
     /// Key was pressed while component has focus.
     KeyDown { key: KeyCode, modifiers: Modifiers },
@@ -190,6 +192,9 @@ impl OxidXEvent {
 
     /// Returns true if this is a focus-related event.
     pub fn is_focus_event(&self) -> bool {
-        matches!(self, OxidXEvent::FocusGained | OxidXEvent::FocusLost)
+        matches!(
+            self,
+            OxidXEvent::FocusGained { .. } | OxidXEvent::FocusLost { .. }
+        )
     }
 }

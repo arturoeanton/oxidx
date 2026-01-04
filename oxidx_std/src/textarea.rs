@@ -1112,6 +1112,11 @@ impl OxidXComponent for TextArea {
     }
 
     fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
+        // Sync focus state from the singleton - engine is the source of truth
+        if !self.id.is_empty() {
+            self.is_focused = ctx.is_focused(&self.id);
+        }
+
         match event {
             OxidXEvent::MouseDown { position, .. }
             | OxidXEvent::MouseUp { position, .. }
@@ -1134,13 +1139,13 @@ impl OxidXComponent for TextArea {
                 ctx.set_cursor_icon(CursorIcon::Default);
                 true
             }
-            OxidXEvent::FocusGained => {
-                self.is_focused = true;
+            // FocusGained: reset cursor blink when we gain focus
+            OxidXEvent::FocusGained { id } if id == &self.id => {
                 self.reset_cursor_blink();
                 true
             }
-            OxidXEvent::FocusLost => {
-                self.is_focused = false;
+            // FocusLost: cleanup when we lose focus
+            OxidXEvent::FocusLost { id } if id == &self.id => {
                 self.is_selecting = false;
                 self.ime_preedit.clear();
                 true
@@ -1153,7 +1158,6 @@ impl OxidXComponent for TextArea {
                 if !self.id.is_empty() {
                     ctx.request_focus(&self.id);
                 }
-                self.is_focused = true;
                 self.is_selecting = true;
 
                 // Calculate cursor position from click

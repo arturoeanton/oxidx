@@ -503,6 +503,11 @@ impl OxidXComponent for Label {
             return false;
         }
 
+        // Sync focus state from the singleton - engine is the source of truth
+        if !self.id.is_empty() {
+            self.is_focused = ctx.is_focused(&self.id);
+        }
+
         match event {
             OxidXEvent::MouseDown { position, .. } => {
                 if !self.bounds.contains(*position) {
@@ -512,7 +517,6 @@ impl OxidXComponent for Label {
                 if !self.id.is_empty() {
                     ctx.request_focus(&self.id);
                 }
-                self.is_focused = true;
                 self.is_selecting = true;
 
                 // Approximate position (refined in render)
@@ -550,12 +554,8 @@ impl OxidXComponent for Label {
                 }
                 true
             }
-            OxidXEvent::FocusGained => {
-                self.is_focused = true;
-                true
-            }
-            OxidXEvent::FocusLost => {
-                self.is_focused = false;
+            // FocusLost: cleanup when we lose focus
+            OxidXEvent::FocusLost { id } if id == &self.id => {
                 self.clear_selection();
                 true
             }

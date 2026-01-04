@@ -7,15 +7,13 @@ pub mod containers;
 pub mod input;
 pub mod label;
 pub mod prelude;
-pub mod textarea; // <--- ¡AGREGA ESTA LÍNEA!
-
+pub mod textarea;
 // Re-export components
 pub use button::Button;
 pub use containers::{HStack, VStack, ZStack};
 pub use input::Input;
 pub use label::Label;
-pub use textarea::TextArea; // <--- Y esta para que sea fácil de usar
-
+pub use textarea::TextArea;
 // Re-export derive macro
 pub use oxidx_derive::OxidXWidget;
 

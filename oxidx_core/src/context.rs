@@ -50,9 +50,16 @@ pub struct OxidXContext {
 }
 
 /// Manages focus state for components.
+///
+/// Focus is a SINGLETON - only one component can be focused at a time.
+/// When focus changes, the engine will dispatch FocusLost to the old
+/// component and FocusGained to the new one.
 #[derive(Debug, Clone, Default)]
 pub struct FocusManager {
+    /// Current focused component ID (singleton - only one at a time)
     focused_id: Option<String>,
+    /// Pending focus request (will be processed by engine)
+    pending_focus: Option<Option<String>>, // Some(Some(id)) = focus, Some(None) = blur
     /// Registry mapping focus_order -> component ID (BTreeMap keeps keys sorted)
     focus_registry: std::collections::BTreeMap<usize, String>,
 }
@@ -61,6 +68,7 @@ impl FocusManager {
     pub fn new() -> Self {
         Self {
             focused_id: None,
+            pending_focus: None,
             focus_registry: std::collections::BTreeMap::new(),
         }
     }
@@ -79,12 +87,40 @@ impl FocusManager {
         self.focus_registry.clear();
     }
 
+    /// Requests focus for a component. This queues a pending focus change
+    /// that will be processed by the engine, which will dispatch the
+    /// appropriate FocusLost/FocusGained events.
     pub fn request(&mut self, id: impl Into<String>) {
-        self.focused_id = Some(id.into());
+        let new_id = id.into();
+        // Only request if different from current
+        if self.focused_id.as_ref() != Some(&new_id) {
+            self.pending_focus = Some(Some(new_id));
+        }
     }
 
+    /// Requests blur (remove focus). Queues a pending focus change.
     pub fn blur(&mut self) {
-        self.focused_id = None;
+        if self.focused_id.is_some() {
+            self.pending_focus = Some(None);
+        }
+    }
+
+    /// Checks if there's a pending focus change.
+    pub fn has_pending_focus(&self) -> bool {
+        self.pending_focus.is_some()
+    }
+
+    /// Takes the pending focus change and returns (old_focus_id, new_focus_id).
+    /// Returns None if there's no pending change.
+    /// This should be called by the engine to process focus transitions.
+    pub fn take_pending_focus_change(&mut self) -> Option<(Option<String>, Option<String>)> {
+        if let Some(new_focus) = self.pending_focus.take() {
+            let old_focus = self.focused_id.take();
+            self.focused_id = new_focus.clone();
+            Some((old_focus, new_focus))
+        } else {
+            None
+        }
     }
 
     pub fn is_focused(&self, id: &str) -> bool {
@@ -97,6 +133,7 @@ impl FocusManager {
 
     /// Cycles focus to next/previous component based on focus_order.
     /// If reverse is true, goes to previous; otherwise goes to next.
+    /// This queues a pending focus change.
     pub fn cycle_focus(&mut self, reverse: bool) {
         if self.focus_registry.is_empty() {
             return;
@@ -125,7 +162,8 @@ impl FocusManager {
         };
 
         if let Some((_, next_id)) = entries.get(next_idx) {
-            self.focused_id = Some((*next_id).clone());
+            // Queue the focus change instead of applying directly
+            self.pending_focus = Some(Some((*next_id).clone()));
         }
     }
 

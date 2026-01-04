@@ -487,6 +487,8 @@ impl OxidXComponent for Input {
         // Register as focusable for Tab navigation (every event ensures we're in registry)
         if !self.id.is_empty() {
             ctx.register_focusable(&self.id, self.focus_order);
+            // Sync focus state from the singleton - engine is the source of truth
+            self.is_focused = ctx.is_focused(&self.id);
         }
 
         // Strict bounds check for mouse events
@@ -512,13 +514,13 @@ impl OxidXComponent for Input {
                 ctx.set_cursor_icon(CursorIcon::Default);
                 true
             }
-            OxidXEvent::FocusGained => {
-                self.is_focused = true;
+            // FocusGained: reset cursor blink when we gain focus
+            OxidXEvent::FocusGained { id } if id == &self.id => {
                 self.reset_cursor_blink();
                 true
             }
-            OxidXEvent::FocusLost => {
-                self.is_focused = false;
+            // FocusLost: cleanup when we lose focus
+            OxidXEvent::FocusLost { id } if id == &self.id => {
                 self.clear_selection();
                 self.is_selecting = false;
                 self.ime_preedit.clear();
@@ -530,11 +532,11 @@ impl OxidXComponent for Input {
                 modifiers,
                 ..
             } => {
-                // Request focus on click
+                // Request focus on click - focus will be set via FocusGained event
                 if !self.id.is_empty() {
                     ctx.request_focus(&self.id);
                 }
-                self.is_focused = true;
+                // Note: is_focused will be set by FocusGained event from engine
                 self.is_selecting = true;
 
                 // Approximate cursor position (will be refined)

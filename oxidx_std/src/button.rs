@@ -427,6 +427,8 @@ impl OxidXComponent for Button {
         // Register as focusable for Tab navigation
         if !self.id.is_empty() {
             ctx.register_focusable(&self.id, self.focus_order);
+            // Sync focus state from the singleton - engine is the source of truth
+            self.is_focused = ctx.is_focused(&self.id);
         }
 
         if self.is_disabled {
@@ -459,11 +461,10 @@ impl OxidXComponent for Button {
                 self.is_pressed = true;
                 self.press_origin.set(*position);
 
-                // Request focus
+                // Request focus - engine will update FocusManager
                 if !self.id.is_empty() {
                     ctx.request_focus(&self.id);
                 }
-                self.is_focused = true;
                 true
             }
             OxidXEvent::MouseUp { .. } => {
@@ -478,12 +479,8 @@ impl OxidXComponent for Button {
                     false
                 }
             }
-            OxidXEvent::FocusGained => {
-                self.is_focused = true;
-                true
-            }
-            OxidXEvent::FocusLost => {
-                self.is_focused = false;
+            // FocusGained/FocusLost: reset pressed state when losing focus
+            OxidXEvent::FocusLost { id } if id == &self.id => {
                 self.is_pressed = false;
                 true
             }
