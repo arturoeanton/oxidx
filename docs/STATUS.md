@@ -28,6 +28,7 @@ This document tracks the current stability and implementation status of the Oxid
 | `GroupBox` | 🟢 Stable | Collapsible, titled container. |
 | `VStack/HStack` | 🟢 Stable | Flex layout, gap, alignment. |
 | `ZStack` | 🟢 Stable | Z-index layering. |
+| `Image` | 🟢 Stable | Texture loading, caching, and content modes. |
 
 ## Tooling
 
@@ -39,7 +40,7 @@ This document tracks the current stability and implementation status of the Oxid
 
 ## Roadmap / In Progress
 
-- [ ] **Asset Management**: Unified system for loading images, fonts, and SVGs (partially implemented in `AssetLoader`).
+- [x] **Asset Management**: Basic image loading via `Image` component and internal texture caching.
 - [ ] **Animation System**: Tweening and keyframe animations for properties.
 - [ ] **Accessibility (A11y)**: Screen reader support integration.
 - [ ] **Data Binding**: Reactive data binding patterns (currently using immediate mode-like callbacks).

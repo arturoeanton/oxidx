@@ -12,6 +12,7 @@
 //!
 //! This approach minimizes GPU state changes and buffer uploads.
 
+use crate::assets::LoadedImage;
 use crate::primitives::{Color, Rect, TextStyle};
 use crate::style::{Background, Style};
 use crate::theme::Theme;
@@ -20,8 +21,18 @@ use glyphon::cosmic_text::{
     Attrs, AttrsList, Buffer, Family, FontSystem, Metrics, Shaping, SwashCache,
 };
 use glyphon::{Resolution, TextArea, TextBounds, TextRenderer as GlyphonTextRenderer};
+use std::collections::HashMap;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
+
+pub type TextureId = u32;
+
+#[derive(Debug, Clone, Copy)]
+struct DrawBatch {
+    texture_id: TextureId,
+    index_start: u32,
+    index_count: u32,
+}
 
 /// Vertex structure for the batched renderer.
 /// Each vertex has position (pixels), color (RGBA), and UV coordinates.
@@ -140,6 +151,15 @@ pub struct Renderer {
     overlay_indices: Vec<u32>,
     overlay_text_commands: Vec<TextCommand>,
 
+    // Batches
+    batches: Vec<DrawBatch>,
+    texture_bind_groups: HashMap<TextureId, wgpu::BindGroup>,
+    // Cache of loaded assets (path -> texture_id)
+    assets: HashMap<String, TextureId>,
+    white_texture: TextureId,
+    next_texture_id: TextureId,
+    texture_layout: wgpu::BindGroupLayout,
+
     // Screen size for projection
     screen_width: f32,
     screen_height: f32,
@@ -252,6 +272,7 @@ impl Renderer {
         });
 
         // Create bind group layout and bind group
+        // Create bind group layout and bind group (Uniforms)
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Uniform Bind Group Layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -275,10 +296,91 @@ impl Renderer {
             }],
         });
 
+        // Create texture bind group layout (Group 1)
+        let texture_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Texture Bind Group Layout"),
+            entries: &[
+                // Texture
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    },
+                    count: None,
+                },
+                // Sampler
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+
+        // Create default white texture for non-textured rendering
+        let white_size = wgpu::Extent3d {
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+        };
+        let white_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("White Texture"),
+            size: white_size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &white_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &[255, 255, 255, 255],
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(4),
+                rows_per_image: None,
+            },
+            white_size,
+        );
+        let white_view = white_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let white_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        let white_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("White Texture Bind Group"),
+            layout: &texture_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&white_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&white_sampler),
+                },
+            ],
+        });
+
+        let mut texture_bind_groups = HashMap::new();
+        let white_id = 0;
+        texture_bind_groups.insert(white_id, white_bind_group);
+
         // Create render pipeline
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[&bind_group_layout],
+            bind_group_layouts: &[&bind_group_layout, &texture_layout],
             push_constant_ranges: &[],
         });
 
@@ -350,6 +452,14 @@ impl Renderer {
             overlay_vertices: Vec::new(),
             overlay_indices: Vec::new(),
             overlay_text_commands: Vec::new(),
+
+            batches: Vec::new(),
+            texture_bind_groups,
+            assets: HashMap::new(),
+            white_texture: white_id,
+            next_texture_id: 1,
+            texture_layout,
+
             screen_width: width as f32,
             screen_height: height as f32,
             clip_stack: ClipStack::new(),
@@ -406,7 +516,10 @@ impl Renderer {
         self.overlay_vertices.clear();
         self.overlay_indices.clear();
         self.overlay_text_commands.clear();
+        self.overlay_indices.clear();
+        self.overlay_text_commands.clear();
         self.clip_stack.clear();
+        self.batches.clear();
     }
 
     /// Pushes a clip rectangle onto the clipping stack.
@@ -436,12 +549,151 @@ impl Renderer {
         self.clip_stack.current()
     }
 
+    /// Switches rendering batch if necessary.
+    fn ensure_batch(&mut self, texture_id: TextureId) {
+        if let Some(current) = self.batches.last() {
+            if current.texture_id == texture_id {
+                return;
+            }
+        }
+
+        // Start new batch
+        self.batches.push(DrawBatch {
+            texture_id,
+            index_start: self.indices.len() as u32,
+            index_count: 0,
+        });
+    }
+
+    /// Creates a texture from an image.
+    pub fn create_texture(&mut self, image: &LoadedImage, label: Option<&str>) -> TextureId {
+        let size = wgpu::Extent3d {
+            width: image.width,
+            height: image.height,
+            depth_or_array_layers: 1,
+        };
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label,
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+
+        self.queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &image.data,
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * image.width),
+                rows_per_image: None,
+            },
+            size,
+        );
+
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Texture Bind Group"),
+            layout: &self.texture_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
+
+        let id = self.next_texture_id;
+        self.next_texture_id += 1;
+        self.texture_bind_groups.insert(id, bind_group);
+        id
+    }
+
+    /// Loads an image from disk and creates a GPU texture.
+    /// Returns the cached TextureId if already loaded.
+    pub fn load_image(&mut self, path: &str) -> Result<TextureId, String> {
+        if let Some(&id) = self.assets.get(path) {
+            return Ok(id);
+        }
+
+        let img = image::open(std::path::Path::new(path)).map_err(|e| e.to_string())?;
+        let rgba = img.to_rgba8();
+        let (width, height) = rgba.dimensions();
+        let loaded_image = LoadedImage {
+            width,
+            height,
+            data: rgba.into_raw(),
+        };
+
+        let id = self.create_texture(&loaded_image, Some(path));
+        self.assets.insert(path.to_string(), id);
+        Ok(id)
+    }
+
+    /// Draws a textured rectangle (Image).
+    pub fn draw_image(&mut self, rect: Rect, texture_id: TextureId) {
+        self.ensure_batch(texture_id);
+
+        let base_index = self.vertices.len() as u32;
+
+        self.vertices.push(Vertex {
+            position: [rect.x, rect.y],
+            color: [1.0, 1.0, 1.0, 1.0],
+            uv: [0.0, 0.0],
+        });
+        self.vertices.push(Vertex {
+            position: [rect.x + rect.width, rect.y],
+            color: [1.0, 1.0, 1.0, 1.0],
+            uv: [1.0, 0.0],
+        });
+        self.vertices.push(Vertex {
+            position: [rect.x + rect.width, rect.y + rect.height],
+            color: [1.0, 1.0, 1.0, 1.0],
+            uv: [1.0, 1.0],
+        });
+        self.vertices.push(Vertex {
+            position: [rect.x, rect.y + rect.height],
+            color: [1.0, 1.0, 1.0, 1.0],
+            uv: [0.0, 1.0],
+        });
+
+        self.indices.push(base_index);
+        self.indices.push(base_index + 1);
+        self.indices.push(base_index + 2);
+        self.indices.push(base_index);
+        self.indices.push(base_index + 2);
+        self.indices.push(base_index + 3);
+
+        if let Some(batch) = self.batches.last_mut() {
+            batch.index_count += 6;
+        }
+    }
+
     /// Draws a filled rectangle.
     ///
     /// # Arguments
     /// * `rect` - Rectangle bounds in pixels
     /// * `color` - Fill color
     pub fn fill_rect(&mut self, rect: Rect, color: Color) {
+        self.ensure_batch(self.white_texture);
         let base_index = self.vertices.len() as u32;
 
         // Four corners of the rectangle
@@ -463,6 +715,10 @@ impl Renderer {
         self.indices.push(base_index);
         self.indices.push(base_index + 2);
         self.indices.push(base_index + 3);
+
+        if let Some(batch) = self.batches.last_mut() {
+            batch.index_count += 6;
+        }
     }
 
     /// Draws a stroked (outlined) rectangle.
@@ -518,6 +774,7 @@ impl Renderer {
 
     /// Draws a line between two points.
     pub fn draw_line(&mut self, start: Vec2, end: Vec2, color: Color, width: f32) {
+        self.ensure_batch(self.white_texture);
         let diff = end - start;
         let len = diff.length();
         if len < 0.001 {
@@ -542,6 +799,10 @@ impl Renderer {
         self.indices.push(base_index);
         self.indices.push(base_index + 2);
         self.indices.push(base_index + 3);
+
+        if let Some(batch) = self.batches.last_mut() {
+            batch.index_count += 6;
+        }
     }
 
     /// Draws a rounded rectangle.
@@ -848,13 +1109,23 @@ impl Renderer {
             // =============================================
             // MAIN PASS (subject to scissor clipping)
             // =============================================
-            if !self.indices.is_empty() {
+            if !self.batches.is_empty() {
                 render_pass.set_pipeline(&self.pipeline);
                 render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                 render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
                 render_pass
                     .set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-                render_pass.draw_indexed(0..self.indices.len() as u32, 0, 0..1);
+
+                for batch in &self.batches {
+                    if let Some(bind_group) = self.texture_bind_groups.get(&batch.texture_id) {
+                        render_pass.set_bind_group(1, bind_group, &[]);
+                        render_pass.draw_indexed(
+                            batch.index_start..(batch.index_start + batch.index_count),
+                            0,
+                            0..1,
+                        );
+                    }
+                }
             }
 
             // Render main layer text

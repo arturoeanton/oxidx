@@ -1,5 +1,5 @@
 // OxidX Batched Shader - WGSL
-// Supports orthographic projection and UV coordinates for future texture support.
+// Supports orthographic projection and UV coordinates for texture support.
 
 // Uniform buffer containing the projection matrix.
 // This transforms pixel coordinates to clip space.
@@ -9,6 +9,12 @@ struct Uniforms {
 
 @group(0) @binding(0)
 var<uniform> uniforms: Uniforms;
+
+// Texture bind group (Group 1)
+@group(1) @binding(0)
+var t_diffuse: texture_2d<f32>;
+@group(1) @binding(1)
+var s_diffuse: sampler;
 
 // Vertex shader input - matches our Vertex struct in Rust
 struct VertexInput {
@@ -37,9 +43,8 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 }
 
 // Fragment shader entry point
-// For now, just outputs the interpolated color.
-// Future: sample from texture using UV coordinates.
+// Multiplies the vertex color with the texture sample.
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return in.color;
+    return textureSample(t_diffuse, s_diffuse, in.uv) * in.color;
 }

@@ -2910,6 +2910,7 @@ name = "showcase"
 version = "0.1.0"
 dependencies = [
  "env_logger",
+ "image",
  "log",
  "oxidx_core",
  "oxidx_std",

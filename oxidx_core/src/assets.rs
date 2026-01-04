@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
+use crate::renderer::{Renderer, TextureId};
 use rayon::ThreadPool;
 
 /// Result of an async image load operation.
@@ -161,6 +162,52 @@ impl AssetLoader {
 }
 
 impl Default for AssetLoader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Asset Manager for synchronous loading and caching of textures.
+pub struct AssetManager {
+    textures: HashMap<String, TextureId>,
+}
+
+impl AssetManager {
+    pub fn new() -> Self {
+        Self {
+            textures: HashMap::new(),
+        }
+    }
+
+    /// Loads an image from disk and creates a GPU texture.
+    /// Returns the cached TextureId if already loaded.
+    pub fn load_image(
+        &mut self,
+        renderer: &mut Renderer,
+        path: &str,
+    ) -> Result<TextureId, AssetError> {
+        if let Some(&id) = self.textures.get(path) {
+            return Ok(id);
+        }
+
+        let img = image::open(Path::new(path)).map_err(|e| AssetError::IoError(e.to_string()))?;
+
+        let rgba = img.to_rgba8();
+        let (width, height) = rgba.dimensions();
+
+        let loaded = LoadedImage {
+            width,
+            height,
+            data: rgba.into_raw(),
+        };
+
+        let id = renderer.create_texture(&loaded, Some(path));
+        self.textures.insert(path.to_string(), id);
+        Ok(id)
+    }
+}
+
+impl Default for AssetManager {
     fn default() -> Self {
         Self::new()
     }

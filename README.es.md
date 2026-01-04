@@ -74,6 +74,7 @@ OxidX viene con una librería estándar pulida:
 | **GroupBox** | Contenedor colapsable con borde y título |
 | **ListBox** | Lista desplazable con selección simple/múltiple y virtualización |
 | **Grid** | Grilla de datos de alto rendimiento con ordenamiento y edición |
+| **Image** | Visualización de imágenes desde archivos con modos de escala (Fit, Fill, Stretch) |
 
 ## 👩‍💻 Inicio Rápido
 
@@ -155,13 +156,14 @@ fn main() {
 
 - [x] Renderizador WGPU Core
 - [x] Bucle de Eventos Básico
-- [x] Librería de Widgets Estándar (Input, Button, Label, TextArea)
+- [x] Librería de Widgets Estándar (Input, Button, Grids, Lists, etc.)
 - [x] Sistema de Gestión de Focus con Navegación Tab
 - [x] **Macros Procedurales** (`oxidx_derive`)
 - [x] **Toolchain CLI** (CodeGen, Schema, Watch)
 - [x] **Capacidades Runtime** (Clipping, Portapapeles, Cursores, IME)
 - [x] Layout y Shaping de Texto (Cosmic Text)
-- [ ] Carga de Assets (Imágenes/Fuentes)
+- [x] Carga de Assets (Imágenes)
+- [ ] Soporte de Fuentes Personalizadas
 - [ ] Expansión del Sistema de Temas
 - [ ] Accesibilidad (a11y)
 

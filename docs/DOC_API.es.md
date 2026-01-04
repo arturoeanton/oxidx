@@ -729,6 +729,28 @@ Grid::new("datos")
 
 ---
 
+---
+
+### Image
+
+Muestra una imagen desde una ruta de archivo.
+
+```rust
+Image::new("assets/logo.png")
+    .width(200.0)
+    .height(100.0)
+    .content_mode(ContentMode::Fit);
+```
+
+| Builder | Descripción |
+|---------|-------------|
+| `new(path)` | Crear imagen desde ruta |
+| `width(w)` | Establecer ancho explícito |
+| `height(h)` | Establecer alto explícito |
+| `content_mode(m)` | `Fit`, `Fill`, `Stretch` |
+
+---
+
 ## Assets
 
 ### `AssetLoader`

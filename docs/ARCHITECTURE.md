@@ -26,6 +26,7 @@ This crate allows the foundational types and systems needed to run an applicatio
   - Scissor clipping (nested)
   - Text rendering via `cosmic-text`
   - Anti-aliased primitives
+  - Texture management (image loading, caching, and batched rendering)
 - **`events`**: Defines the `OxidXEvent` enum, abstracting low-level OS events (mouse, keyboard, focus) into semantic UI events.
 - **`context` (`OxidXContext`)**: A context object passed to components during updates and event handling. It provides access to:
   - Global focus state (Focus Manager)

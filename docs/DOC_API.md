@@ -729,6 +729,28 @@ Grid::new("data")
 
 ---
 
+---
+
+### Image
+
+Displays an image from a file path.
+
+```rust
+Image::new("assets/logo.png")
+    .width(200.0)
+    .height(100.0)
+    .content_mode(ContentMode::Fit);
+```
+
+| Builder | Description |
+|---------|-------------|
+| `new(path)` | Create new image from file path |
+| `width(w)` | Set explicit width |
+| `height(h)` | Set explicit height |
+| `content_mode(m)` | `Fit`, `Fill`, `Stretch` |
+
+---
+
 ## Assets
 
 ### `AssetLoader`

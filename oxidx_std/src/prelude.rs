@@ -14,6 +14,7 @@ pub use crate::combobox::ComboBox;
 pub use crate::containers::{HStack, VStack, ZStack};
 pub use crate::grid::{Column, ColumnType, Grid, Row};
 pub use crate::groupbox::GroupBox;
+pub use crate::image::{ContentMode, Image};
 pub use crate::input::Input;
 pub use crate::label::{Label, LabelStyle, TextOverflow};
 pub use crate::listbox::{ListBox, SelectionMode};
