@@ -1,6 +1,6 @@
 use crate::schema::{ComponentNode, WindowSchema};
 use crate::traits::CodeGenerator;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde_json::Value;
 
 pub struct RustGenerator;

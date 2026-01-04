@@ -175,32 +175,27 @@ impl OxidXComponent for GroupBox {
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        // Extract theme values
-        let border = renderer.theme.border;
-        let text_color = renderer.theme.text;
-        let background = renderer.theme.background_color;
-
-        // Draw border
-        // Usually GroupBox draws a border around the content, with label interrupting the top border
-        // Simplified: Draw rect info
+        // Draw background
+        renderer.fill_rect(self.bounds, renderer.theme.colors.surface);
 
         let header_h = if self.label.is_empty() {
             10.0
         } else {
             self.header_height
         };
+
         let content_y = self.bounds.y + header_h / 2.0;
 
+        // Draw border
         let border_rect = Rect::new(
             self.bounds.x,
             content_y,
             self.bounds.width,
             self.bounds.height - (header_h / 2.0),
         );
+        renderer.stroke_rect(border_rect, renderer.theme.colors.border, 1.0);
 
-        renderer.stroke_rect(border_rect, border, 1.0);
-
-        // Label with background to "cut" the border
+        // Draw title
         if !self.label.is_empty() {
             let label_width = self.label.len() as f32 * 8.0; // Approx
             let label_rect = Rect::new(
@@ -210,18 +205,15 @@ impl OxidXComponent for GroupBox {
                 header_h,
             );
 
-            // Clear background for label
-            renderer.fill_rect(label_rect, background); // Use background color to mask border?
+            // Clear background for label to cut the border visual
+            renderer.fill_rect(label_rect, renderer.theme.colors.surface);
 
-            // Draw label
-            renderer.draw_text_bounded(
+            renderer.draw_text(
                 &self.label,
-                Vec2::new(label_rect.x + 5.0, label_rect.y + 4.0),
-                label_rect.width,
+                Vec2::new(label_rect.x + 5.0, label_rect.y),
                 TextStyle {
-                    font_size: 14.0,
-                    color: text_color,
-                    bold: true,
+                    font_size: 12.0,
+                    color: renderer.theme.colors.text_main,
                     ..Default::default()
                 },
             );

@@ -318,6 +318,13 @@ impl OxidXContext {
         }
     }
 
+    /// Sets the current application theme.
+    /// This changes the semantic tokens used by components.
+    pub fn set_theme(&mut self, theme: Theme) {
+        self.renderer.theme = theme.clone();
+        self.theme = theme;
+    }
+
     /// Handles window resize events.
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {

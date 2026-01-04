@@ -2,7 +2,7 @@ use glam::Vec2;
 use oxidx_core::component::OxidXComponent;
 use oxidx_core::context::OxidXContext;
 use oxidx_core::events::{KeyCode, OxidXEvent};
-use oxidx_core::primitives::{Rect, TextAlign, TextStyle};
+use oxidx_core::primitives::{Rect, TextStyle};
 use oxidx_core::renderer::Renderer;
 
 pub struct Checkbox {
@@ -155,67 +155,53 @@ impl OxidXComponent for Checkbox {
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        // Constants
-        let size = 18.0; // Checkbox size
-        let padding = 8.0;
-
-        let text_color = if self.disabled {
-            renderer.theme.disabled_text
+        // Draw checkbox background/border
+        let border_color = if self.focused {
+            renderer.theme.colors.border_focus
         } else {
-            renderer.theme.text
+            renderer.theme.colors.border
         };
-        let primary = renderer.theme.primary;
-        let border_color = renderer.theme.border;
-        let surface_hover = renderer.theme.surface_hover;
-        let on_primary = renderer.theme.on_primary;
 
-        // Background on hover
-        if self.hovered && !self.disabled {
-            renderer.fill_rect(self.bounds, surface_hover);
-        }
+        let bg_color = if self.checked {
+            renderer.theme.colors.primary
+        } else {
+            renderer.theme.colors.surface
+        };
 
-        // Checkbox rect
-        let check_rect = Rect::new(
-            self.bounds.x,
-            self.bounds.y + (self.bounds.height - size) / 2.0,
-            size,
-            size,
-        );
+        // Checkbox square
+        let size = 20.0;
+        let y_center = self.bounds.y + self.bounds.height / 2.0;
+        let checkbox_rect = Rect::new(self.bounds.x, y_center - size / 2.0, size, size);
 
-        // Draw box
-        renderer.stroke_rect(
-            check_rect,
-            if self.checked || self.focused {
-                primary
-            } else {
-                border_color
-            },
-            if self.focused { 2.0 } else { 1.5 },
-        );
+        renderer.fill_rect(checkbox_rect, bg_color);
+        renderer.stroke_rect(checkbox_rect, border_color, 1.0);
 
+        // Checkmark
         if self.checked {
-            renderer.draw_rounded_rect(check_rect, primary, 4.0, None, None);
-
-            // Checkmark (simple lines)
-            let start = Vec2::new(check_rect.x + 4.0, check_rect.y + 9.0);
-            let mid = Vec2::new(check_rect.x + 7.0, check_rect.y + 12.0);
-            let end = Vec2::new(check_rect.x + 14.0, check_rect.y + 5.0);
-
-            renderer.draw_line(start, mid, on_primary, 2.0);
-            renderer.draw_line(mid, end, on_primary, 2.0);
+            // Draw a simple checkmark
+            let check_color = renderer.theme.colors.text_on_primary;
+            let check_rect = Rect::new(
+                checkbox_rect.x + 4.0,
+                checkbox_rect.y + 4.0,
+                size - 8.0,
+                size - 8.0,
+            );
+            renderer.fill_rect(check_rect, check_color);
         }
 
         // Label
         if !self.label.is_empty() {
-            let label_x = check_rect.x + size + padding;
-            renderer.draw_text_bounded(
+            let text_x = self.bounds.x + size + renderer.theme.spacing.sm;
+            renderer.draw_text(
                 &self.label,
-                Vec2::new(label_x, self.bounds.y + (self.bounds.height - 14.0) / 2.0), // approx vertical center
-                self.bounds.width - size - padding,
+                Vec2::new(text_x, self.bounds.y + (self.bounds.height - 14.0) / 2.0),
                 TextStyle {
                     font_size: 14.0,
-                    color: text_color,
-                    align: TextAlign::Left,
+                    color: if self.disabled {
+                        renderer.theme.colors.disabled_text
+                    } else {
+                        renderer.theme.colors.text_main
+                    },
                     ..Default::default()
                 },
             );

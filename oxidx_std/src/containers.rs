@@ -133,6 +133,8 @@ impl OxidXComponent for VStack {
 
             if matches!(self.alignment, StackAlignment::Stretch) {
                 child.set_size(content_width, child_size.y);
+            } else {
+                child.set_size(child_size.x, child_size.y);
             }
 
             y_offset += child_size.y + gap;
@@ -340,6 +342,8 @@ impl OxidXComponent for HStack {
 
             if matches!(self.alignment, StackAlignment::Stretch) {
                 child.set_size(child_size.x, content_height);
+            } else {
+                child.set_size(child_size.x, child_size.y);
             }
 
             x_offset += child_size.x + gap;

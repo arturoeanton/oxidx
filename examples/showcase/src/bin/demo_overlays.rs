@@ -57,9 +57,11 @@ impl OxidXComponent for DemoApp {
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        // Draw standard background
-        renderer.fill_rect(self.bounds, renderer.theme.background_color);
-
+        // Clear screen
+        renderer.fill_rect(
+            Rect::new(0.0, 0.0, 10000.0, 10000.0),
+            renderer.theme.colors.surface,
+        );
         self.button.render(renderer);
         self.combo.render(renderer);
     }

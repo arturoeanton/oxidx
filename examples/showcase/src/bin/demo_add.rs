@@ -13,7 +13,7 @@ use oxidx_std::prelude::*;
 use std::sync::{Arc, Mutex};
 
 fn main() {
-    let theme = Theme::dark();
+    // let theme = Theme::dark();
 
     // === Shared State ===
     let num_a = Arc::new(Mutex::new(0.0_f64));
@@ -65,7 +65,7 @@ fn main() {
     // === Add Button ===
     let btn_add = Button::new()
         .label("Add Numbers")
-        .style(theme.primary_button)
+        .variant(oxidx_std::button::ButtonVariant::Primary) // Fix usage
         .with_id("add_btn")
         .with_focus_order(3) // Tab order: 3rd
         .on_click({

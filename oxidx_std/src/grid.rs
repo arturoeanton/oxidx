@@ -725,29 +725,16 @@ impl OxidXComponent for Grid {
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        // Extract basic theme colors to avoid borrow issues
-        // We can't access `renderer.theme` fields inside methods if we pass `renderer` mutably.
-        // So we extract them here.
-        let surface = renderer.theme.surface;
-        let surface_alt = renderer.theme.surface_alt;
-        let _primary = renderer.theme.primary;
-        let border = renderer.theme.border;
-        let _text = renderer.theme.text;
-
-        // Use a local struct or individual vars to pass to helper methods if needed
-        // Or just implement rendering inline here to be safe and simple for this rewrite.
-
         // 1. Background
-        renderer.fill_rect(self.bounds, surface);
+        renderer.fill_rect(self.bounds, renderer.theme.colors.surface);
 
         // 2. Header
         if self.show_header {
-            renderer.fill_rect(self.header_rect, surface_alt);
+            renderer.fill_rect(self.header_rect, renderer.theme.colors.surface_alt);
 
             let mut x = self.header_rect.x - self.scroll.offset_x;
             if self.show_row_numbers {
-                x += self.row_number_width; // Skip row number area
-                                            // Draw row number header background
+                x += self.row_number_width;
                 renderer.fill_rect(
                     Rect::new(
                         self.header_rect.x,
@@ -755,7 +742,7 @@ impl OxidXComponent for Grid {
                         self.row_number_width,
                         self.header_rect.height,
                     ),
-                    surface_alt,
+                    renderer.theme.colors.surface_alt,
                 );
             }
 
@@ -766,10 +753,10 @@ impl OxidXComponent for Grid {
 
                 let col_rect = Rect::new(x, self.header_rect.y, col.width, self.header_rect.height);
 
-                // Draw header text
+                // Header text
                 let text_style = TextStyle {
                     font_size: self.size.font_size,
-                    color: renderer.theme.text,
+                    color: renderer.theme.colors.text_main,
                     bold: true,
                     align: match col.align {
                         ColumnAlign::Left => TextAlign::Left,
@@ -791,7 +778,7 @@ impl OxidXComponent for Grid {
                     renderer.draw_line(
                         Vec2::new(col_rect.x + col_rect.width, col_rect.y),
                         Vec2::new(col_rect.x + col_rect.width, col_rect.y + col_rect.height),
-                        border,
+                        renderer.theme.colors.border,
                         1.0,
                     );
                 }
@@ -802,11 +789,9 @@ impl OxidXComponent for Grid {
 
         // 3. Body
         renderer.push_clip(self.body_rect);
-        // ... (Simplified body rendering)
-        // Draw rows
+
         let row_h = self.size.row_height;
         let (start_row, end_row) = self.scroll.visible_row_range(row_h, self.rows.len());
-
         let mut y = self.body_rect.y + (start_row as f32 * row_h) - self.scroll.offset_y;
 
         for i in start_row..end_row {
@@ -816,22 +801,22 @@ impl OxidXComponent for Grid {
 
             // Row Highlight
             if self.selected_rows.contains(&row.id) {
-                renderer.fill_rect(row_rect, renderer.theme.primary.with_alpha(0.3));
+                renderer.fill_rect(row_rect, renderer.theme.colors.primary.with_alpha(0.3));
             } else if self.striped_rows && i % 2 == 1 {
-                renderer.fill_rect(row_rect, surface_alt);
+                renderer.fill_rect(row_rect, renderer.theme.colors.surface_alt);
             }
 
-            // Cells
             let mut x = self.body_rect.x - self.scroll.offset_x;
+
+            // Row Number
             if self.show_row_numbers {
-                // Draw row number
                 renderer.draw_text_bounded(
                     &(i + 1).to_string(),
                     Vec2::new(self.body_rect.x + 4.0, y + 4.0),
                     self.row_number_width,
                     TextStyle {
                         font_size: 12.0,
-                        color: renderer.theme.text_secondary,
+                        color: renderer.theme.colors.text_dim,
                         ..Default::default()
                     },
                 );
@@ -843,7 +828,6 @@ impl OxidXComponent for Grid {
                     continue;
                 }
 
-                // Draw cell content
                 let val = row.get(&col.id);
                 let text = self.format_cell_value(val, col);
 
@@ -853,7 +837,7 @@ impl OxidXComponent for Grid {
                     col.width - self.size.padding * 2.0,
                     TextStyle {
                         font_size: self.size.font_size,
-                        color: renderer.theme.text,
+                        color: renderer.theme.colors.text_main,
                         ..Default::default()
                     },
                 );
@@ -862,24 +846,22 @@ impl OxidXComponent for Grid {
                     renderer.draw_line(
                         Vec2::new(x + col.width, y),
                         Vec2::new(x + col.width, y + row_h),
-                        border.with_alpha(0.5),
+                        renderer.theme.colors.border.with_alpha(0.5),
                         1.0,
                     );
                 }
-
                 x += col.width;
             }
 
-            // Horizontal grid line
+            // Horizontal line
             if self.show_grid_lines {
                 renderer.draw_line(
                     Vec2::new(self.body_rect.x, y + row_h),
                     Vec2::new(self.body_rect.x + self.body_rect.width, y + row_h),
-                    border.with_alpha(0.5),
+                    renderer.theme.colors.border.with_alpha(0.5),
                     1.0,
                 );
             }
-
             y += row_h;
         }
 
@@ -887,13 +869,13 @@ impl OxidXComponent for Grid {
 
         // 4. Scrollbars
         if self.scrollbar_v_rect.width > 0.0 {
-            renderer.fill_rect(self.scrollbar_v_rect, surface_alt);
-            // Thumb
+            renderer.fill_rect(self.scrollbar_v_rect, renderer.theme.colors.surface_alt);
             let ratio = self.scroll.viewport_height / self.scroll.content_height;
             let thumb_h = (self.scrollbar_v_rect.height * ratio).max(20.0);
             let thumb_y = self.scrollbar_v_rect.y
                 + (self.scroll.offset_y / self.scroll.max_offset_y())
                     * (self.scrollbar_v_rect.height - thumb_h);
+
             renderer.fill_rect(
                 Rect::new(
                     self.scrollbar_v_rect.x,
@@ -901,18 +883,18 @@ impl OxidXComponent for Grid {
                     self.scrollbar_v_rect.width,
                     thumb_h,
                 ),
-                border,
+                renderer.theme.colors.border,
             );
         }
 
         if self.scrollbar_h_rect.height > 0.0 {
-            renderer.fill_rect(self.scrollbar_h_rect, surface_alt);
-            // Thumb
+            renderer.fill_rect(self.scrollbar_h_rect, renderer.theme.colors.surface_alt);
             let ratio = self.scroll.viewport_width / self.scroll.content_width;
             let thumb_w = (self.scrollbar_h_rect.width * ratio).max(20.0);
             let thumb_x = self.scrollbar_h_rect.x
                 + (self.scroll.offset_x / self.scroll.max_offset_x())
                     * (self.scrollbar_h_rect.width - thumb_w);
+
             renderer.fill_rect(
                 Rect::new(
                     thumb_x,
@@ -920,17 +902,17 @@ impl OxidXComponent for Grid {
                     thumb_w,
                     self.scrollbar_h_rect.height,
                 ),
-                border,
+                renderer.theme.colors.border,
             );
         }
 
         // 5. Border
         if self.show_border {
-            renderer.stroke_rect(self.bounds, border, 1.0);
+            renderer.stroke_rect(self.bounds, renderer.theme.colors.border, 1.0);
         }
 
         if self.focused {
-            renderer.stroke_rect(self.bounds, renderer.theme.primary, 2.0);
+            renderer.stroke_rect(self.bounds, renderer.theme.colors.border_focus, 2.0);
         }
     }
 }

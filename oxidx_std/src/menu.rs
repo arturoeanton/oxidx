@@ -1,6 +1,6 @@
 use oxidx_core::{
-    Color, ComponentState, OxidXComponent, OxidXContext, OxidXEvent, Rect, Renderer, Style,
-    TextStyle, Vec2,
+    ComponentState, OxidXComponent, OxidXContext, OxidXEvent, Rect, Renderer, Style, TextStyle,
+    Vec2,
 };
 
 /// A single entry in a ContextMenu.
@@ -36,28 +36,18 @@ impl OxidXComponent for MenuEntry {
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        // Scoped access to theme to avoid borrow issues
-        let (bg_color, text_color) = {
-            let theme = &renderer.theme;
-
-            let bg = match self.state {
-                ComponentState::Idle => Color::TRANSPARENT,
-                ComponentState::Hover => theme.surface_hover,
-                ComponentState::Pressed => theme.primary,
-                ComponentState::Disabled => Color::TRANSPARENT,
-            };
-
-            let txt = match self.state {
-                ComponentState::Disabled => theme.disabled_text,
-                ComponentState::Pressed => theme.on_primary,
-                _ => theme.text,
-            };
-            (bg, txt)
+        let text_color = if self.state == ComponentState::Disabled {
+            renderer.theme.colors.disabled_text
+        } else if self.state == ComponentState::Pressed {
+            renderer.theme.colors.text_on_primary
+        } else {
+            renderer.theme.colors.text_main
         };
 
-        // Draw background
-        if bg_color.a > 0.0 {
-            renderer.fill_rect(self.bounds, bg_color);
+        if self.state == ComponentState::Pressed {
+            renderer.fill_rect(self.bounds, renderer.theme.colors.primary);
+        } else if self.state == ComponentState::Hover && self.state != ComponentState::Disabled {
+            renderer.fill_rect(self.bounds, renderer.theme.colors.surface_hover);
         }
 
         // Center vertically, left align with padding
@@ -199,25 +189,11 @@ impl OxidXComponent for ContextMenu {
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        let (surface, border) = {
-            let theme = &renderer.theme;
-            (theme.surface, theme.border)
-        };
-
-        // Shadow
-        let shadow_rect = Rect::new(
-            self.bounds.x + 4.0,
-            self.bounds.y + 4.0,
-            self.bounds.width,
-            self.bounds.height,
-        );
-        renderer.fill_rect(shadow_rect, Color::new(0.0, 0.0, 0.0, 0.2));
-
         // Background
-        renderer.fill_rect(self.bounds, surface);
+        renderer.fill_rect(self.bounds, renderer.theme.colors.surface);
 
         // Border
-        renderer.stroke_rect(self.bounds, border, 1.0);
+        renderer.stroke_rect(self.bounds, renderer.theme.colors.border, 1.0);
 
         // Render entries (entries handle their own theme access correctly)
         for entry in &self.entries {

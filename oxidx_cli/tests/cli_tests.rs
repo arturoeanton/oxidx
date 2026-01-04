@@ -1,12 +1,5 @@
-use std::path::PathBuf;
 use std::process::Command;
 use std::{env, fs};
-
-fn get_bin_path() -> PathBuf {
-    // In a real scenario we might use assert_cmd or find the target dir.
-    // simpler: usage cargo run.
-    PathBuf::from("cargo")
-}
 
 #[test]
 fn test_cli_generate_command() {

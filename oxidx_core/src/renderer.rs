@@ -32,13 +32,6 @@ use wgpu::util::DeviceExt;
 
 pub type TextureId = u32;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct DrawBatch {
-    texture_id: TextureId,
-    index_start: u32,
-    index_count: u32,
-}
-
 /// Vertex structure for the batched renderer.
 /// Each vertex has position (pixels), color (RGBA), and UV coordinates.
 #[repr(C)]
@@ -746,7 +739,7 @@ impl Renderer {
         vertices.push(Vertex::new(p3.x, p3.y, color));
         vertices.push(Vertex::new(p4.x, p4.y, color));
 
-        let mut indices = vec![0, 1, 2, 0, 2, 3];
+        let indices = vec![0, 1, 2, 0, 2, 3];
 
         self.push_command(RenderOp::Geometry {
             vertices,

@@ -73,12 +73,11 @@ impl OxidXComponent for ComboBoxDropdown {
 
     fn render(&self, renderer: &mut Renderer) {
         // Extract theme
-        let theme = &renderer.theme;
-        // let surface = theme.surface; // Unused
-        // let surface_hover = theme.surface_hover; // Unused
-        let border = theme.border;
-        let primary = theme.primary;
-        let text_color = theme.text;
+        // let surface = renderer.theme.colors.surface; // Unused
+        // let surface_hover = renderer.theme.colors.surface_hover; // Unused
+        let border = renderer.theme.colors.border;
+        let primary = renderer.theme.colors.primary;
+        let text_color = renderer.theme.colors.text_main;
 
         // Draw Shadow
         let shadow_rect = Rect::new(
@@ -466,12 +465,12 @@ impl OxidXComponent for ComboBox {
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        let theme = &renderer.theme;
-        let surface = theme.surface;
-        let border = theme.border;
-        let primary = theme.primary;
-        let text_color = theme.text;
-        let disabled_text = theme.disabled_text;
+        // let theme = &renderer.theme;
+        let surface = renderer.theme.colors.surface;
+        let border = renderer.theme.colors.border;
+        let primary = renderer.theme.colors.primary;
+        let text_color = renderer.theme.colors.text_main;
+        let disabled_text = renderer.theme.colors.disabled_text;
 
         // Draw Button
         renderer.fill_rect(self.bounds, surface);

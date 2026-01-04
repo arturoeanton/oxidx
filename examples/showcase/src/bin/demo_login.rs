@@ -12,7 +12,7 @@ use oxidx_std::prelude::*;
 use std::sync::{Arc, Mutex};
 
 fn main() {
-    let theme = Theme::dark();
+    // let theme = Theme::dark();
 
     // === Shared State for Form Values ===
     // We use Arc<Mutex<String>> to share values between inputs and button callback
@@ -44,11 +44,12 @@ fn main() {
             }
         });
 
-    // === Sign In Button with Validation ===
+    // === Login Button ===
     let btn_signin = Button::new()
-        .label("Sign In")
-        .style(theme.primary_button)
-        .with_id("signin")
+        .label("Log In")
+        // .style(theme.colors.primary) // Style is InteractiveStyle. Using variant instead if possible or default style
+        .variant(oxidx_std::button::ButtonVariant::Primary)
+        .with_id("login_btn")
         .with_focus_order(3) // Tab order: 3rd
         .on_click({
             let email = email_value.clone();
@@ -198,6 +199,9 @@ impl OxidXComponent for CenteredCard {
     }
 
     fn render(&self, renderer: &mut Renderer) {
+        // Simplified rendering for demo (no hover state logic for now, or use stored state)
+        // Render background BEHIND child
+        renderer.fill_rect(self.bounds, renderer.theme.colors.primary);
         self.child.render(renderer);
     }
 

@@ -1,5 +1,5 @@
 use oxidx_core::{
-    run, AppConfig, Color, OxidXComponent, OxidXContext, OxidXEvent, Rect, StackAlignment,
+    AppConfig, Color, OxidXComponent, OxidXContext, OxidXEvent, Rect, StackAlignment,
 };
 use oxidx_std::{Alert, Button, Confirm, VStack};
 
@@ -18,7 +18,7 @@ impl DemoDialogs {
         root.add_child(Box::new(lbl));
 
         // Background Button (to test blocking)
-        let btn_bg = Button::new();
+        let _btn_bg = Button::new();
         // Button to trigger Alert
         let btn_alert = Button::new().label("Show Alert").on_click(|ctx| {
             Alert::show(ctx, "Welcome!", "This is a blocking modal alert.");

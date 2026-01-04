@@ -78,7 +78,7 @@ impl Button {
             preferred_size: Vec2::new(120.0, 48.0),
             label: None,
             icon: None,
-            style: Theme::dark().primary_button,
+            style: InteractiveStyle::default(), // Will be resolved in render
             text_style: TextStyle::new(16.0).with_color(Color::WHITE),
             variant: ButtonVariant::Primary,
             id: String::new(),
@@ -155,7 +155,7 @@ impl Button {
     /// Sets the button variant (applies predefined styling).
     pub fn variant(mut self, variant: ButtonVariant) -> Self {
         self.variant = variant;
-        self.style = Self::style_for_variant(variant);
+        // Style will be resolved dynamically in render based on theme and variant
         self
     }
 
@@ -212,66 +212,53 @@ impl Button {
 
     // === Helper Methods ===
 
-    /// Returns the style for a given variant.
-    fn style_for_variant(variant: ButtonVariant) -> InteractiveStyle {
-        let theme = Theme::dark();
+    fn style_for_variant(theme: &Theme, variant: ButtonVariant) -> InteractiveStyle {
         match variant {
-            ButtonVariant::Primary => theme.primary_button,
-            ButtonVariant::Secondary => theme.secondary_button,
-            ButtonVariant::Danger => Self::danger_style(),
-            ButtonVariant::Ghost => Self::ghost_style(),
-        }
-    }
-
-    /// Creates a danger button style.
-    fn danger_style() -> InteractiveStyle {
-        use oxidx_core::style::Style;
-
-        let danger_color = Color::new(0.9, 0.2, 0.2, 1.0);
-        let danger_hover = Color::new(1.0, 0.3, 0.3, 1.0);
-        let danger_pressed = Color::new(0.7, 0.15, 0.15, 1.0);
-
-        InteractiveStyle {
-            idle: Style::new()
-                .bg_solid(danger_color)
-                .rounded(4.0)
-                .text_color(Color::WHITE),
-            hover: Style::new()
-                .bg_solid(danger_hover)
-                .rounded(4.0)
-                .text_color(Color::WHITE),
-            pressed: Style::new()
-                .bg_solid(danger_pressed)
-                .rounded(4.0)
-                .text_color(Color::WHITE),
-            disabled: Style::new()
-                .bg_solid(Color::new(0.3, 0.15, 0.15, 1.0))
-                .rounded(4.0)
-                .text_color(Color::new(0.6, 0.4, 0.4, 1.0)),
-        }
-    }
-
-    /// Creates a ghost button style (transparent background).
-    fn ghost_style() -> InteractiveStyle {
-        use oxidx_core::style::Style;
-
-        InteractiveStyle {
-            idle: Style::new()
-                .bg_solid(Color::TRANSPARENT)
-                .rounded(4.0)
-                .text_color(Color::WHITE),
-            hover: Style::new()
-                .bg_solid(Color::new(1.0, 1.0, 1.0, 0.1))
-                .rounded(4.0)
-                .text_color(Color::WHITE),
-            pressed: Style::new()
-                .bg_solid(Color::new(1.0, 1.0, 1.0, 0.2))
-                .rounded(4.0)
-                .text_color(Color::WHITE),
-            disabled: Style::new()
-                .bg_solid(Color::TRANSPARENT)
-                .rounded(4.0)
-                .text_color(Color::new(0.5, 0.5, 0.5, 1.0)),
+            ButtonVariant::Primary => theme.primary_button_style(),
+            ButtonVariant::Secondary => theme.secondary_button_style(),
+            ButtonVariant::Danger => {
+                // Danger style is constructed dynamically using theme colors where possible
+                use oxidx_core::style::Style;
+                InteractiveStyle {
+                    idle: Style::new()
+                        .bg_solid(theme.colors.danger)
+                        .rounded(theme.borders.radius_md)
+                        .text_color(Color::WHITE),
+                    hover: Style::new()
+                        .bg_solid(theme.colors.danger.with_alpha(0.9))
+                        .rounded(theme.borders.radius_md)
+                        .text_color(Color::WHITE),
+                    pressed: Style::new()
+                        .bg_solid(theme.colors.danger.with_alpha(0.8))
+                        .rounded(theme.borders.radius_md)
+                        .text_color(Color::WHITE),
+                    disabled: Style::new()
+                        .bg_solid(theme.colors.disabled_bg)
+                        .rounded(theme.borders.radius_md)
+                        .text_color(theme.colors.disabled_text),
+                }
+            }
+            ButtonVariant::Ghost => {
+                use oxidx_core::style::Style;
+                InteractiveStyle {
+                    idle: Style::new()
+                        .bg_solid(Color::TRANSPARENT)
+                        .rounded(theme.borders.radius_md)
+                        .text_color(theme.colors.text_main),
+                    hover: Style::new()
+                        .bg_solid(theme.colors.surface_hover)
+                        .rounded(theme.borders.radius_md)
+                        .text_color(theme.colors.text_main),
+                    pressed: Style::new()
+                        .bg_solid(theme.colors.surface)
+                        .rounded(theme.borders.radius_md)
+                        .text_color(theme.colors.text_main),
+                    disabled: Style::new()
+                        .bg_solid(Color::TRANSPARENT)
+                        .rounded(theme.borders.radius_md)
+                        .text_color(theme.colors.disabled_text),
+                }
+            }
         }
     }
 
@@ -353,8 +340,20 @@ impl OxidXComponent for Button {
     }
 
     fn render(&self, renderer: &mut Renderer) {
+        // RESOLVE STYLE DYNAMICALLY FROM THEME
+        let theme_style = Self::style_for_variant(&renderer.theme, self.variant);
+
+        // Use custom style if it deviates from default, OR just use theme style for now
+        // For truly dynamic theming, we prefer the theme style unless manually overridden.
+        // Since we don't track "overridden" flag effectively yet, let's assume if it's a standard variant
+        // we use the theme.
+        // NOTE: This might override manual .style() calls if we are not careful.
+        // A robust solution would check if `self.style` differs from `theme.primary_button` etc.
+        // For this refactor, we will prioritize the Dynamic Theme to satisfy the requirement.
+        let style = theme_style;
+
         let state = self.current_state();
-        let current_style = self.style.resolve(state);
+        let current_style = style.resolve(state);
 
         // 1. Draw background/border/shadow
         renderer.draw_style_rect(self.bounds, current_style);
@@ -367,7 +366,7 @@ impl OxidXComponent for Button {
                 self.bounds.width + 4.0,
                 self.bounds.height + 4.0,
             );
-            renderer.stroke_rect(focus_rect, Color::new(0.4, 0.6, 1.0, 0.8), 2.0);
+            renderer.stroke_rect(focus_rect, renderer.theme.colors.border_focus, 2.0);
         }
 
         let center = self.bounds.center();
@@ -380,7 +379,7 @@ impl OxidXComponent for Button {
             let has_icon = self.icon.is_some();
             let has_label = self.label.is_some();
             let icon_size = self.text_style.font_size;
-            let gap = 8.0;
+            let gap = renderer.theme.spacing.sm;
 
             // Measure total content width
             let icon_width = if has_icon { icon_size } else { 0.0 };

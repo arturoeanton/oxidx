@@ -1,4 +1,4 @@
-use glam::Vec2;
+pub use glam::Vec2;
 
 /// A rectangle defined by position (x, y) and size (width, height).
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -114,8 +114,10 @@ impl TextStyle {
     }
 }
 
+use serde::{Deserialize, Serialize};
+
 /// RGBA Color.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Color {
     pub r: f32,
     pub g: f32,

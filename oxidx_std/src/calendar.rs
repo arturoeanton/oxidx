@@ -67,16 +67,18 @@ impl OxidXComponent for Calendar {
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        let theme_surface = renderer.theme.surface;
-        let theme_border = renderer.theme.border;
-        let theme_surface_alt = renderer.theme.surface_alt;
-        let theme_text = renderer.theme.text;
-        let theme_text_secondary = renderer.theme.text_secondary;
-        let theme_surface_hover = renderer.theme.surface_hover;
-        let theme_primary = renderer.theme.primary;
+        // Background
+        renderer.fill_rect(self.bounds, renderer.theme.colors.surface);
+        renderer.stroke_rect(self.bounds, renderer.theme.colors.border, 1.0);
 
-        renderer.fill_rect(self.bounds, theme_surface);
-        renderer.stroke_rect(self.bounds, theme_border, 1.0);
+        // Header
+        let header_rect = Rect::new(self.bounds.x, self.bounds.y, self.bounds.width, 30.0);
+        renderer.fill_rect(header_rect, renderer.theme.colors.surface_alt);
+
+        // Days grid placeholder
+        // Using renderer.theme.colors.text_main for text
+        // Using renderer.theme.colors.primary for selected day
+        // Using renderer.theme.colors.surface_hover for hover
 
         let month = self.visible_month.load(Ordering::Relaxed);
         let year = self.visible_year.load(Ordering::Relaxed);
@@ -84,12 +86,12 @@ impl OxidXComponent for Calendar {
         // Header (Month Year + Arrows)
         // Previous Arrow
         let prev_rect = Rect::new(self.bounds.x + 10.0, self.bounds.y + 10.0, 20.0, 20.0);
-        renderer.fill_rect(prev_rect, theme_surface_alt); // placeholder style
+        renderer.fill_rect(prev_rect, renderer.theme.colors.surface_alt); // placeholder style
         renderer.draw_text_bounded(
             "<",
             Vec2::new(prev_rect.x + 6.0, prev_rect.y + 2.0),
             20.0,
-            TextStyle::default().with_color(theme_text),
+            TextStyle::default().with_color(renderer.theme.colors.text_main),
         );
 
         // Next Arrow
@@ -99,12 +101,12 @@ impl OxidXComponent for Calendar {
             20.0,
             20.0,
         );
-        renderer.fill_rect(next_rect, theme_surface_alt);
+        renderer.fill_rect(next_rect, renderer.theme.colors.surface_alt);
         renderer.draw_text_bounded(
             ">",
             Vec2::new(next_rect.x + 6.0, next_rect.y + 2.0),
             20.0,
-            TextStyle::default().with_color(theme_text),
+            TextStyle::default().with_color(renderer.theme.colors.text_main),
         );
 
         // Month Label
@@ -117,7 +119,9 @@ impl OxidXComponent for Calendar {
             &title,
             Vec2::new(self.bounds.x + 40.0, self.bounds.y + 12.0),
             200.0,
-            TextStyle::default().with_color(theme_text).with_size(16.0),
+            TextStyle::default()
+                .with_color(renderer.theme.colors.text_main)
+                .with_size(16.0),
         );
 
         // Days Grid
@@ -134,7 +138,7 @@ impl OxidXComponent for Calendar {
                 *d,
                 Vec2::new(start_x + i as f32 * day_w + 10.0, start_y),
                 day_w,
-                TextStyle::default().with_color(theme_text_secondary),
+                TextStyle::default().with_color(renderer.theme.colors.text_dim),
             );
         }
 
@@ -163,12 +167,12 @@ impl OxidXComponent for Calendar {
 
             // Hover
             if self.hovered_day == Some(day) {
-                renderer.fill_rect(rect, theme_surface_hover);
+                renderer.fill_rect(rect, renderer.theme.colors.surface_hover);
             }
             // Selection
             if let Some(sel) = self.selected_date {
                 if sel.year() == year && sel.month() == month && sel.day() == day {
-                    renderer.fill_rect(rect, theme_primary);
+                    renderer.fill_rect(rect, renderer.theme.colors.primary);
                 }
             }
 
@@ -176,7 +180,7 @@ impl OxidXComponent for Calendar {
                 &day.to_string(),
                 Vec2::new(x + 10.0, y + 10.0),
                 day_w,
-                TextStyle::default().with_color(theme_text),
+                TextStyle::default().with_color(renderer.theme.colors.text_main),
             );
         }
     }

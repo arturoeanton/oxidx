@@ -2213,6 +2213,8 @@ dependencies = [
  "log",
  "pollster",
  "rayon",
+ "serde",
+ "serde_json",
  "thiserror 1.0.69",
  "wgpu",
  "winit",

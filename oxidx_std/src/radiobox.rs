@@ -148,13 +148,13 @@ impl OxidXComponent for RadioBox {
     fn render(&self, renderer: &mut Renderer) {
         // Extract theme colors
         let text_color = if self.disabled {
-            renderer.theme.disabled_text
+            renderer.theme.colors.disabled_text
         } else {
-            renderer.theme.text
+            renderer.theme.colors.text_main
         };
-        let primary = renderer.theme.primary;
-        let border_color = renderer.theme.border;
-        let surface_hover = renderer.theme.surface_hover;
+        let primary = renderer.theme.colors.primary;
+        let border_color = renderer.theme.colors.border;
+        let surface_hover = renderer.theme.colors.surface_hover;
 
         // Hover
         if self.hovered && !self.disabled {
@@ -397,14 +397,14 @@ impl OxidXComponent for RadioGroup {
 
         // Extract theme values
         let text_color = if self.disabled {
-            renderer.theme.disabled_text
+            renderer.theme.colors.disabled_text
         } else {
-            renderer.theme.text
+            renderer.theme.colors.text_main
         };
-        let primary = renderer.theme.primary;
-        let border_color = renderer.theme.border;
-        let surface_hover = renderer.theme.surface_hover;
-        let border_alpha = renderer.theme.border.with_alpha(0.5);
+        let primary = renderer.theme.colors.primary;
+        let border_color = renderer.theme.colors.border;
+        let surface_hover = renderer.theme.colors.surface_hover;
+        let border_alpha = renderer.theme.colors.border.with_alpha(0.5);
 
         let mut y = self.bounds.y;
 

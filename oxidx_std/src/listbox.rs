@@ -227,16 +227,20 @@ impl OxidXComponent for ListBox {
 
     fn render(&self, renderer: &mut Renderer) {
         // Extract theme values
-        let surface_alt = renderer.theme.surface_alt;
-        let surface_hover = renderer.theme.surface_hover;
-        let border = renderer.theme.border;
-        let primary = renderer.theme.primary;
-        let text_color = renderer.theme.text;
+        let surface_alt = renderer.theme.colors.surface_alt;
+        let surface_hover = renderer.theme.colors.surface_hover;
+        let border = renderer.theme.colors.border;
+        let primary = renderer.theme.colors.primary;
+        let text_color = renderer.theme.colors.text_main;
 
         // Background
         renderer.fill_rect(self.bounds, surface_alt);
 
-        let border_color = if self.focused { primary } else { border };
+        let border_color = if self.focused {
+            renderer.theme.colors.border_focus // Using dedicated focus border color if available, or just focus color
+        } else {
+            border
+        };
         renderer.stroke_rect(self.bounds, border_color, 1.0);
 
         // Clip

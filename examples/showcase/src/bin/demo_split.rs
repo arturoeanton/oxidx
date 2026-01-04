@@ -13,7 +13,7 @@ use oxidx_std::prelude::*;
 use oxidx_std::textarea::TextArea;
 
 fn main() {
-    let theme = Theme::dark();
+    // let theme = Theme::dark();
 
     // === File Tree (Left Panel) ===
     let file_tree = create_file_tree();
@@ -23,8 +23,8 @@ fn main() {
         .with_id("editor")
         .placeholder("// Your code here...")
         .with_line_numbers(true)
-        .with_tab_size(4)
-        .style(theme.secondary_button);
+        .with_tab_size(4);
+    // .style(theme.colors.surface_alt); // Removed style call matching old incorrect API
 
     // === Terminal (Bottom-Right) ===
     let terminal = TerminalPanel::new();

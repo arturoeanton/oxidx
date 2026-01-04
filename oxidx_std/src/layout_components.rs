@@ -55,8 +55,8 @@ impl OxidXComponent for Header {
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        let theme_surface = renderer.theme.surface;
-        let theme_border = renderer.theme.border;
+        let theme_surface = renderer.theme.colors.surface;
+        let theme_border = renderer.theme.colors.border;
         renderer.fill_rect(self.bounds, theme_surface);
         renderer.stroke_rect(self.bounds, theme_border, 1.0);
 
@@ -119,9 +119,9 @@ impl OxidXComponent for Footer {
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        let theme_surface_alt = renderer.theme.surface_alt;
-        let theme_border = renderer.theme.border;
-        let theme_text_secondary = renderer.theme.text_secondary;
+        let theme_surface_alt = renderer.theme.colors.surface_alt;
+        let theme_border = renderer.theme.colors.border;
+        let theme_text_secondary = renderer.theme.colors.text_dim;
 
         renderer.fill_rect(self.bounds, theme_surface_alt);
         // Top border
@@ -213,8 +213,8 @@ impl OxidXComponent for SideMenu {
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        let theme_surface = renderer.theme.surface;
-        let theme_border = renderer.theme.border;
+        let theme_surface = renderer.theme.colors.surface;
+        let theme_border = renderer.theme.colors.border;
 
         renderer.fill_rect(self.bounds, theme_surface);
 

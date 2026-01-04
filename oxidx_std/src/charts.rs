@@ -158,7 +158,7 @@ impl OxidXComponent for PieChart {
 pub struct BarChart {
     bounds: Rect,
     data: Vec<(String, f32)>,
-    max_val: f32,
+    _max_val: f32,
     size: Option<Vec2>,
 }
 
@@ -168,7 +168,7 @@ impl BarChart {
         Self {
             bounds: Rect::ZERO,
             data,
-            max_val: if max_val == 0.0 { 1.0 } else { max_val },
+            _max_val: if max_val == 0.0 { 1.0 } else { max_val },
             size: None,
         }
     }
@@ -199,49 +199,58 @@ impl OxidXComponent for BarChart {
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        let surface_alt = renderer.theme.surface_alt;
-        let text_secondary = renderer.theme.text_secondary;
-        let text_color = renderer.theme.text;
+        // Background
+        renderer.fill_rect(self.bounds, renderer.theme.colors.surface_alt);
 
-        renderer.fill_rect(self.bounds, surface_alt);
-
-        let count = self.data.len();
-        if count == 0 {
+        if self.data.is_empty() {
             return;
         }
 
-        let gap = 10.0;
-        let padding_x = 20.0;
-        let padding_y = 20.0;
+        let count = self.data.len();
+        let max_val = self.data.iter().map(|(_, v)| *v).fold(f32::MIN, f32::max); // Handle NaN? or use 0.0
+        let max_val = if max_val.is_finite() {
+            max_val.max(0.1)
+        } else {
+            1.0
+        };
 
-        let available_width = self.bounds.width - (padding_x * 2.0) - (gap * (count - 1) as f32);
-        let bar_width = available_width / count as f32;
-        let available_height = self.bounds.height - (padding_y * 2.0);
+        let padding = 10.0;
+        let chart_rect = Rect::new(
+            self.bounds.x + padding,
+            self.bounds.y + padding,
+            self.bounds.width - padding * 2.0,
+            self.bounds.height - padding * 2.0,
+        );
 
-        for (i, (label, value)) in self.data.iter().enumerate() {
-            let x = self.bounds.x + padding_x + i as f32 * (bar_width + gap);
-            let bar_h = (value / self.max_val) * available_height;
-            let y = self.bounds.y + self.bounds.height - padding_y - bar_h;
+        let bar_width = (chart_rect.width / count as f32) * 0.8;
+        let gap = (chart_rect.width / count as f32) * 0.2;
 
-            let color = get_chart_color(i);
+        for (i, (label, val)) in self.data.iter().enumerate() {
+            let h = (*val / max_val) * chart_rect.height;
+            let x = chart_rect.x + (i as f32 * (bar_width + gap));
+            let y = chart_rect.y + chart_rect.height - h;
 
-            renderer.fill_rect(Rect::new(x, y, bar_width, bar_h), color);
+            let color = get_chart_color(i); // Using get_chart_color for consistency
+
+            renderer.fill_rect(Rect::new(x, y, bar_width, h), color);
 
             // Label
             renderer.draw_text_bounded(
                 label,
-                Vec2::new(x, self.bounds.y + self.bounds.height - padding_y + 4.0),
+                Vec2::new(x, self.bounds.y + self.bounds.height - padding + 4.0), // Adjusted y for label
                 bar_width + gap,
                 TextStyle::default()
-                    .with_color(text_secondary)
+                    .with_color(renderer.theme.colors.text_dim)
                     .with_size(10.0),
             );
             // Value
             renderer.draw_text_bounded(
-                &format!("{:.0}", value),
+                &format!("{:.0}", val),
                 Vec2::new(x, y - 14.0),
                 bar_width + gap,
-                TextStyle::default().with_color(text_color).with_size(10.0),
+                TextStyle::default()
+                    .with_color(renderer.theme.colors.text_main)
+                    .with_size(10.0),
             );
         }
     }
@@ -314,29 +323,29 @@ impl OxidXComponent for LineChart {
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        let surface_alt = renderer.theme.surface_alt;
-        let primary_color = renderer.theme.primary;
-
-        renderer.fill_rect(self.bounds, surface_alt);
+        let padding_x = 20.0;
+        let padding_y = 20.0;
+        let usable_w = self.bounds.width - padding_x * 2.0;
+        let usable_h = self.bounds.height - padding_y * 2.0;
 
         let count = self.data.len();
         if count < 2 {
             return;
         }
 
-        let padding_x = 20.0;
-        let padding_y = 20.0;
-        let usable_w = self.bounds.width - padding_x * 2.0;
-        let usable_h = self.bounds.height - padding_y * 2.0;
-
         let step_x = usable_w / (count - 1) as f32;
         let range = self.max_val - self.min_val;
+        let primary_color = renderer.theme.colors.primary;
 
         let mut prev_point: Option<Vec2> = None;
 
         for (i, (_label, value)) in self.data.iter().enumerate() {
             let x = self.bounds.x + padding_x + i as f32 * step_x;
-            let normalized = (*value - self.min_val) / range;
+            let normalized = if range.abs() > 0.0001 {
+                (*value - self.min_val) / range
+            } else {
+                0.5
+            };
             let y = self.bounds.y + self.bounds.height - padding_y - (normalized * usable_h);
             let current_point = Vec2::new(x, y);
 

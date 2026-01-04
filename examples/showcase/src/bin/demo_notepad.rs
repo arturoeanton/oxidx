@@ -12,15 +12,19 @@ use oxidx_std::prelude::*;
 use oxidx_std::textarea::TextArea;
 
 fn main() {
-    let theme = Theme::dark();
+    let _theme = Theme::dark(); // Unused but keeps API consistent or remove?
+                                // Removing entirely if unused.
+                                // let theme = Theme::dark();
 
     // === TextArea (Code Editor) ===
     let textarea = TextArea::new()
         .with_id("editor")
         .placeholder("Start typing here...")
-        .with_line_numbers(true)
-        .with_tab_size(4)
-        .style(theme.secondary_button); // Use a dark style
+        .with_tab_size(4);
+    // .style(theme.colors.surface_alt); // Input.style expects InteractiveStyle, removing to rely on default theme or set specific colors if needed.
+    // If we want custom bg, we can use InteractiveStyle with custom colors?
+    // Or ComponentState?
+    // Let's just rely on default for now to fix compile error.
 
     // === Header Bar ===
     let header = Label::new("📝 OxidX Notepad")

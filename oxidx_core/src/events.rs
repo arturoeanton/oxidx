@@ -58,6 +58,7 @@ impl KeyCode {
     pub const KEY_X: KeyCode = KeyCode(winit::keyboard::KeyCode::KeyX);
     pub const KEY_Y: KeyCode = KeyCode(winit::keyboard::KeyCode::KeyY);
     pub const KEY_Z: KeyCode = KeyCode(winit::keyboard::KeyCode::KeyZ);
+    pub const KEY_T: KeyCode = KeyCode(winit::keyboard::KeyCode::KeyT);
 
     pub const HOME: KeyCode = KeyCode(winit::keyboard::KeyCode::Home);
     pub const END: KeyCode = KeyCode(winit::keyboard::KeyCode::End);
