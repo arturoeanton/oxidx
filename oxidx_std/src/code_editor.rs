@@ -22,6 +22,9 @@ use oxidx_core::OxidXContext;
 use std::cell::Cell;
 use winit::window::CursorIcon;
 
+// Import SyntaxDefinition for dynamic language support
+use oxidx_core::syntax::{SyntaxDefinition, SyntaxError};
+
 /// Syntax theme for code highlighting.
 #[derive(Debug, Clone)]
 pub struct SyntaxTheme {
@@ -188,6 +191,10 @@ pub struct CodeEditor {
     minimap_width: f32,
     /// Is dragging the minimap viewport
     is_dragging_minimap: bool,
+
+    // === Dynamic Syntax Definition ===
+    /// Optional loaded syntax definition for dynamic language support
+    syntax_definition: Option<SyntaxDefinition>,
 }
 
 /// Action for undo/redo
@@ -275,10 +282,11 @@ impl CodeEditor {
             syntax_theme: SyntaxTheme::dark_rust(),
             cached_tokens: Vec::new(),
             tokens_dirty: true,
-            // Minimap
             show_minimap: false,
             minimap_width: 80.0,
             is_dragging_minimap: false,
+            // Dynamic syntax
+            syntax_definition: None,
         }
     }
 
@@ -321,6 +329,26 @@ impl CodeEditor {
     /// Enables syntax highlighting with the default Rust theme.
     pub fn with_syntax_highlighting(mut self, enabled: bool) -> Self {
         self.syntax_theme.enabled = enabled;
+        self
+    }
+
+    /// Loads a syntax definition from a JSON file.
+    ///
+    /// When loaded, the tokenizer will use the keywords and types from
+    /// the definition instead of the hardcoded RUST_KEYWORDS.
+    pub fn load_syntax_from_file(mut self, path: &str) -> Result<Self, SyntaxError> {
+        let definition = SyntaxDefinition::from_file(path)?;
+        self.syntax_definition = Some(definition);
+        self.syntax_theme.enabled = true; // Auto-enable when loading syntax
+        self.tokens_dirty = true;
+        Ok(self)
+    }
+
+    /// Sets a syntax definition directly (for embedded definitions).
+    pub fn with_syntax_definition(mut self, definition: SyntaxDefinition) -> Self {
+        self.syntax_definition = Some(definition);
+        self.syntax_theme.enabled = true;
+        self.tokens_dirty = true;
         self
     }
 
@@ -626,15 +654,26 @@ impl CodeEditor {
                     continue;
                 }
 
-                // Check if keyword
-                let color = if RUST_KEYWORDS.contains(&word.as_str()) {
+                // Check if keyword using dynamic definition or fallback
+                let is_keyword = if let Some(ref def) = self.syntax_definition {
+                    def.is_keyword(&word)
+                } else {
+                    RUST_KEYWORDS.contains(&word.as_str())
+                };
+
+                // Check if type using dynamic definition
+                let is_type = if let Some(ref def) = self.syntax_definition {
+                    def.is_type(&word)
+                } else {
+                    word.chars()
+                        .next()
+                        .map(|c| c.is_uppercase())
+                        .unwrap_or(false)
+                };
+
+                let color = if is_keyword {
                     self.syntax_theme.keyword
-                } else if word
-                    .chars()
-                    .next()
-                    .map(|c| c.is_uppercase())
-                    .unwrap_or(false)
-                {
+                } else if is_type {
                     self.syntax_theme.type_name
                 } else {
                     self.syntax_theme.normal
@@ -758,6 +797,7 @@ impl CodeEditor {
         self.cursor.line += 1;
         self.lines.insert(self.cursor.line, rest);
         self.cursor.col = 0;
+        self.tokens_dirty = true; // Invalidate cache when lines change
     }
 
     fn insert_tab(&mut self) {
@@ -769,6 +809,7 @@ impl CodeEditor {
         let byte_pos = self.col_to_byte(self.cursor.line, self.cursor.col);
         self.lines[self.cursor.line].insert_str(byte_pos, &spaces);
         self.cursor.col += self.tab_size;
+        self.tokens_dirty = true; // Invalidate cache
     }
 
     fn delete_char_before(&mut self) {
@@ -796,6 +837,7 @@ impl CodeEditor {
                     text: deleted,
                 });
                 self.redo_stack.clear();
+                self.tokens_dirty = true; // Invalidate cache
             }
         } else if self.cursor.line > 0 {
             // Merge with previous line
@@ -809,6 +851,7 @@ impl CodeEditor {
                 text: "\n".to_string(),
             });
             self.redo_stack.clear();
+            self.tokens_dirty = true; // Invalidate cache when lines merge
         }
     }
 
@@ -837,6 +880,7 @@ impl CodeEditor {
                     text: deleted,
                 });
                 self.redo_stack.clear();
+                self.tokens_dirty = true; // Invalidate cache
             }
         } else if self.cursor.line < self.lines.len() - 1 {
             // Merge with next line
@@ -848,6 +892,7 @@ impl CodeEditor {
                 text: "\n".to_string(),
             });
             self.redo_stack.clear();
+            self.tokens_dirty = true; // Invalidate cache when lines merge
         }
     }
 

@@ -32,6 +32,8 @@ pub use calendar::*;
 pub use charts::*;
 pub use checkbox::Checkbox;
 pub use code_editor::{CodeEditor, SyntaxTheme, TextSpan};
+
+// Re-export SyntaxDefinition from oxidx_core for convenience
 pub use combobox::ComboBox;
 pub use containers::{HStack, VStack, ZStack};
 pub use dialog::{Alert, Confirm, Modal};
@@ -43,6 +45,7 @@ pub use label::Label;
 pub use layout_components::*;
 pub use listbox::{ListBox, SelectionMode};
 pub use menu::{ContextMenu, MenuEntry};
+pub use oxidx_core::{SyntaxDefinition, SyntaxError};
 pub use progress::ProgressBar;
 pub use radiobox::{RadioBox, RadioGroup};
 pub use scroll::{ScrollView, ScrollbarStyle};

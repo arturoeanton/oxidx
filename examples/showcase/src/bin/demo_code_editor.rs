@@ -1,38 +1,35 @@
-//! Demo: Code Editor with Syntax Highlighting
+//! Demo: CodeEditor with Dynamic Syntax Loading
 //!
 //! Demonstrates:
-//! - TextArea with syntax highlighting
-//! - Rust keywords (purple)
-//! - Strings (orange)
-//! - Comments (green)
-//! - Numbers (light green)
-//! - Types (cyan)
-//! - Macros (cyan)
+//! - New CodeEditor component (separated from TextArea)
+//! - Dynamic syntax loading from JSON files
+//! - Rust syntax highlighting (purple keywords, orange strings, green comments)
+//! - Line numbers and minimap
 
 use oxidx_core::{AppConfig, Color, OxidXComponent, OxidXContext, OxidXEvent, Rect, Vec2};
 use oxidx_std::prelude::*;
-use oxidx_std::textarea::{SyntaxTheme, TextArea};
+use oxidx_std::CodeEditor;
 
 fn main() {
     let _theme = Theme::dark();
 
-    // === Code Editor with Syntax Highlighting ===
-    let editor = TextArea::new()
+    // === Code Editor with Dynamic Syntax from JSON ===
+    let editor = CodeEditor::new()
         .with_id("code_editor")
         .with_line_numbers(true)
         .with_tab_size(4)
-        .with_syntax_theme(SyntaxTheme::dark_rust())
-        .with_syntax_highlighting(true) // Must be after theme to override enabled=false
-        .with_minimap(true) // VS Code-style minimap
+        .load_syntax_from_file("assets/syntax/rust.json")
+        .expect("Failed to load rust.json syntax")
+        .with_minimap(true)
         .text(SAMPLE_CODE);
 
     // === Header ===
-    let header = Label::new("🦀 Rust Code Editor")
+    let header = Label::new("🦀 OxidX Code Editor")
         .with_style(LabelStyle::Heading2)
         .with_color(Color::WHITE);
 
     let subtitle =
-        Label::new("Syntax highlighting: keywords • strings • comments • numbers • types")
+        Label::new("CodeEditor with dynamic syntax | keywords • strings • comments • types")
             .with_size(12.0)
             .with_color(Color::new(0.5, 0.5, 0.6, 1.0));
 
@@ -108,11 +105,12 @@ impl OxidXComponent for EditorContainer {
     }
 }
 
-// === Sample Rust Code for Syntax Highlighting Demo ===
+// === Sample Rust Code ===
 const SAMPLE_CODE: &str = r#"// Welcome to the OxidX Code Editor!
-// This demo showcases syntax highlighting for Rust.
+// Now with dynamic syntax loading from JSON files.
 
 use std::collections::HashMap;
+use oxidx_std::{CodeEditor, SyntaxDefinition};
 
 /// A simple calculator struct
 pub struct Calculator {
@@ -145,6 +143,15 @@ impl Calculator {
 }
 
 fn main() {
+    // Load syntax from JSON file
+    let editor = CodeEditor::new()
+        .load_syntax_from_file("assets/syntax/rust.json")
+        .expect("Failed to load syntax");
+
+    // Or use built-in definition
+    let js_editor = CodeEditor::new()
+        .with_syntax_definition(SyntaxDefinition::javascript());
+
     let mut calc = Calculator::new();
     
     // Try some calculations

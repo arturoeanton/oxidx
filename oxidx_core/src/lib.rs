@@ -47,6 +47,7 @@ pub mod layout;
 pub mod primitives;
 pub mod renderer;
 pub mod style;
+pub mod syntax;
 pub mod theme;
 
 // Re-export primary types
@@ -59,6 +60,7 @@ pub use layout::{Alignment, Anchor, LayoutProps, SizeConstraint, Spacing, StackA
 pub use primitives::{Color, Rect, TextAlign, TextStyle};
 pub use renderer::Renderer;
 pub use style::{Background, Border, ComponentState, InteractiveStyle, Shadow, Style};
+pub use syntax::{SyntaxDefinition, SyntaxError};
 pub use theme::Theme;
 
 // Re-export glam types
