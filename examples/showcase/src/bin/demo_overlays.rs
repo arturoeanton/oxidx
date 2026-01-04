@@ -2,22 +2,33 @@ use oxidx_core::{
     run_with_config, AppConfig, Color, ComponentState, OxidXComponent, OxidXContext, OxidXEvent,
     Rect, Renderer, Vec2,
 };
-use oxidx_std::{Button, ContextMenu, MenuEntry};
+use oxidx_std::{Button, ComboBox, ContextMenu, MenuEntry};
 
 struct DemoApp {
     button: Button,
+    combo: ComboBox,
     bounds: Rect,
 }
 
 impl DemoApp {
     fn new() -> Self {
         let mut button = Button::new().label("Right Click Me");
-        // Center button initially (layout will fix it)
         button.set_position(300.0, 250.0);
         button.set_size(200.0, 50.0);
 
+        let mut combo = ComboBox::new("my_combo")
+            .items(vec![
+                "Option 1".into(),
+                "Option 2".into(),
+                "Option 3".into(),
+            ])
+            .placeholder("Choose...");
+        combo.set_position(300.0, 150.0);
+        combo.set_size(200.0, 32.0);
+
         Self {
             button,
+            combo,
             bounds: Rect::default(),
         }
     }
@@ -26,6 +37,7 @@ impl DemoApp {
 impl OxidXComponent for DemoApp {
     fn update(&mut self, delta_time: f32) {
         self.button.update(delta_time);
+        self.combo.update(delta_time); // ComboBox no-op update but good practice
     }
 
     fn layout(&mut self, available: Rect) -> Vec2 {
@@ -39,6 +51,9 @@ impl OxidXComponent for DemoApp {
 
         self.button.layout(Rect::new(x, y, btn_w, btn_h));
 
+        // Combo above button
+        self.combo.layout(Rect::new(x, y - 60.0, btn_w, 32.0));
+
         Vec2::new(available.width, available.height)
     }
 
@@ -47,6 +62,7 @@ impl OxidXComponent for DemoApp {
         renderer.fill_rect(self.bounds, renderer.theme.background_color);
 
         self.button.render(renderer);
+        self.combo.render(renderer);
     }
 
     fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
@@ -75,6 +91,9 @@ impl OxidXComponent for DemoApp {
 
         // Main interaction (swapped order)
         if self.button.on_event(event, ctx) {
+            return true;
+        }
+        if self.combo.on_event(event, ctx) {
             return true;
         }
 
