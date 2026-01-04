@@ -225,17 +225,19 @@ pub fn run_with_config<C: OxidXComponent + 'static>(mut component: C, config: Ap
                             // Step 1: Calculate delta time
                             let delta_time = timing.update();
 
-                            // Step 2: Clear focus registry BEFORE update()
+                            // Step 2: Clear focus registry BEFORE Tick
                             // IMPORTANT TIMING: Tab events are processed BEFORE RedrawRequested,
                             // so they can use the registry from the previous frame.
-                            // We clear here so components can re-register during update().
+                            // We clear here, then dispatch Tick so components can re-register.
                             context.clear_focus_registry();
 
-                            // Step 3: Update (animations/game logic)
-                            // Components register themselves as focusable during update()
+                            // Step 3: Dispatch Tick event to let components register as focusable
+                            component.on_event(&OxidXEvent::Tick, &mut context);
+
+                            // Step 4: Update (animations/game logic)
                             component.update(delta_time);
 
-                            // Step 3: Layout pass
+                            // Step 5: Layout pass
                             let available = Rect::new(0.0, 0.0, window_size.x, window_size.y);
                             component.layout(available);
 
