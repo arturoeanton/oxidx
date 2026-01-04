@@ -94,6 +94,8 @@ fn main() {
 
 - **[Referencia API (English)](docs/DOC_API.md)** — Documentación completa en inglés
 - **[Referencia API (Español)](docs/DOC_API.es.md)** — Documentación completa de la API pública
+- **[Guía de Arquitectura](docs/ARCHITECTURE.md)** — Diseño del sistema e internos
+- **[Estado de Componentes](docs/STATUS.md)** — Seguimiento de estabilidad de componentes estándar
 
 ## 🎨 Ejemplo: Formulario de Login
 

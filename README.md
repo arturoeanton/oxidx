@@ -94,6 +94,8 @@ fn main() {
 
 - **[API Reference (English)](docs/DOC_API.md)** — Complete public API documentation
 - **[API Reference (Español)](docs/DOC_API.es.md)** — Documentación completa en español
+- **[Architecture Guide](docs/ARCHITECTURE.md)** — System design and internals
+- **[Component Status](docs/STATUS.md)** — Stability tracking for standard components
 
 ## 🎨 Example: Login Form
 

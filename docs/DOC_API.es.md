@@ -460,6 +460,10 @@ TextArea::new()
 | `with_word_wrap(b)` | Habilitar wrap |
 | `with_tab_size(n)` | Ancho de tab |
 | `read_only(b)` | Modo solo lectura |
+| `with_scrollbar_x(b)` | Mostrar barra horizontal |
+| `with_scrollbar_y(b)` | Mostrar barra vertical |
+| `with_minimap(b)` | Mostrar minimapa estilo VS Code |
+| `with_syntax_highlighting(b)`| Habilitar resaltado de sintaxis Rust |
 
 | Método | Descripción |
 |--------|-------------|
