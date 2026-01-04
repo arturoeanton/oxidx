@@ -58,3 +58,27 @@ pub fn oxidx_widget_derive(input: TokenStream) -> TokenStream {
         Err(err) => err.to_compile_error().into(),
     }
 }
+
+mod component;
+
+/// Derive macro for `OxidXComponent`.
+///
+/// Automates the implementation of the `OxidXComponent` trait by forwarding
+/// events and updates to child components marked with `#[oxidx(child)]`.
+///
+/// Requires the struct to implement `OxidXContainerLogic` for custom layout and handling.
+///
+/// # Attributes
+///
+/// - `#[oxidx(child)]` - Field is a child component.
+/// - `#[oxidx(bounds)]` - Field stores the component bounds (Rect). Default: field named "bounds".
+/// - `#[oxidx(id)]` - Field stores the component ID (String). Default: field named "id".
+#[proc_macro_derive(OxidXComponent, attributes(oxidx))]
+pub fn oxidx_component_derive(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    match component::derive_oxidx_component(input) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}

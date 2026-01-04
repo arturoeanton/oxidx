@@ -33,11 +33,11 @@ pub use split::{GutterStyle, SplitDirection, SplitView};
 pub use textarea::TextArea;
 pub use tree::{TreeItem, TreeItemStyle, TreeView};
 // Re-export derive macro
-pub use oxidx_derive::OxidXWidget;
+pub use oxidx_derive::{OxidXComponent, OxidXWidget};
 
 // Re-export core types
 pub use oxidx_core::{
     run, run_with_config, Anchor, AppConfig, Background, Border, Color, ComponentState,
-    InteractiveStyle, OxidXComponent, OxidXEvent, Rect, Renderer, Shadow, SizeConstraint, Spacing,
-    StackAlignment, Style, TextStyle, Theme, Vec2,
+    InteractiveStyle, OxidXComponent, OxidXContainerLogic, OxidXEvent, Rect, Renderer, Shadow,
+    SizeConstraint, Spacing, StackAlignment, Style, TextStyle, Theme, Vec2,
 };

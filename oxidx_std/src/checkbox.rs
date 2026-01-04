@@ -116,8 +116,8 @@ impl OxidXComponent for Checkbox {
                 self.hovered = false;
                 true
             }
-            OxidXEvent::MouseDown { .. } => {
-                if self.hovered {
+            OxidXEvent::MouseDown { position, .. } => {
+                if self.bounds.contains(*position) {
                     ctx.focus.request(&self.id);
                     self.toggle();
                     true

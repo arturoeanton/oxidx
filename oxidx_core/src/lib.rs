@@ -51,7 +51,7 @@ pub mod theme;
 
 // Re-export primary types
 pub use assets::{AssetError, AssetLoader, LoadedImage};
-pub use component::OxidXComponent;
+pub use component::{OxidXComponent, OxidXContainerLogic};
 pub use context::{ContextError, OxidXContext};
 pub use engine::{run, run_with_config, AppConfig};
 pub use events::{KeyCode, Modifiers, MouseButton, OxidXEvent};

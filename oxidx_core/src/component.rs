@@ -135,3 +135,30 @@ pub trait OxidXComponent: Send {
         0
     }
 }
+
+/// Trait for custom container logic when using `#[derive(OxidXComponent)]`.
+///
+/// Implements the specific logic for layout and rendering of a custom component,
+/// allowing the macro to handle child event forwarding automatically.
+pub trait OxidXContainerLogic {
+    /// Calculate layout for this component.
+    /// Default implementation returns zero size.
+    fn layout_content(&mut self, _available: Rect) -> Vec2 {
+        Vec2::ZERO
+    }
+
+    /// Render content before children (e.g. background).
+    fn render_background(&self, _renderer: &mut Renderer) {}
+
+    /// Render content after children (e.g. overlay, border).
+    fn render_foreground(&self, _renderer: &mut Renderer) {}
+
+    /// Handle event before children.
+    /// Return true if handled.
+    fn handle_event(&mut self, _event: &OxidXEvent, _ctx: &mut OxidXContext) -> bool {
+        false
+    }
+
+    /// Handle keyboard input (after children logic, or before? Typically custom logic handles it itself).
+    fn handle_keyboard(&mut self, _event: &OxidXEvent, _ctx: &mut OxidXContext) {}
+}
