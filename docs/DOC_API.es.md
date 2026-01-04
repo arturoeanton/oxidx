@@ -749,7 +749,93 @@ Image::new("assets/logo.png")
 | `height(h)` | Establecer alto explícito |
 | `content_mode(m)` | `Fit`, `Fill`, `Stretch` |
 
+
 ---
+
+### ProgressBar
+
+```rust
+ProgressBar::new()
+    .value(0.7)
+    .indeterminate(false)
+    .color(Color::BLUE);
+```
+
+| Builder | Descripción |
+|---------|-------------|
+| `value(f32)` | Establecer progreso (0.0 - 1.0) |
+| `indeterminate(bool)` | Habilitar estado de carga animado |
+| `color(Color)` | Establecer color de relleno |
+| `set_progress(f32)` | Actualizar valor de progreso |
+
+---
+
+### Charts
+
+Widgets de visualización de datos incluyendo gráficos de Torta, Barras y Líneas.
+
+```rust
+let data = vec![("A".to_string(), 30.0), ("B".to_string(), 70.0)];
+
+PieChart::new(data).with_size(300.0, 300.0);
+BarChart::new(data).with_size(400.0, 300.0);
+LineChart::new(data).with_size(400.0, 300.0);
+```
+
+| Builder | Descripción |
+|---------|-------------|
+| `new(data)` | Crear con `Vec<(String, f32)>` |
+| `with_size(w, h)` | Establecer tamaño explícito del gráfico |
+
+---
+
+### Calendar
+
+```rust
+Calendar::new()
+    .with_date(2025, 12, 25)
+    .on_select(|y, m, d| println!("{}-{}-{}", y, m, d));
+```
+
+| Builder | Descripción |
+|---------|-------------|
+| `with_date(y, m, d)` | Establecer fecha inicial |
+| `on_select(fn)` | Callback de selección de fecha |
+
+---
+
+### ContextMenu (Overlay)
+
+Menús de clic derecho que se renderizan sobre otro contenido.
+
+```rust
+let menu = ContextMenu::new(mouse_pos, 150.0, vec![
+    MenuEntry::new("Cortar", "cut"),
+    MenuEntry::new("Copiar", "copy"),
+]);
+ctx.add_overlay(Box::new(menu));
+```
+
+---
+
+### Componentes de Layout
+
+Estructuras de aplicación de alto nivel.
+
+**SideMenu**:
+```rust
+SideMenu::new()
+    .width(250.0)
+    .add_item(Box::new(button1))
+    .add_item(Box::new(button2));
+```
+
+**Header**:
+```rust
+Header::new()
+    .height(60.0)
+    .add_child(Box::new(logo));
+```
 
 ## Assets
 
@@ -787,14 +873,34 @@ for asset in loader.poll_completed() {
 
 ## Macros Derive
 
-### `#[derive(OxidXWidget)]`
+### `#[derive(OxidXComponent)]`
 
-Auto-implementa boilerplate para componentes personalizados.
+Auto-implementa código repetitivo para componentes personalizados, incluyendo métodos de `OxidXComponent`.
 
 ```rust
-#[derive(OxidXWidget)]
+#[derive(OxidXComponent)]
 struct MiWidget {
+    #[oxidx(id)]
+    id: String,
+    
+    #[oxidx(bounds)]
     bounds: Rect,
-    // ...
+
+    #[oxidx(child)]
+    boton: Button, // Auto-delega eventos y renderizado a hijos
+}
+
+// Implementar lógica específica (layout, renderizado custom)
+impl OxidXContainerLogic for MiWidget {
+    fn layout_content(&mut self, available: Rect) -> Vec2 {
+        // ... lógica de layout personalizada ...
+    }
 }
 ```
+
+| Atributo | Descripción |
+|----------|-------------|
+| `#[oxidx(id)]` | Marca el campo `id` |
+| `#[oxidx(bounds)]` | Marca el campo `bounds` |
+| `#[oxidx(child)]` | Marca un componente hijo para auto-propagación |
+

@@ -749,7 +749,93 @@ Image::new("assets/logo.png")
 | `height(h)` | Set explicit height |
 | `content_mode(m)` | `Fit`, `Fill`, `Stretch` |
 
+
 ---
+
+### ProgressBar
+
+```rust
+ProgressBar::new()
+    .value(0.7)
+    .indeterminate(false)
+    .color(Color::BLUE);
+```
+
+| Builder | Description |
+|---------|-------------|
+| `value(f32)` | Set progress (0.0 - 1.0) |
+| `indeterminate(bool)` | Enable animated loading state |
+| `color(Color)` | Set fill color |
+| `set_progress(f32)` | Update progress value |
+
+---
+
+### Charts
+
+Data visualization widgets including Pie, Bar, and Line charts.
+
+```rust
+let data = vec![("A".to_string(), 30.0), ("B".to_string(), 70.0)];
+
+PieChart::new(data).with_size(300.0, 300.0);
+BarChart::new(data).with_size(400.0, 300.0);
+LineChart::new(data).with_size(400.0, 300.0);
+```
+
+| Builder | Description |
+|---------|-------------|
+| `new(data)` | Create with `Vec<(String, f32)>` |
+| `with_size(w, h)` | Set explicit chart size |
+
+---
+
+### Calendar
+
+```rust
+Calendar::new()
+    .with_date(2025, 12, 25)
+    .on_select(|y, m, d| println!("{}-{}-{}", y, m, d));
+```
+
+| Builder | Description |
+|---------|-------------|
+| `with_date(y, m, d)` | Set initial date |
+| `on_select(fn)` | Date selection callback |
+
+---
+
+### ContextMenu (Overlay)
+
+Right-click menus that render above other content.
+
+```rust
+let menu = ContextMenu::new(mouse_pos, 150.0, vec![
+    MenuEntry::new("Cut", "cut"),
+    MenuEntry::new("Copy", "copy"),
+]);
+ctx.add_overlay(Box::new(menu));
+```
+
+---
+
+### Layout Components
+
+High-level application structures.
+
+**SideMenu**:
+```rust
+SideMenu::new()
+    .width(250.0)
+    .add_item(Box::new(button1))
+    .add_item(Box::new(button2));
+```
+
+**Header**:
+```rust
+Header::new()
+    .height(60.0)
+    .add_child(Box::new(logo));
+```
 
 ## Assets
 
@@ -785,16 +871,34 @@ for asset in loader.poll_completed() {
 
 ---
 
-## Derive Macros
+### `#[derive(OxidXComponent)]`
 
-### `#[derive(OxidXWidget)]`
-
-Auto-implements boilerplate for custom components.
+Auto-implements boilerplate for custom components, including `OxidXComponent` methods.
 
 ```rust
-#[derive(OxidXWidget)]
+#[derive(OxidXComponent)]
 struct MyWidget {
+    #[oxidx(id)]
+    id: String,
+    
+    #[oxidx(bounds)]
     bounds: Rect,
-    // ...
+
+    #[oxidx(child)]
+    button: Button, // Auto-delegates events and rendering to children
+}
+
+// Implement specific logic (layout, custom rendering)
+impl OxidXContainerLogic for MyWidget {
+    fn layout_content(&mut self, available: Rect) -> Vec2 {
+        // ... custom layout logic ...
+    }
 }
 ```
+
+| Attribute | Description |
+|-----------|-------------|
+| `#[oxidx(id)]` | Marks the `id` field |
+| `#[oxidx(bounds)]` | Marks the `bounds` field |
+| `#[oxidx(child)]` | Marks a child component for auto-propagation |
+

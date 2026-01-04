@@ -15,7 +15,7 @@ OxidX es un framework moderno de GUI para Rust diseñado para alto rendimiento y
   - **Integración con SO**: Soporte nativo de Portapapeles (Copiar/Pegar) y gestión de Cursor.
   - **Gestión de Focus**: Navegación centralizada con Tab y enrutamiento de focus con notificaciones basadas en eventos.
 - **Experiencia del Desarrollador (DX)**:
-  - **Macros Procedurales**: `#[derive(OxidXWidget)]` elimina el 90% del código repetitivo.
+  - **Macros Procedurales**: `#[derive(OxidXComponent)]` elimina el 90% del código repetitivo.
   - **Hot-Reload**: Modo watch recompila instantáneamente los cambios de layout.
   - **IntelliSense**: Soporte de JSON Schema para autocompletado en VS Code.
 
@@ -75,6 +75,11 @@ OxidX viene con una librería estándar pulida:
 | **ListBox** | Lista desplazable con selección simple/múltiple y virtualización |
 | **Grid** | Grilla de datos de alto rendimiento con ordenamiento y edición |
 | **Image** | Visualización de imágenes desde archivos con modos de escala (Fit, Fill, Stretch) |
+| **ProgressBar** | Indicador visual de progreso con modos determinado/iterminado |
+| **Charts** | Widgets de visualización de datos: `PieChart`, `BarChart`, `LineChart` |
+| **Calendar** | Calendario interactivo mensual para selección de fechas |
+| **ContextMenu** | Menús contextuales overlay (clic derecho) con soporte de items |
+| **SideMenu / Header** | Estructuras de alto nivel para layout de aplicaciones |
 
 ## 👩‍💻 Inicio Rápido
 
