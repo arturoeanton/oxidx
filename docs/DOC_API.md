@@ -144,6 +144,7 @@ Manages GPU context and OS integration. Passed to event handlers.
 | `MouseDown` | `button, position, modifiers` | Button pressed |
 | `MouseUp` | `button, position, modifiers` | Button released |
 | `MouseMove` | `position, delta` | Mouse moved |
+| `MouseWheel` | `delta, position` | Mouse wheel scrolled |
 | `FocusGained` | `id` | Component received focus |
 | `FocusLost` | `id` | Component lost focus |
 | `KeyDown` | `key, modifiers` | Key pressed |
@@ -501,6 +502,94 @@ zstack.add_child(Box::new(foreground));
 ```
 
 Same API as VStack/HStack.
+
+---
+
+### ScrollView
+
+Scrollable container with mouse wheel support and optional scrollbars.
+
+```rust
+let scroll = ScrollView::new(content)
+    .with_show_scrollbar_y(true)
+    .with_show_scrollbar_x(false)
+    .with_id("my_scroll");
+```
+
+| Builder | Description |
+|---------|-------------|
+| `new(content)` | Wrap child component |
+| `with_show_scrollbar_y(b)` | Show vertical scrollbar |
+| `with_show_scrollbar_x(b)` | Show horizontal scrollbar |
+| `with_scrollbar_style(s)` | Custom scrollbar style |
+
+| Method | Description |
+|--------|-------------|
+| `scroll_by(delta)` | Scroll by pixels |
+| `scroll_to(offset)` | Scroll to offset |
+| `scroll_to_top()` | Scroll to top |
+| `scroll_to_bottom()` | Scroll to bottom |
+
+---
+
+### SplitView
+
+Resizable split container with draggable gutter.
+
+```rust
+let split = SplitView::horizontal(left_panel, right_panel)
+    .with_ratio(0.3)
+    .with_min_ratio(0.1)
+    .with_max_ratio(0.9);
+
+let split = SplitView::vertical(top_panel, bottom_panel)
+    .with_ratio(0.5);
+```
+
+| Builder | Description |
+|---------|-------------|
+| `horizontal(first, second)` | Left \| Right split |
+| `vertical(first, second)` | Top \| Bottom split |
+| `with_ratio(r)` | Split ratio (0.0-1.0) |
+| `with_min_ratio(r)` | Minimum ratio |
+| `with_max_ratio(r)` | Maximum ratio |
+| `with_gutter_size(s)` | Gutter width |
+| `with_gutter_style(s)` | Custom gutter style |
+
+**SplitDirection**: `Horizontal`, `Vertical`
+
+---
+
+### TreeView / TreeItem
+
+Hierarchical tree display for file explorers and nested data.
+
+```rust
+let tree = TreeView::new()
+    .item(TreeItem::folder("📁", "src")
+        .child(TreeItem::leaf("📄", "main.rs"))
+        .child(TreeItem::leaf("📄", "lib.rs"))
+        .expanded(true))
+    .item(TreeItem::leaf("📄", "Cargo.toml"));
+```
+
+**TreeItem**:
+
+| Builder | Description |
+|---------|-------------|
+| `leaf(icon, label)` | Leaf node (no children) |
+| `folder(icon, label)` | Expandable node |
+| `child(item)` | Add child item |
+| `expanded(bool)` | Initial expand state |
+| `on_select(fn)` | Selection callback |
+| `with_style(s)` | Custom style |
+
+**TreeView**:
+
+| Builder | Description |
+|---------|-------------|
+| `new()` | Create empty tree |
+| `item(item)` | Add root item |
 
 ---
 

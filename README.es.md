@@ -65,6 +65,9 @@ OxidX viene con una librería estándar pulida:
 | **Input** | Entrada de texto de una línea con cursor, selección, portapapeles y soporte IME |
 | **TextArea** | Editor de texto multilínea con números de línea, word wrap y deshacer/rehacer |
 | **Label** | Tipografía con tamaño configurable, alineación, overflow y selección de texto |
+| **ScrollView** | Contenedor con scroll, rueda del mouse y barras de desplazamiento opcionales |
+| **SplitView** | Paneles divididos redimensionables con separador arrastrable |
+| **TreeView** | Árbol jerárquico para exploradores de archivos y datos anidados |
 
 ## 👩‍💻 Inicio Rápido
 

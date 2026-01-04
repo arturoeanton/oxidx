@@ -308,6 +308,34 @@ fn process_window_event<C: OxidXComponent>(
             );
         }
 
+        // Handle mouse wheel scrolling
+        WindowEvent::MouseWheel { delta, .. } => {
+            use winit::event::MouseScrollDelta;
+
+            let scale = ctx.scale_factor() as f32;
+
+            // Convert to logical pixels - positive Y = scroll up (content moves down)
+            let scroll_delta = match delta {
+                MouseScrollDelta::LineDelta(x, y) => {
+                    // Each line is approximately 20 logical pixels (consistent with most UI frameworks)
+                    let line_height = 20.0 * scale;
+                    Vec2::new(*x * line_height, *y * line_height)
+                }
+                MouseScrollDelta::PixelDelta(pos) => {
+                    // Already in pixels, just apply scale
+                    Vec2::new(pos.x as f32 / scale, pos.y as f32 / scale)
+                }
+            };
+
+            component.on_event(
+                &OxidXEvent::MouseWheel {
+                    delta: scroll_delta,
+                    position: input.mouse_position,
+                },
+                ctx,
+            );
+        }
+
         // Handle mouse button events - always dispatch to root
         WindowEvent::MouseInput { state, button, .. } => {
             let mouse_button = MouseButton::from(*button);

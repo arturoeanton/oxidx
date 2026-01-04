@@ -144,6 +144,7 @@ Gestiona el contexto GPU e integración con el SO. Se pasa a los manejadores de 
 | `MouseDown` | `button, position, modifiers` | Botón presionado |
 | `MouseUp` | `button, position, modifiers` | Botón liberado |
 | `MouseMove` | `position, delta` | Mouse movido |
+| `MouseWheel` | `delta, position` | Rueda del mouse |
 | `FocusGained` | `id` | Componente recibió focus |
 | `FocusLost` | `id` | Componente perdió focus |
 | `KeyDown` | `key, modifiers` | Tecla presionada |
@@ -501,6 +502,94 @@ zstack.add_child(Box::new(frente));
 ```
 
 Misma API que VStack/HStack.
+
+---
+
+### ScrollView
+
+Contenedor con scroll, soporte de rueda del mouse y barras de desplazamiento opcionales.
+
+```rust
+let scroll = ScrollView::new(contenido)
+    .with_show_scrollbar_y(true)
+    .with_show_scrollbar_x(false)
+    .with_id("mi_scroll");
+```
+
+| Builder | Descripción |
+|---------|-------------|
+| `new(content)` | Envolver componente hijo |
+| `with_show_scrollbar_y(b)` | Mostrar scrollbar vertical |
+| `with_show_scrollbar_x(b)` | Mostrar scrollbar horizontal |
+| `with_scrollbar_style(s)` | Estilo personalizado |
+
+| Método | Descripción |
+|--------|-------------|
+| `scroll_by(delta)` | Desplazar por píxeles |
+| `scroll_to(offset)` | Desplazar a offset |
+| `scroll_to_top()` | Ir al inicio |
+| `scroll_to_bottom()` | Ir al final |
+
+---
+
+### SplitView
+
+Contenedor dividido redimensionable con separador arrastrable.
+
+```rust
+let split = SplitView::horizontal(panel_izq, panel_der)
+    .with_ratio(0.3)
+    .with_min_ratio(0.1)
+    .with_max_ratio(0.9);
+
+let split = SplitView::vertical(panel_sup, panel_inf)
+    .with_ratio(0.5);
+```
+
+| Builder | Descripción |
+|---------|-------------|
+| `horizontal(first, second)` | División Izquierda \| Derecha |
+| `vertical(first, second)` | División Arriba \| Abajo |
+| `with_ratio(r)` | Proporción (0.0-1.0) |
+| `with_min_ratio(r)` | Proporción mínima |
+| `with_max_ratio(r)` | Proporción máxima |
+| `with_gutter_size(s)` | Ancho del separador |
+| `with_gutter_style(s)` | Estilo del separador |
+
+**SplitDirection**: `Horizontal`, `Vertical`
+
+---
+
+### TreeView / TreeItem
+
+Árbol jerárquico para exploradores de archivos y datos anidados.
+
+```rust
+let tree = TreeView::new()
+    .item(TreeItem::folder("📁", "src")
+        .child(TreeItem::leaf("📄", "main.rs"))
+        .child(TreeItem::leaf("📄", "lib.rs"))
+        .expanded(true))
+    .item(TreeItem::leaf("📄", "Cargo.toml"));
+```
+
+**TreeItem**:
+
+| Builder | Descripción |
+|---------|-------------|
+| `leaf(icon, label)` | Nodo hoja (sin hijos) |
+| `folder(icon, label)` | Nodo expandible |
+| `child(item)` | Añadir hijo |
+| `expanded(bool)` | Estado inicial expandido |
+| `on_select(fn)` | Callback de selección |
+| `with_style(s)` | Estilo personalizado |
+
+**TreeView**:
+
+| Builder | Descripción |
+|---------|-------------|
+| `new()` | Crear árbol vacío |
+| `item(item)` | Añadir elemento raíz |
 
 ---
 

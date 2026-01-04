@@ -22,6 +22,83 @@ use oxidx_core::OxidXContext;
 use std::cell::Cell;
 use winit::window::CursorIcon;
 
+/// Syntax theme for code highlighting.
+#[derive(Debug, Clone)]
+pub struct SyntaxTheme {
+    /// Keywords (fn, let, pub, struct, impl, use, etc.)
+    pub keyword: Color,
+    /// Strings (text inside quotes)
+    pub string: Color,
+    /// Comments (after //)
+    pub comment: Color,
+    /// Numbers (digits)
+    pub number: Color,
+    /// Normal text
+    pub normal: Color,
+    /// Types (uppercase identifiers like String, Vec, Option)
+    pub type_name: Color,
+    /// Macros (ending with !)
+    pub macro_call: Color,
+    /// Function names
+    pub function: Color,
+    /// Whether syntax highlighting is enabled
+    pub enabled: bool,
+}
+
+impl Default for SyntaxTheme {
+    fn default() -> Self {
+        Self::dark_rust()
+    }
+}
+
+impl SyntaxTheme {
+    /// VS Code Dark / Monokai-style theme for Rust
+    /// Note: syntax highlighting is disabled by default. Use with_syntax_highlighting(true) to enable.
+    pub fn dark_rust() -> Self {
+        Self {
+            keyword: Color::new(0.78, 0.47, 0.82, 1.0),   // Purple
+            string: Color::new(0.8, 0.68, 0.47, 1.0),     // Orange/Yellow
+            comment: Color::new(0.45, 0.55, 0.45, 1.0),   // Green-gray
+            number: Color::new(0.71, 0.84, 0.67, 1.0),    // Light green
+            normal: Color::new(0.85, 0.85, 0.9, 1.0),     // Light gray
+            type_name: Color::new(0.4, 0.75, 0.85, 1.0),  // Cyan
+            macro_call: Color::new(0.4, 0.75, 0.85, 1.0), // Cyan
+            function: Color::new(0.88, 0.88, 0.62, 1.0),  // Yellow
+            enabled: false,                               // Disabled by default for performance
+        }
+    }
+
+    /// No syntax highlighting
+    pub fn none() -> Self {
+        Self {
+            keyword: Color::WHITE,
+            string: Color::WHITE,
+            comment: Color::WHITE,
+            number: Color::WHITE,
+            normal: Color::WHITE,
+            type_name: Color::WHITE,
+            macro_call: Color::WHITE,
+            function: Color::WHITE,
+            enabled: false,
+        }
+    }
+}
+
+/// A text span with its color for syntax highlighting
+#[derive(Debug, Clone)]
+pub struct TextSpan {
+    pub text: String,
+    pub color: Color,
+}
+
+/// Rust keywords for syntax highlighting
+const RUST_KEYWORDS: &[&str] = &[
+    "fn", "let", "mut", "pub", "struct", "impl", "use", "mod", "crate", "super", "self", "Self",
+    "const", "static", "enum", "trait", "type", "where", "for", "while", "loop", "if", "else",
+    "match", "return", "break", "continue", "as", "in", "ref", "move", "async", "await", "dyn",
+    "unsafe", "extern", "true", "false", "Some", "None", "Ok", "Err",
+];
+
 /// Cursor position in a text document (line, column)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct CursorPosition {
@@ -77,6 +154,10 @@ pub struct TextArea {
     scroll_offset: Vec2,
     /// Number of visible lines
     visible_lines: usize,
+    /// Show horizontal scrollbar
+    show_scrollbar_x: bool,
+    /// Show vertical scrollbar
+    show_scrollbar_y: bool,
 
     // === Undo/Redo ===
     undo_stack: Vec<UndoAction>,
@@ -90,6 +171,13 @@ pub struct TextArea {
     cached_cursor_y: Cell<f32>,
     line_height: f32,
     gutter_width: f32,
+
+    // === Syntax Highlighting ===
+    syntax_theme: SyntaxTheme,
+    /// Cached tokenized lines (invalidated on text change)
+    cached_tokens: Vec<Vec<TextSpan>>,
+    /// Whether cache needs to be rebuilt
+    tokens_dirty: bool,
 }
 
 /// Action for undo/redo
@@ -163,6 +251,8 @@ impl TextArea {
             is_selecting: false,
             scroll_offset: Vec2::ZERO,
             visible_lines: 10,
+            show_scrollbar_x: false,
+            show_scrollbar_y: true,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
             ime_preedit: String::new(),
@@ -170,6 +260,9 @@ impl TextArea {
             cached_cursor_y: Cell::new(0.0),
             line_height: 20.0,
             gutter_width: 0.0,
+            syntax_theme: SyntaxTheme::dark_rust(),
+            cached_tokens: Vec::new(),
+            tokens_dirty: true,
         }
     }
 
@@ -203,9 +296,33 @@ impl TextArea {
         self
     }
 
+    /// Sets the syntax theme for code highlighting.
+    pub fn with_syntax_theme(mut self, theme: SyntaxTheme) -> Self {
+        self.syntax_theme = theme;
+        self
+    }
+
+    /// Enables syntax highlighting with the default Rust theme.
+    pub fn with_syntax_highlighting(mut self, enabled: bool) -> Self {
+        self.syntax_theme.enabled = enabled;
+        self
+    }
+
     /// Enables/disables word wrap.
     pub fn with_word_wrap(mut self, wrap: bool) -> Self {
         self.word_wrap = wrap;
+        self
+    }
+
+    /// Shows/hides the horizontal scrollbar.
+    pub fn with_scrollbar_x(mut self, show: bool) -> Self {
+        self.show_scrollbar_x = show;
+        self
+    }
+
+    /// Shows/hides the vertical scrollbar.
+    pub fn with_scrollbar_y(mut self, show: bool) -> Self {
+        self.show_scrollbar_y = show;
         self
     }
 
@@ -380,6 +497,155 @@ impl TextArea {
         self.cursor.col = self.cursor.col.min(line_len);
     }
 
+    /// Tokenizes a line of text into colored spans for syntax highlighting.
+    fn tokenize_line(&self, line: &str) -> Vec<TextSpan> {
+        if !self.syntax_theme.enabled || line.is_empty() {
+            return vec![TextSpan {
+                text: line.to_string(),
+                color: self.syntax_theme.normal,
+            }];
+        }
+
+        let mut spans = Vec::new();
+        let chars: Vec<char> = line.chars().collect();
+        let mut i = 0;
+
+        while i < chars.len() {
+            // Check for line comment
+            if i + 1 < chars.len() && chars[i] == '/' && chars[i + 1] == '/' {
+                let rest: String = chars[i..].iter().collect();
+                spans.push(TextSpan {
+                    text: rest,
+                    color: self.syntax_theme.comment,
+                });
+                break;
+            }
+
+            // Check for string literal
+            if chars[i] == '"' {
+                let start = i;
+                i += 1;
+                while i < chars.len() && chars[i] != '"' {
+                    if chars[i] == '\\' && i + 1 < chars.len() {
+                        i += 1; // Skip escaped char
+                    }
+                    i += 1;
+                }
+                if i < chars.len() {
+                    i += 1; // Include closing quote
+                }
+                let text: String = chars[start..i].iter().collect();
+                spans.push(TextSpan {
+                    text,
+                    color: self.syntax_theme.string,
+                });
+                continue;
+            }
+
+            // Check for char literal
+            if chars[i] == '\'' && i + 2 < chars.len() {
+                let start = i;
+                i += 1;
+                if chars[i] == '\\' {
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+                if i < chars.len() && chars[i] == '\'' {
+                    i += 1;
+                    let text: String = chars[start..i].iter().collect();
+                    spans.push(TextSpan {
+                        text,
+                        color: self.syntax_theme.string,
+                    });
+                    continue;
+                }
+                i = start + 1; // Not a char literal, backtrack
+            }
+
+            // Check for number
+            if chars[i].is_ascii_digit() {
+                let start = i;
+                while i < chars.len()
+                    && (chars[i].is_ascii_alphanumeric() || chars[i] == '_' || chars[i] == '.')
+                {
+                    i += 1;
+                }
+                let text: String = chars[start..i].iter().collect();
+                spans.push(TextSpan {
+                    text,
+                    color: self.syntax_theme.number,
+                });
+                continue;
+            }
+
+            // Check for identifier/keyword
+            if chars[i].is_alphabetic() || chars[i] == '_' {
+                let start = i;
+                while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '_') {
+                    i += 1;
+                }
+                let word: String = chars[start..i].iter().collect();
+
+                // Check for macro
+                if i < chars.len() && chars[i] == '!' {
+                    i += 1;
+                    let text = format!("{}!", word);
+                    spans.push(TextSpan {
+                        text,
+                        color: self.syntax_theme.macro_call,
+                    });
+                    continue;
+                }
+
+                // Check if keyword
+                let color = if RUST_KEYWORDS.contains(&word.as_str()) {
+                    self.syntax_theme.keyword
+                } else if word
+                    .chars()
+                    .next()
+                    .map(|c| c.is_uppercase())
+                    .unwrap_or(false)
+                {
+                    self.syntax_theme.type_name
+                } else {
+                    self.syntax_theme.normal
+                };
+
+                spans.push(TextSpan { text: word, color });
+                continue;
+            }
+
+            // Whitespace and other characters
+            let start = i;
+            while i < chars.len()
+                && !chars[i].is_alphanumeric()
+                && chars[i] != '_'
+                && chars[i] != '"'
+                && chars[i] != '\''
+                && chars[i] != '/'
+            {
+                i += 1;
+            }
+            if i > start {
+                let text: String = chars[start..i].iter().collect();
+                spans.push(TextSpan {
+                    text,
+                    color: self.syntax_theme.normal,
+                });
+            } else {
+                // Single char fallback
+                spans.push(TextSpan {
+                    text: chars[i].to_string(),
+                    color: self.syntax_theme.normal,
+                });
+                i += 1;
+            }
+        }
+
+        spans
+    }
+
     fn col_to_byte(&self, line: usize, col: usize) -> usize {
         if line >= self.lines.len() {
             return 0;
@@ -419,6 +685,7 @@ impl TextArea {
             text: ch.to_string(),
         });
         self.redo_stack.clear();
+        self.tokens_dirty = true; // Invalidate syntax cache
     }
 
     fn insert_text(&mut self, text: &str) {
@@ -449,6 +716,7 @@ impl TextArea {
             text: text.to_string(),
         });
         self.redo_stack.clear();
+        self.tokens_dirty = true; // Invalidate syntax cache
     }
 
     fn insert_newline(&mut self) {
@@ -906,6 +1174,15 @@ impl OxidXComponent for TextArea {
                 self.cursor_blink_timer = 0.0;
             }
         }
+
+        // Rebuild syntax highlighting cache if needed
+        if self.tokens_dirty && self.syntax_theme.enabled {
+            self.cached_tokens.clear();
+            for line in &self.lines {
+                self.cached_tokens.push(self.tokenize_line(line));
+            }
+            self.tokens_dirty = false;
+        }
     }
 
     fn layout(&mut self, available: Rect) -> Vec2 {
@@ -1026,7 +1303,7 @@ impl OxidXComponent for TextArea {
             }
         }
 
-        // 4. Draw text lines
+        // 4. Draw text lines with syntax highlighting
         let is_empty = self.lines.len() == 1 && self.lines[0].is_empty();
 
         for (i, line) in self.lines.iter().enumerate() {
@@ -1036,26 +1313,51 @@ impl OxidXComponent for TextArea {
                 continue;
             }
 
-            let display_text = if is_empty && i == 0 && !self.placeholder.is_empty() {
-                &self.placeholder
-            } else {
-                line
-            };
-
-            let mut color = self.text_style.color;
+            // Handle placeholder
             if is_empty && i == 0 && !self.placeholder.is_empty() {
+                let mut color = self.text_style.color;
                 color.a *= 0.5;
+                renderer.draw_text(
+                    &self.placeholder,
+                    Vec2::new(content_x, y),
+                    TextStyle {
+                        font_size: self.text_style.font_size,
+                        color,
+                        ..self.text_style.clone()
+                    },
+                );
+                continue;
             }
 
-            renderer.draw_text(
-                display_text,
-                Vec2::new(content_x, y),
-                TextStyle {
-                    font_size: self.text_style.font_size,
-                    color,
-                    ..self.text_style.clone()
-                },
-            );
+            // Use cached tokens for syntax highlighting (much faster!)
+            if self.syntax_theme.enabled && !line.is_empty() && i < self.cached_tokens.len() {
+                let spans = &self.cached_tokens[i];
+                let mut x = content_x;
+
+                for span in spans {
+                    renderer.draw_text(
+                        &span.text,
+                        Vec2::new(x, y),
+                        TextStyle {
+                            font_size: self.text_style.font_size,
+                            color: span.color,
+                            ..self.text_style.clone()
+                        },
+                    );
+                    x += renderer.measure_text(&span.text, self.text_style.font_size);
+                }
+            } else {
+                // Fallback: simple text rendering
+                renderer.draw_text(
+                    line,
+                    Vec2::new(content_x, y),
+                    TextStyle {
+                        font_size: self.text_style.font_size,
+                        color: self.text_style.color,
+                        ..self.text_style.clone()
+                    },
+                );
+            }
         }
 
         // 5. Draw cursor
@@ -1138,6 +1440,20 @@ impl OxidXComponent for TextArea {
                 self.is_hovered = false;
                 ctx.set_cursor_icon(CursorIcon::Default);
                 true
+            }
+            // MouseWheel: scroll the content
+            OxidXEvent::MouseWheel { delta, position } => {
+                if self.bounds.contains(*position) {
+                    // Calculate max scroll
+                    let content_height = self.lines.len() as f32 * self.line_height;
+                    let visible_height = self.bounds.height - self.layout.padding * 2.0;
+                    let max_scroll = (content_height - visible_height).max(0.0);
+
+                    // Apply scroll - delta.y is positive when scrolling down
+                    self.scroll_offset.y = (self.scroll_offset.y - delta.y).clamp(0.0, max_scroll);
+                    return true;
+                }
+                false
             }
             // FocusGained: reset cursor blink when we gain focus
             OxidXEvent::FocusGained { id } if id == &self.id => {

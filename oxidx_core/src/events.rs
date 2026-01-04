@@ -128,6 +128,10 @@ pub enum OxidXEvent {
     /// Mouse moved while over this component.
     MouseMove { position: Vec2, delta: Vec2 },
 
+    /// Mouse wheel scrolled while over this component.
+    /// Delta is in logical pixels (positive Y = scroll up/content moves down).
+    MouseWheel { delta: Vec2, position: Vec2 },
+
     /// Component gained focus. Contains the ID of the focused component.
     /// Components should check if the ID matches their own before responding.
     FocusGained { id: String },
@@ -179,6 +183,7 @@ impl OxidXEvent {
                 | OxidXEvent::MouseDown { .. }
                 | OxidXEvent::MouseUp { .. }
                 | OxidXEvent::MouseMove { .. }
+                | OxidXEvent::MouseWheel { .. }
         )
     }
 

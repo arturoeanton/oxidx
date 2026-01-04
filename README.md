@@ -65,6 +65,9 @@ OxidX comes with a polished standard library:
 | **Input** | Single-line text input with cursor, selection, clipboard, and IME support |
 | **TextArea** | Multi-line text editor with line numbers, word wrap, and undo/redo |
 | **Label** | Typography with configurable size, alignment, overflow, and text selection |
+| **ScrollView** | Scrollable container with mouse wheel and optional scrollbars |
+| **SplitView** | Resizable split panels with draggable gutter |
+| **TreeView** | Hierarchical tree display for file explorers and nested data |
 
 ## 👩‍💻 Quick Start
 

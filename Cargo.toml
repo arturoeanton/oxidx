@@ -7,7 +7,6 @@ members = [
     "oxidx_derive",
     "oxidx_cli",
     "oxidx_editor",
-    "examples/demo",
     "examples/showcase",
 ]
 
