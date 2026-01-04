@@ -159,6 +159,11 @@ pub enum OxidXEvent {
     /// IME Commit
     /// Final text committed by the IME.
     ImeCommit(String),
+
+    /// Tick event fired every frame.
+    /// Used for components to register themselves as focusable.
+    /// This is dispatched AFTER clearing the focus registry.
+    Tick,
 }
 
 impl OxidXEvent {
