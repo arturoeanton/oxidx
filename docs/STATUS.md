@@ -29,12 +29,17 @@ This document tracks the current stability and implementation status of the Oxid
 | `VStack/HStack` | 🟢 Stable | Flex layout, gap, alignment. |
 | `ZStack` | 🟢 Stable | Z-index layering. |
 | `Image` | 🟢 Stable | Texture loading, caching, and content modes. |
+| `ProgressBar` | 🟢 Stable | Determinate and indeterminate states. |
+| `SideMenu / Header` | 🟢 Stable | Layout components for app structure. |
+| `Charts` | 🟡 Beta | Pie, Bar, and Line charts (basic rendering). |
+| `Calendar` | 🟡 Beta | Month view with selection. |
+| `ContextMenu` | 🟡 Beta | Overlay-based menu system. |
 
 ## Tooling
 
 | Tool | Status | Notes |
 |------|--------|-------|
-| `oxidx_derive` | 🟢 Stable | `OxidXWidget` macro reduces boilerplate significantly. |
+| `oxidx_derive` | 🟢 Stable | `OxidXComponent` macro reduces boilerplate significantly. |
 | `oxidx_cli` | 🟡 Beta | Watch mode and Schema working, CodeGen in active development. |
 | `Hot e-load` | 🟡 Beta | Layout reloading works, logic reloading requires recompile. |
 

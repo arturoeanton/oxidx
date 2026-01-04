@@ -34,6 +34,14 @@ This crate allows the foundational types and systems needed to run an applicatio
   - Cursor icon management
   - IME (Input Method Editor) control
   - Screen scaling factors (DPI)
+  - **Global Overlay Queue**: Manages transient UI elements (menus, tooltips) that render on top of the main tree.
+
+### Overlay System
+
+OxidX implements a "Global Overlay" system to handle UI elements that must float above everything else (like Context Menus).
+- **Event Priority**: Overlays are processed *first* (in reverse order) during event handling to intercept clicks.
+- **Rendering**: Overlays are drawn *last*, bypassing parent clipping regions (`renderer.clear_clip()`).
+- **Transient Nature**: Clicking outside an overlay generally triggers a cleanup.
 
 ### The Component Trait (`OxidXComponent`)
 
@@ -69,7 +77,7 @@ A collection of production-ready widgets and containers built on top of `oxidx_c
 
 ## 3. Tooling (`oxidx_derive`, `oxidx_cli`)
 
-- **`oxidx_derive`**: Provides the `#[derive(OxidXWidget)]` macro. This macro analyzes a struct and automatically implements the boilerplate methods for `OxidXComponent` (bounds management, basic layout pass-through, etc.), allowing developers to focus on `render` and `on_event`.
+- **`oxidx_derive`**: Provides the `#[derive(OxidXComponent)]` macro. This macro analyzes a struct and automatically implements the boilerplate methods for `OxidXComponent` (bounds management, basic layout pass-through, etc.), allowing developers to focus on `render` and `on_event`.
 - **`oxidx_cli`**: A command-line tool for:
   - Hot-reloading layouts (`oxidx watch`)
   - Generating Rust code from JSON definitions (`oxidx generate`)
