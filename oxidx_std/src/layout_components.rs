@@ -74,6 +74,12 @@ impl OxidXComponent for Header {
         false
     }
 
+    fn on_keyboard_input(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) {
+        for child in &mut self.children {
+            child.on_keyboard_input(event, ctx);
+        }
+    }
+
     // Boilerplate
     fn bounds(&self) -> Rect {
         self.bounds

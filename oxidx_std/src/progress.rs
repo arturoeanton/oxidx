@@ -54,10 +54,11 @@ impl OxidXComponent for ProgressBar {
     }
 
     fn layout(&mut self, available: Rect) -> Vec2 {
-        self.bounds = available;
-        if self.bounds.height == 0.0 || self.bounds.height > 5000.0 {
-            self.bounds.height = 8.0; // Default thickless
-        }
+        // Force a standard height for progress bars, ignoring container's stretch attempt
+        let height = 10.0;
+
+        self.bounds = Rect::new(available.x, available.y, available.width, height);
+
         self.bounds.size()
     }
 
