@@ -838,6 +838,85 @@ Header::new()
     .add_child(Box::new(logo));
 ```
 
+---
+
+### CodeEditor
+
+Syntax-highlighted code editor with line numbers, minimap, and dynamic JSON-based syntax.
+
+```rust
+// Load syntax from JSON file
+let editor = CodeEditor::new()
+    .with_id("editor")
+    .with_line_numbers(true)
+    .with_tab_size(4)
+    .load_syntax_from_file("assets/syntax/rust.json")
+    .expect("Failed to load syntax")
+    .with_minimap(true)
+    .text("fn main() { }");
+
+// Or use built-in definition
+let js_editor = CodeEditor::new()
+    .with_syntax_definition(SyntaxDefinition::javascript());
+```
+
+| Builder | Description |
+|---------|-------------|
+| `with_id(id)` | Set component ID |
+| `with_line_numbers(bool)` | Show/hide line numbers |
+| `with_tab_size(n)` | Set tab width (spaces) |
+| `with_minimap(bool)` | Show code minimap |
+| `load_syntax_from_file(path)` | Load syntax from JSON |
+| `with_syntax_definition(def)` | Use built-in syntax |
+| `text(str)` | Set initial content |
+| `with_syntax_theme(theme)` | Custom syntax colors |
+
+**SyntaxDefinition JSON Format**:
+```json
+{
+  "name": "Rust",
+  "extensions": ["rs"],
+  "keywords": ["fn", "let", "mut", "pub", ...],
+  "types": ["String", "Vec", "Option", ...],
+  "comment_line": "//",
+  "string_delimiters": ["\""],
+  "comment_block_start": "/*",
+  "comment_block_end": "*/"
+}
+```
+
+---
+
+### Modal / Alert / Confirm
+
+Blocking dialog overlays for user interaction.
+
+```rust
+// Simple alert
+Alert::show(ctx, "Title", "Message text here.");
+
+// Confirmation dialog
+Confirm::show(
+    ctx,
+    "Delete Files?",
+    "This action cannot be undone.",
+    |ctx| { 
+        println!("Confirmed!");
+        ctx.remove_overlay();
+    },
+    |ctx| {
+        println!("Cancelled!");
+        ctx.remove_overlay();
+    },
+);
+```
+
+| Function | Description |
+|----------|-------------|
+| `Alert::show(ctx, title, message)` | Show blocking alert |
+| `Confirm::show(ctx, title, msg, on_ok, on_cancel)` | Show confirmation |
+| `Modal::new(content)` | Custom modal wrapper |
+
 ## Assets
 
 ### `AssetLoader`

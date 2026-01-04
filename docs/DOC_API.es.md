@@ -838,6 +838,85 @@ Header::new()
     .add_child(Box::new(logo));
 ```
 
+---
+
+### CodeEditor
+
+Editor de código con resaltado de sintaxis, números de línea, minimapa y carga dinámica de sintaxis desde JSON.
+
+```rust
+// Cargar sintaxis desde archivo JSON
+let editor = CodeEditor::new()
+    .with_id("editor")
+    .with_line_numbers(true)
+    .with_tab_size(4)
+    .load_syntax_from_file("assets/syntax/rust.json")
+    .expect("Error al cargar sintaxis")
+    .with_minimap(true)
+    .text("fn main() { }");
+
+// O usar definición incorporada
+let js_editor = CodeEditor::new()
+    .with_syntax_definition(SyntaxDefinition::javascript());
+```
+
+| Builder | Descripción |
+|---------|-------------|
+| `with_id(id)` | Establecer ID del componente |
+| `with_line_numbers(bool)` | Mostrar/ocultar números de línea |
+| `with_tab_size(n)` | Establecer ancho de tab (espacios) |
+| `with_minimap(bool)` | Mostrar minimapa de código |
+| `load_syntax_from_file(path)` | Cargar sintaxis desde JSON |
+| `with_syntax_definition(def)` | Usar sintaxis incorporada |
+| `text(str)` | Establecer contenido inicial |
+| `with_syntax_theme(theme)` | Colores de sintaxis personalizados |
+
+**Formato JSON de SyntaxDefinition**:
+```json
+{
+  "name": "Rust",
+  "extensions": ["rs"],
+  "keywords": ["fn", "let", "mut", "pub", ...],
+  "types": ["String", "Vec", "Option", ...],
+  "comment_line": "//",
+  "string_delimiters": ["\""],
+  "comment_block_start": "/*",
+  "comment_block_end": "*/"
+}
+```
+
+---
+
+### Modal / Alert / Confirm
+
+Overlays de diálogo bloqueantes para interacción con el usuario.
+
+```rust
+// Alerta simple
+Alert::show(ctx, "Título", "Texto del mensaje.");
+
+// Diálogo de confirmación
+Confirm::show(
+    ctx,
+    "¿Eliminar archivos?",
+    "Esta acción no se puede deshacer.",
+    |ctx| { 
+        println!("Confirmado!");
+        ctx.remove_overlay();
+    },
+    |ctx| {
+        println!("Cancelado!");
+        ctx.remove_overlay();
+    },
+);
+```
+
+| Función | Descripción |
+|---------|-------------|
+| `Alert::show(ctx, titulo, mensaje)` | Mostrar alerta bloqueante |
+| `Confirm::show(ctx, titulo, msg, on_ok, on_cancel)` | Mostrar confirmación |
+| `Modal::new(contenido)` | Envoltorio de modal personalizado |
+
 ## Assets
 
 ### `AssetLoader`
