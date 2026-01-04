@@ -549,6 +549,12 @@ impl Renderer {
         self.clip_stack.current()
     }
 
+    /// Clears the clip stack.
+    /// Useful before rendering overlays to ensure they are not clipped.
+    pub fn clear_clip(&mut self) {
+        self.clip_stack.clear();
+    }
+
     /// Switches rendering batch if necessary.
     fn ensure_batch(&mut self, texture_id: TextureId) {
         if let Some(current) = self.batches.last() {

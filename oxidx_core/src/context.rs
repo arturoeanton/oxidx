@@ -3,6 +3,7 @@
 //! Manages the WGPU rendering context including device, queue, and surface.
 //! Also provides access to OS integration (clipboard, cursor).
 
+use crate::component::OxidXComponent;
 use crate::events::Modifiers;
 use crate::primitives::Rect;
 use crate::renderer::Renderer;
@@ -53,6 +54,10 @@ pub struct OxidXContext {
     pub theme: Theme,
     /// Current keyboard modifiers state
     pub modifiers: Modifiers,
+    /// Queue of overlay components (rendered on top, handle events first)
+    pub overlay_queue: Vec<Box<dyn OxidXComponent>>,
+    /// Flag indicating if overlays were cleared during event processing
+    pub(crate) pending_overlay_clear: bool,
 }
 
 /// Manages focus state for components.
@@ -275,6 +280,8 @@ impl OxidXContext {
             scale_factor,
             theme: Theme::default(),
             modifiers: Modifiers::default(),
+            overlay_queue: Vec::new(),
+            pending_overlay_clear: false,
         })
     }
 
@@ -302,6 +309,8 @@ impl OxidXContext {
             scale_factor: 1.0,
             theme: Theme::default(),
             modifiers: Modifiers::default(),
+            overlay_queue: Vec::new(),
+            pending_overlay_clear: false,
         }
     }
 
@@ -474,6 +483,30 @@ impl OxidXContext {
     /// Measures text width with the given font size.
     pub fn measure_text(&mut self, text: &str, font_size: f32) -> f32 {
         self.renderer.measure_text(text, font_size)
+    }
+
+    // =========================================================================
+    // Overlays
+    // =========================================================================
+
+    /// Adds a component to the overlay queue.
+    /// Overlays are rendered on top of everything else and receive events first.
+    pub fn add_overlay(&mut self, component: Box<dyn OxidXComponent>) {
+        self.overlay_queue.push(component);
+    }
+
+    /// Clears all overlays.
+    pub fn clear_overlays(&mut self) {
+        self.overlay_queue.clear();
+        self.pending_overlay_clear = true;
+    }
+
+    /// Checks and resets the pending overlay clear flag.
+    /// Internal use only.
+    pub(crate) fn check_and_reset_overlay_clear(&mut self) -> bool {
+        let cleared = self.pending_overlay_clear;
+        self.pending_overlay_clear = false;
+        cleared
     }
 }
 

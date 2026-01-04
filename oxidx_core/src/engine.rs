@@ -247,6 +247,11 @@ pub fn run_with_config<C: OxidXComponent + 'static>(mut component: C, config: Ap
                             let available = Rect::new(0.0, 0.0, window_size.x, window_size.y);
                             component.layout(available);
 
+                            // Layout overlays
+                            for overlay in &mut context.overlay_queue {
+                                overlay.layout(available);
+                            }
+
                             // Step 7: Render
                             match render_frame(&mut context, &component, clear_color) {
                                 Ok(_) => {}
@@ -327,16 +332,57 @@ fn process_window_event<C: OxidXComponent>(
                 }
             };
 
-            component.on_event(
-                &OxidXEvent::MouseWheel {
-                    delta: scroll_delta,
-                    position: input.mouse_position,
-                },
-                ctx,
-            );
+            let mut event_handled = false;
+
+            // 1. Dispatch to overlays first (reverse order - top to bottom)
+            // We use the take-process-restore pattern to satisfy borrow checker
+            let mut overlays = std::mem::take(&mut ctx.overlay_queue);
+            ctx.check_and_reset_overlay_clear(); // Reset flag before processing
+
+            // Iterate reverse to hit topmost first
+            for overlay in overlays.iter_mut().rev() {
+                // Determine if we should filter this event
+                // Only mouse events are strictly localized to overlays usually,
+                // but for now we offer all.
+                let handled = overlay.on_event(
+                    &OxidXEvent::MouseWheel {
+                        delta: scroll_delta,
+                        position: input.mouse_position,
+                    },
+                    ctx,
+                );
+                if handled {
+                    event_handled = true;
+                    break;
+                }
+            }
+
+            // Restore overlays if not cleared
+            if !ctx.check_and_reset_overlay_clear() {
+                // Prepend old overlays (processed) to any new ones added during processing
+                // To maintain order: old...new
+                // Current ctx.overlay_queue contains NEW stuff.
+                // We want: [old_overlays] + [new_overlays]
+                let mut new_queue = overlays;
+                new_queue.append(&mut ctx.overlay_queue);
+                ctx.overlay_queue = new_queue;
+            } else {
+                // If cleared, we drop `overlays` (the old ones).
+                // `ctx.overlay_queue` contains only new ones added after clear.
+            }
+
+            if !event_handled {
+                component.on_event(
+                    &OxidXEvent::MouseWheel {
+                        delta: scroll_delta,
+                        position: input.mouse_position,
+                    },
+                    ctx,
+                );
+            }
         }
 
-        // Handle mouse button events - always dispatch to root
+        // Handle mouse button events
         WindowEvent::MouseInput { state, button, .. } => {
             let mouse_button = MouseButton::from(*button);
 
@@ -344,42 +390,166 @@ fn process_window_event<C: OxidXComponent>(
                 ElementState::Pressed => {
                     input.pressed_button = Some(mouse_button);
 
-                    // Always dispatch MouseDown to root
-                    let handled = component.on_event(
-                        &OxidXEvent::MouseDown {
-                            button: mouse_button,
-                            position: input.mouse_position,
-                            modifiers: input.modifiers,
-                        },
-                        ctx,
-                    );
+                    // 1. Dispatch to overlays first (reverse order)
+                    let mut event_handled = false;
+                    let mut overlays = std::mem::take(&mut ctx.overlay_queue);
+                    ctx.check_and_reset_overlay_clear();
 
-                    // If nothing handled the click, blur any focused component
-                    if !handled {
-                        ctx.blur();
-                    }
-                }
-                ElementState::Released => {
-                    // Always dispatch MouseUp to root
-                    component.on_event(
-                        &OxidXEvent::MouseUp {
-                            button: mouse_button,
-                            position: input.mouse_position,
-                            modifiers: input.modifiers,
-                        },
-                        ctx,
-                    );
-
-                    // Fire Click if same button that was pressed
-                    if input.pressed_button == Some(mouse_button) {
-                        component.on_event(
-                            &OxidXEvent::Click {
+                    for overlay in overlays.iter_mut().rev() {
+                        let handled = overlay.on_event(
+                            &OxidXEvent::MouseDown {
                                 button: mouse_button,
                                 position: input.mouse_position,
                                 modifiers: input.modifiers,
                             },
                             ctx,
                         );
+                        if handled {
+                            event_handled = true;
+                            break;
+                        }
+                    }
+
+                    // Restore logic
+                    if !ctx.check_and_reset_overlay_clear() {
+                        let mut new_queue = overlays;
+                        new_queue.append(&mut ctx.overlay_queue);
+                        ctx.overlay_queue = new_queue;
+                    }
+
+                    // 2. Click-outside logic
+                    // If we had overlays, but none handled the click, it's a click outside.
+                    // We should close them.
+                    // Note: If event_handled is true, we clicked ON an overlay.
+                    // If event_handled is false, we clicked on main app OR empty space.
+                    // BUT, if we *had* overlays (overlays.len() > 0) and !event_handled,
+                    // it means we clicked outside the overlays.
+                    // Wait, we need to check if we had overlays *before* restoring.
+                    // Since we just restored them (or not), we can check ctx.overlay_queue.
+                    // But effectively: if !event_handled && !ctx.overlay_queue.is_empty(),
+                    // it implies click went through.
+                    // However, we need to do this BEFORE main component handles it?
+                    // Usually "Click Outside" consumes the event or just closes overlays and lets event propagate.
+                    // Requirement: "If the user clicks anywhere else... overlay should close."
+                    // If I click a button in main app, overlay should close AND button should click.
+                    // So we do NOT stop propagation?
+                    // "If event_handled is false" -> dispatch to main.
+                    // But we should `clear_overlays` if !event_handled.
+
+                    let had_overlays = !ctx.overlay_queue.is_empty();
+
+                    if !event_handled {
+                        // Dispatch to root
+                        let root_handled = component.on_event(
+                            &OxidXEvent::MouseDown {
+                                button: mouse_button,
+                                position: input.mouse_position,
+                                modifiers: input.modifiers,
+                            },
+                            ctx,
+                        );
+
+                        // If NOT handled by overlay (obviously)
+                        // Verify if we should close overlays.
+                        // If we had overlays, and we are here, it means no overlay caught it.
+                        // So it is a click outside.
+                        if had_overlays {
+                            ctx.clear_overlays();
+                        }
+
+                        // If nothing handled the click (root or overlay), blur.
+                        if !root_handled {
+                            ctx.blur();
+                        }
+                    }
+                }
+                ElementState::Released => {
+                    // Dispatch to overlays first
+                    let mut event_handled = false;
+                    let mut overlays = std::mem::take(&mut ctx.overlay_queue);
+                    ctx.check_and_reset_overlay_clear();
+
+                    for overlay in overlays.iter_mut().rev() {
+                        let handled = overlay.on_event(
+                            &OxidXEvent::MouseUp {
+                                button: mouse_button,
+                                position: input.mouse_position,
+                                modifiers: input.modifiers,
+                            },
+                            ctx,
+                        );
+                        if handled {
+                            event_handled = true;
+                            // For MouseUp, we often want to simulate Click if applicable
+                            // But checking pressed state vs overlay is tricky if overlay changed.
+                            // Simplified: just pass Up.
+                            // Check for Click in overlay?
+                            // Standard OxidX logic handles Click in `on_event` for Up if tracking.
+                            // But we need to pass Click event too.
+                            break;
+                        }
+                    }
+
+                    // Restore
+                    if !ctx.check_and_reset_overlay_clear() {
+                        let mut new_queue = overlays;
+                        new_queue.append(&mut ctx.overlay_queue);
+                        ctx.overlay_queue = new_queue;
+                    }
+
+                    if !event_handled {
+                        // Always dispatch MouseUp to root
+                        component.on_event(
+                            &OxidXEvent::MouseUp {
+                                button: mouse_button,
+                                position: input.mouse_position,
+                                modifiers: input.modifiers,
+                            },
+                            ctx,
+                        );
+                    }
+
+                    // Fire Click if same button that was pressed
+                    if input.pressed_button == Some(mouse_button) {
+                        // Dispatch Click to overlays
+                        let mut click_handled = false;
+                        let mut overlays = std::mem::take(&mut ctx.overlay_queue);
+                        ctx.check_and_reset_overlay_clear();
+
+                        for overlay in overlays.iter_mut().rev() {
+                            let handled = overlay.on_event(
+                                &OxidXEvent::Click {
+                                    // Fix: Pass event structure, not just enum variant
+                                    button: mouse_button,
+                                    position: input.mouse_position,
+                                    modifiers: input.modifiers,
+                                },
+                                ctx,
+                            );
+                            if handled {
+                                click_handled = true;
+                                break;
+                            }
+                        }
+
+                        // Restore
+                        if !ctx.check_and_reset_overlay_clear() {
+                            let mut new_queue = overlays;
+                            new_queue.append(&mut ctx.overlay_queue);
+                            ctx.overlay_queue = new_queue;
+                        }
+
+                        if !click_handled && !event_handled {
+                            // If Up was handled, maybe Click shouldn't? Usually independent.
+                            component.on_event(
+                                &OxidXEvent::Click {
+                                    button: mouse_button,
+                                    position: input.mouse_position,
+                                    modifiers: input.modifiers,
+                                },
+                                ctx,
+                            );
+                        }
                     }
                     input.pressed_button = None;
                 }
@@ -517,6 +687,30 @@ fn render_frame<C: OxidXComponent>(
 
     // Let component render to the renderer
     component.render(&mut ctx.renderer);
+
+    // Render Overlays
+    // We want overlays to ignore the previous clip rect (usually) or at least be on top.
+    // The renderer uses a changing clip rect. We should reset it to full screen for overlays?
+    // The component render might have left a clip rect.
+    // We should assume Renderer provides a way to reset or we just set it.
+    // For now we assume overlays render on top.
+    // Since we are not batched strictly by Z yet (painter's algorithm), drawing last works.
+
+    // NOTE: We need to iterate mutable queue while using mutable renderer.
+    // Since they are disjoint fields in OxidXContext, we can do this by splitting the borrow
+    // OR just iterating. Rust 2021+ captures partial fields.
+    // But `ctx.renderer` and `ctx.overlay_queue` are fields of `ctx`.
+    // `render` needs `&mut Renderer`.
+
+    let renderer = &mut ctx.renderer;
+    let queue = &mut ctx.overlay_queue;
+
+    // Clear clip rect before overlays to ensure they float above everything
+    renderer.clear_clip();
+
+    for overlay in queue {
+        overlay.render(renderer);
+    }
 
     // End frame - flushes all draw calls
     ctx.renderer.end_frame(&mut encoder, &view, clear_color);
