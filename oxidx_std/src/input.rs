@@ -161,6 +161,18 @@ impl Input {
         self
     }
 
+    pub fn set_placeholder(&mut self, text: impl Into<String>) {
+        self.placeholder = text.into();
+    }
+
+    pub fn get_text(&self) -> &str {
+        &self.value
+    }
+
+    pub fn set_text(&mut self, text: impl Into<String>) {
+        self.set_value(text);
+    }
+
     // === Public API ===
 
     /// Returns the current text value
@@ -308,7 +320,7 @@ impl Input {
 
     /// Converts a click X position to a character index
     /// Uses the cached measurement approach for precision
-    fn click_x_to_char_index(&self, click_x: f32, renderer: &mut Renderer) -> usize {
+    fn _click_x_to_char_index(&self, click_x: f32, renderer: &mut Renderer) -> usize {
         let text_start_x = self.bounds.x + self.layout.padding;
         let relative_x = click_x - text_start_x;
 

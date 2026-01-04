@@ -207,7 +207,7 @@ impl OxidXComponent for TreeItem {
     }
 
     fn layout(&mut self, available: Rect) -> Vec2 {
-        let indent = self.indent_level as f32 * self.style.indent_size;
+        //let indent = self.indent_level as f32 * self.style.indent_size;
 
         // Header bounds
         self.header_bounds = Rect::new(

@@ -20,6 +20,13 @@ impl Rect {
         }
     }
 
+    pub const ZERO: Rect = Rect {
+        x: 0.0,
+        y: 0.0,
+        width: 0.0,
+        height: 0.0,
+    };
+
     /// Checks if a point is inside the rectangle.
     pub fn contains(&self, point: Vec2) -> bool {
         point.x >= self.x
@@ -71,6 +78,8 @@ pub struct TextStyle {
     pub color: Color,
     pub align: TextAlign,
     pub font_family: Option<String>,
+    pub bold: bool,
+    pub italic: bool,
 }
 
 impl Default for TextStyle {
@@ -80,6 +89,8 @@ impl Default for TextStyle {
             color: Color::BLACK,
             align: TextAlign::Left,
             font_family: None,
+            bold: false,
+            italic: false,
         }
     }
 }
@@ -140,6 +151,21 @@ impl Color {
             b as f32 / 255.0,
             1.0,
         ))
+    }
+
+    /// Creates a color from RGBA values (0-255).
+    pub fn rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self::new(
+            r as f32 / 255.0,
+            g as f32 / 255.0,
+            b as f32 / 255.0,
+            a as f32 / 255.0,
+        )
+    }
+
+    /// Returns a new color with the specified alpha value.
+    pub fn with_alpha(self, alpha: f32) -> Self {
+        Self { a: alpha, ..self }
     }
 
     pub fn to_array(&self) -> [f32; 4] {

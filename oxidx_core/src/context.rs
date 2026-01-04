@@ -3,8 +3,10 @@
 //! Manages the WGPU rendering context including device, queue, and surface.
 //! Also provides access to OS integration (clipboard, cursor).
 
+use crate::events::Modifiers;
 use crate::primitives::Rect;
 use crate::renderer::Renderer;
+use crate::theme::Theme;
 use std::sync::Arc;
 use thiserror::Error;
 use winit::window::{CursorIcon, Window};
@@ -47,6 +49,10 @@ pub struct OxidXContext {
     clipboard: Option<arboard::Clipboard>,
     /// Display scale factor (1.0 = normal, 2.0 = Retina)
     scale_factor: f64,
+    /// Global application theme
+    pub theme: Theme,
+    /// Current keyboard modifiers state
+    pub modifiers: Modifiers,
 }
 
 /// Manages focus state for components.
@@ -267,6 +273,8 @@ impl OxidXContext {
             window: Some(window),
             clipboard: None,
             scale_factor,
+            theme: Theme::default(),
+            modifiers: Modifiers::default(),
         })
     }
 
@@ -292,6 +300,8 @@ impl OxidXContext {
             window: None,
             clipboard: None,
             scale_factor: 1.0,
+            theme: Theme::default(),
+            modifiers: Modifiers::default(),
         }
     }
 
@@ -459,6 +469,11 @@ impl OxidXContext {
     /// Returns the current window reference.
     pub fn window(&self) -> Option<&Arc<Window>> {
         self.window.as_ref()
+    }
+
+    /// Measures text width with the given font size.
+    pub fn measure_text(&mut self, text: &str, font_size: f32) -> f32 {
+        self.renderer.measure_text(text, font_size)
     }
 }
 

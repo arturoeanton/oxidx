@@ -18,6 +18,20 @@ pub struct Theme {
     pub background_color: Color,
     /// Default text color.
     pub text_color: Color,
+
+    // New fields for extended component support
+    pub surface: Color,
+    pub surface_alt: Color,
+    pub surface_hover: Color,
+    pub border: Color,
+    pub border_hover: Color,
+    pub text: Color,
+    pub text_secondary: Color,
+    pub disabled_text: Color,
+    pub primary: Color,
+    pub on_primary: Color,
+    pub disabled_background: Color,
+    pub disabled_border: Color,
 }
 
 impl Default for Theme {
@@ -33,6 +47,20 @@ impl Theme {
         let secondary_color = Color::new(0.3, 0.3, 0.35, 1.0);
         let text_white = Color::WHITE;
         let shadow_color = Color::new(0.0, 0.0, 0.0, 0.5);
+
+        // Extended palette
+        let surface = Color::new(0.15, 0.15, 0.18, 1.0);
+        let surface_alt = Color::new(0.12, 0.12, 0.15, 1.0);
+        let surface_hover = Color::new(0.2, 0.2, 0.23, 1.0);
+        let border = Color::new(0.3, 0.3, 0.35, 1.0);
+        let border_hover = Color::new(0.4, 0.4, 0.5, 1.0);
+        let text = text_white;
+        let text_color = text_white; // Keep legacy field consistent
+        let text_secondary = Color::new(0.7, 0.7, 0.75, 1.0);
+        let disabled_text = Color::new(0.5, 0.5, 0.5, 1.0);
+        let on_primary = Color::WHITE;
+        let disabled_background = Color::new(0.2, 0.2, 0.2, 1.0);
+        let disabled_border = Color::new(0.3, 0.3, 0.3, 1.0);
 
         Self {
             primary_button: InteractiveStyle {
@@ -79,7 +107,20 @@ impl Theme {
                 .rounded(8.0)
                 .shadow(Vec2::new(0.0, 4.0), 12.0, shadow_color),
             background_color: Color::new(0.1, 0.1, 0.12, 1.0),
-            text_color: text_white,
+            text_color,
+
+            surface,
+            surface_alt,
+            surface_hover,
+            border,
+            border_hover,
+            text,
+            text_secondary,
+            disabled_text,
+            primary: primary_color,
+            on_primary,
+            disabled_background,
+            disabled_border,
         }
     }
 }

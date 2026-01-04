@@ -68,6 +68,12 @@ OxidX comes with a polished standard library:
 | **ScrollView** | Scrollable container with mouse wheel and optional scrollbars |
 | **SplitView** | Resizable split panels with draggable gutter |
 | **TreeView** | Hierarchical tree display for file explorers and nested data |
+| **Checkbox** | Two-state toggle with label and custom styling |
+| **ComboBox** | Dropdown selection with type-ahead search and filtering |
+| **RadioGroup** | Single-selection group with keyboard navigation |
+| **GroupBox** | Collapsible container with titled border |
+| **ListBox** | Scrollable list with single/multi selection and virtualization |
+| **Grid** | High-performance data grid with sorting, resizing, and editing |
 
 ## 👩‍💻 Quick Start
 

@@ -77,6 +77,7 @@ pub struct Label {
 
     // === Cached Values ===
     /// Cached measured text size
+    #[allow(dead_code)]
     cached_text_size: Cell<Vec2>,
     /// Whether cache is valid
     cache_valid: Cell<bool>,
@@ -258,7 +259,7 @@ impl Label {
     }
 
     /// Measures text and returns size.
-    fn measure_text(&self, renderer: &mut Renderer) -> Vec2 {
+    fn _measure_text(&self, renderer: &mut Renderer) -> Vec2 {
         if self.cache_valid.get() {
             return self.cached_text_size.get();
         }
@@ -306,7 +307,7 @@ impl Label {
     }
 
     /// Converts click X position to character index.
-    fn click_to_char_index(&self, click_x: f32, renderer: &mut Renderer) -> usize {
+    fn _click_to_char_index(&self, click_x: f32, renderer: &mut Renderer) -> usize {
         let text_start_x = self.bounds.x + self.layout.padding;
         let relative_x = click_x - text_start_x;
 
@@ -384,10 +385,10 @@ impl OxidXComponent for Label {
 
             let words: Vec<&str> = self.text.split_whitespace().collect();
             let mut current_line = String::new();
-            let space_width = renderer.measure_text(" ", self.style.font_size);
+            //let space_width = renderer.measure_text(" ", self.style.font_size);
 
             for word in words {
-                let word_width = renderer.measure_text(word, self.style.font_size);
+                //let word_width = renderer.measure_text(word, self.style.font_size);
                 let test_line = if current_line.is_empty() {
                     word.to_string()
                 } else {

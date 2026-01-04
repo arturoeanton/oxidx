@@ -14,6 +14,7 @@
 
 use crate::primitives::{Color, Rect, TextStyle};
 use crate::style::{Background, Style};
+use crate::theme::Theme;
 use glam::{Mat4, Vec2};
 use glyphon::cosmic_text::{
     Attrs, AttrsList, Buffer, Family, FontSystem, Metrics, Shaping, SwashCache,
@@ -111,6 +112,9 @@ pub struct Renderer {
     device: Arc<wgpu::Device>,
     queue: Arc<wgpu::Queue>,
     _surface_format: wgpu::TextureFormat,
+
+    // Global theme for rendering components
+    pub theme: Theme,
 
     // Render pipeline
     pipeline: wgpu::RenderPipeline,
@@ -331,6 +335,7 @@ impl Renderer {
             device,
             queue,
             _surface_format: surface_format,
+            theme: Theme::default(),
             pipeline,
             uniform_buffer,
             uniform_bind_group,
@@ -509,6 +514,60 @@ impl Renderer {
             ),
             color,
         );
+    }
+
+    /// Draws a line between two points.
+    pub fn draw_line(&mut self, start: Vec2, end: Vec2, color: Color, width: f32) {
+        let diff = end - start;
+        let len = diff.length();
+        if len < 0.001 {
+            return;
+        }
+
+        let normal = Vec2::new(-diff.y, diff.x).normalize() * (width / 2.0);
+        let p1 = start + normal;
+        let p2 = start - normal;
+        let p3 = end - normal;
+        let p4 = end + normal;
+
+        let base_index = self.vertices.len() as u32;
+        self.vertices.push(Vertex::new(p1.x, p1.y, color));
+        self.vertices.push(Vertex::new(p2.x, p2.y, color));
+        self.vertices.push(Vertex::new(p3.x, p3.y, color));
+        self.vertices.push(Vertex::new(p4.x, p4.y, color));
+
+        self.indices.push(base_index);
+        self.indices.push(base_index + 1);
+        self.indices.push(base_index + 2);
+        self.indices.push(base_index);
+        self.indices.push(base_index + 2);
+        self.indices.push(base_index + 3);
+    }
+
+    /// Draws a rounded rectangle.
+    ///
+    /// # Arguments
+    /// * `rect` - Rectangle bounds in pixels
+    /// * `color` - Fill color
+    /// * `radius` - Corner radius in pixels
+    /// * `border_color` - Optional border color
+    /// * `border_width` - Optional border width
+    pub fn draw_rounded_rect(
+        &mut self,
+        rect: Rect,
+        color: Color,
+        _radius: f32,
+        border_color: Option<Color>,
+        border_width: Option<f32>,
+    ) {
+        // TODO: Implement actual rounded corners using UVs or geometry
+        // For now, render as a standard rectangle
+        self.fill_rect(rect, color);
+        if let Some(bc) = border_color {
+            if let Some(bw) = border_width {
+                self.stroke_rect(rect, bc, bw);
+            }
+        }
     }
 
     /// Draws a styled rectangle (with background, border, shadow).

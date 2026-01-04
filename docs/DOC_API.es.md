@@ -593,6 +593,138 @@ let tree = TreeView::new()
 
 ---
 
+---
+
+### Checkbox
+
+```rust
+Checkbox::new("terminos")
+    .label("Acepto los términos")
+    .checked(true)
+    .on_change(|checked| println!("Marcado: {}", checked));
+```
+
+| Builder | Descripción |
+|---------|-------------|
+| `label(text)` | Texto de etiqueta |
+| `checked(bool)` | Estado inicial |
+| `indeterminate()` | Estado indeterminado |
+| `on_change(fn)` | Callback con nuevo estado |
+| `size(s)` | `Small`, `Medium`, `Large` |
+
+---
+
+### ComboBox
+
+```rust
+ComboBox::new("pais")
+    .placeholder("Seleccionar País")
+    .options(vec![
+        ComboOption::new("ar", "Argentina"),
+        ComboOption::new("mx", "México")
+    ])
+    .selected("ar")
+    .on_change(|val| println!("Seleccionado: {}", val));
+```
+
+| Builder | Descripción |
+|---------|-------------|
+| `options(vec)` | Establecer opciones |
+| `add_option(opt)` | Añadir opción individual |
+| `placeholder(text)` | Texto temporal |
+| `selected(val)` | Valor seleccionado |
+| `searchable(bool)` | Habilitar búsqueda |
+
+---
+
+### RadioGroup / RadioButton
+
+```rust
+RadioGroup::new("color")
+    .options(vec![("rojo", "Rojo"), ("azul", "Azul")])
+    .selected("rojo")
+    .layout(RadioLayout::Horizontal)
+    .on_change(|val| println!("Color: {}", val));
+```
+
+| Builder | Descripción |
+|---------|-------------|
+| `options(vec)` | Lista de tuplas (valor, etiqueta) |
+| `selected(val)` | Valor seleccionado |
+| `layout(l)` | `Horizontal` o `Vertical` |
+| `spacing(f32)` | Espaciado entre items |
+
+---
+
+### GroupBox
+
+```rust
+GroupBox::new("config")
+    .title("Configuración")
+    .collapsible(true)
+    .children(vec![
+        Box::new(checkbox),
+        Box::new(button)
+    ]);
+```
+
+| Builder | Descripción |
+|---------|-------------|
+| `title(text)` | Título del panel |
+| `collapsible(bool)` | Permitir colapsar |
+| `collapsed(bool)` | Estado inicial |
+| `children(vec)` | Componentes hijos |
+| `padding(spacing)` | Padding interno |
+
+---
+
+### ListBox
+
+```rust
+ListBox::new("archivos")
+    .items(vec![
+        ListItem::new("1", "Archivo 1"),
+        ListItem::new("2", "Archivo 2")
+    ])
+    .selection_mode(SelectionMode::Multiple)
+    .on_selection_change(|ids| println!("Seleccionados: {:?}", ids));
+```
+
+| Builder | Descripción |
+|---------|-------------|
+| `items(vec)` | Establecer elementos |
+| `selection_mode(m)` | `Single`, `Multiple`, `None` |
+| `show_checkboxes(b)` | Mostrar casillas de verificación |
+| `on_selection_change(fn)` | Callback de selección |
+
+---
+
+### Grid
+
+Grilla de datos de alto rendimiento.
+
+```rust
+Grid::new("datos")
+    .columns(vec![
+        Column::new("id", "ID").width(50.0),
+        Column::new("nombre", "Nombre").width(200.0)
+    ])
+    .rows(vec![
+        Row::new("1").cell("id", 1).cell("nombre", "Ana"),
+        Row::new("2").cell("id", 2).cell("nombre", "Beto")
+    ]);
+```
+
+| Builder | Descripción |
+|---------|-------------|
+| `columns(vec)` | Definir columnas |
+| `rows(vec)` | Establecer datos |
+| `sortable(bool)` | Habilitar ordenamiento |
+| `resizable_columns(b)` | Habilitar redimensionamiento |
+| `selection_mode(m)` | `SingleRow`, `MultiRow`, `Cell`... |
+
+---
+
 ## Assets
 
 ### `AssetLoader`

@@ -106,6 +106,7 @@ impl OxidXComponent for EditorContainer {
     }
 }
 
+#[allow(dead_code)]
 const SAMPLE_CODE: &str = r#"// Welcome to OxidX Notepad!
 // 
 // This is a multi-line text editor demo.

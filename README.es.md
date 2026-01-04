@@ -68,6 +68,12 @@ OxidX viene con una librería estándar pulida:
 | **ScrollView** | Contenedor con scroll, rueda del mouse y barras de desplazamiento opcionales |
 | **SplitView** | Paneles divididos redimensionables con separador arrastrable |
 | **TreeView** | Árbol jerárquico para exploradores de archivos y datos anidados |
+| **Checkbox** | Interruptor de dos estados con etiqueta y estilo personalizado |
+| **ComboBox** | Selección desplegable con búsqueda predictiva y filtrado |
+| **RadioGroup** | Grupo de selección única con navegación por teclado |
+| **GroupBox** | Contenedor colapsable con borde y título |
+| **ListBox** | Lista desplazable con selección simple/múltiple y virtualización |
+| **Grid** | Grilla de datos de alto rendimiento con ordenamiento y edición |
 
 ## 👩‍💻 Inicio Rápido
 

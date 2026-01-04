@@ -11,7 +11,7 @@ use oxidx_core::{AppConfig, Color, OxidXComponent, OxidXContext, OxidXEvent, Rec
 use oxidx_std::prelude::*;
 
 fn main() {
-    let theme = Theme::dark();
+    let _theme = Theme::dark();
 
     // === Create many items to scroll ===
     let mut items_stack = VStack::with_spacing(Spacing::new(0.0, 8.0));

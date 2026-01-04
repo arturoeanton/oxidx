@@ -201,6 +201,7 @@ enum UndoAction {
         position: CursorPosition,
         text: String,
     },
+    #[allow(dead_code)]
     Replace {
         position: CursorPosition,
         old_text: String,
@@ -518,7 +519,7 @@ impl TextArea {
         self.cursor_visible = true;
     }
 
-    fn clamp_cursor(&mut self) {
+    fn _clamp_cursor(&mut self) {
         self.cursor.line = self.cursor.line.min(self.lines.len().saturating_sub(1));
         let line_len = self.lines[self.cursor.line].chars().count();
         self.cursor.col = self.cursor.col.min(line_len);
@@ -964,7 +965,7 @@ impl TextArea {
         }
     }
 
-    fn page_up(&mut self, extend_selection: bool) {
+    fn _page_up(&mut self, extend_selection: bool) {
         if extend_selection && self.selection_anchor.is_none() {
             self.selection_anchor = Some(self.cursor);
         }
@@ -979,7 +980,7 @@ impl TextArea {
         }
     }
 
-    fn page_down(&mut self, extend_selection: bool) {
+    fn _page_down(&mut self, extend_selection: bool) {
         if extend_selection && self.selection_anchor.is_none() {
             self.selection_anchor = Some(self.cursor);
         }
@@ -1256,7 +1257,7 @@ impl OxidXComponent for TextArea {
         let padding = self.layout.padding;
         let content_x = self.bounds.x + padding + self.gutter_width;
         let content_y = self.bounds.y + padding;
-        let content_width = self.bounds.width - padding * 2.0 - self.gutter_width;
+        //let content_width = self.bounds.width - padding * 2.0 - self.gutter_width;
 
         // 2. Draw line numbers
         if self.show_line_numbers {
@@ -1492,11 +1493,11 @@ impl OxidXComponent for TextArea {
             let minimap_content_height = total_lines * minimap_line_height;
 
             // Calculate what portion of content is visible
-            let scale = if minimap_content_height > minimap_height {
+            /*let scale = if minimap_content_height > minimap_height {
                 minimap_height / minimap_content_height
             } else {
                 1.0
-            };
+            }; // */
 
             // Calculate minimap scroll offset to keep viewport visible
             let minimap_scroll = if minimap_content_height > minimap_height {
