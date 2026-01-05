@@ -96,62 +96,51 @@ impl StudioState {
 
     /// Exports canvas items to JSON schema compatible with oxidx_viewer
     fn export_to_json(&self) -> String {
-        // Build the children array
+        // Build the children array with absolute positioning
         let children: Vec<String> = self
             .canvas_items
             .iter()
-            .map(|item| match item.component_type.as_str() {
-                "Button" => format!(
-                    r#"{{
-                        "type": "Button",
-                        "id": "{}",
-                        "props": {{ "text": "{}" }}
-                    }}"#,
-                    item.id, item.label
-                ),
-                "Label" => format!(
-                    r#"{{
-                        "type": "Label",
-                        "id": "{}",
-                        "props": {{ "text": "{}" }}
-                    }}"#,
-                    item.id, item.label
-                ),
-                "Input" => format!(
-                    r#"{{
-                        "type": "Input",
-                        "id": "{}",
-                        "props": {{ "placeholder": "{}" }}
-                    }}"#,
-                    item.id, item.label
-                ),
-                "Checkbox" => format!(
-                    r#"{{
-                        "type": "Checkbox",
-                        "id": "{}",
-                        "props": {{ "label": "{}", "checked": false }}
-                    }}"#,
-                    item.id, item.label
-                ),
-                _ => format!(
-                    r#"{{
-                        "type": "VStack",
-                        "id": "{}",
-                        "props": {{}},
-                        "children": []
-                    }}"#,
-                    item.id
-                ),
+            .map(|item| {
+                // All components include x, y, width, height for absolute positioning
+                let base_props = format!(
+                    r#""x": {}, "y": {}, "width": {}, "height": {}"#,
+                    item.x, item.y, item.width, item.height
+                );
+                
+                match item.component_type.as_str() {
+                    "Button" => format!(
+                        r#"{{ "type": "Button", "id": "{}", "props": {{ {}, "text": "{}" }} }}"#,
+                        item.id, base_props, item.label
+                    ),
+                    "Label" => format!(
+                        r#"{{ "type": "Label", "id": "{}", "props": {{ {}, "text": "{}" }} }}"#,
+                        item.id, base_props, item.label
+                    ),
+                    "Input" => format!(
+                        r#"{{ "type": "Input", "id": "{}", "props": {{ {}, "placeholder": "{}" }} }}"#,
+                        item.id, base_props, item.label
+                    ),
+                    "Checkbox" => format!(
+                        r#"{{ "type": "Checkbox", "id": "{}", "props": {{ {}, "label": "{}", "checked": false }} }}"#,
+                        item.id, base_props, item.label
+                    ),
+                    _ => format!(
+                        r#"{{ "type": "VStack", "id": "{}", "props": {{ {} }}, "children": [] }}"#,
+                        item.id, base_props
+                    ),
+                }
             })
             .collect();
 
-        // Wrap in a VStack root
+        // Use AbsoluteCanvas as root for free-form positioning
         format!(
             r#"{{
-    "type": "VStack",
+    "type": "AbsoluteCanvas",
     "id": "root",
-    "props": {{ "spacing": 10 }},
-    "children": [{}]
+    "props": {{ "offset_x": 250, "offset_y": 0 }},
+    "children": [
+        {}
+    ]
 }}"#,
             children.join(",\n        ")
         )

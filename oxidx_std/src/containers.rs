@@ -693,3 +693,158 @@ impl oxidx_core::schema::ToSchema for ZStack {
         node
     }
 }
+
+// =============================================================================
+// AbsoluteCanvas - Free-form positioning container
+// =============================================================================
+
+/// A container that allows absolute/free-form positioning of children.
+/// Unlike VStack/HStack, this does NOT reposition children during layout.
+/// Children keep their positions as set by set_position().
+pub struct AbsoluteCanvas {
+    bounds: Rect,
+    children: Vec<Box<dyn OxidXComponent>>,
+    background: Option<Color>,
+}
+
+impl AbsoluteCanvas {
+    /// Creates a new absolute canvas.
+    pub fn new() -> Self {
+        Self {
+            bounds: Rect::default(),
+            children: Vec::new(),
+            background: None,
+        }
+    }
+
+    /// Sets the background color.
+    pub fn set_background(&mut self, color: Color) {
+        self.background = Some(color);
+    }
+
+    /// Adds a child component at its current position.
+    /// The child's position will NOT be modified during layout.
+    pub fn add_child(&mut self, child: Box<dyn OxidXComponent>) {
+        self.children.push(child);
+    }
+
+    /// Adds a child at a specific position.
+    pub fn add_child_at(&mut self, mut child: Box<dyn OxidXComponent>, x: f32, y: f32) {
+        child.set_position(x, y);
+        self.children.push(child);
+    }
+
+    /// Removes all children.
+    pub fn clear(&mut self) {
+        self.children.clear();
+    }
+}
+
+impl Default for AbsoluteCanvas {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl OxidXComponent for AbsoluteCanvas {
+    fn update(&mut self, delta_time: f32) {
+        for child in &mut self.children {
+            child.update(delta_time);
+        }
+    }
+
+    fn layout(&mut self, available: Rect) -> Vec2 {
+        self.bounds = available;
+
+        // IMPORTANT: We do NOT reposition children!
+        // They keep their absolute positions.
+        // We only call layout on each child with its own bounds.
+        for child in &mut self.children {
+            let child_bounds = child.bounds();
+            // Only call layout to let child compute its internal layout
+            // but we use the child's OWN position, not the parent's
+            child.layout(Rect::new(
+                child_bounds.x,
+                child_bounds.y,
+                child_bounds.width.max(100.0),
+                child_bounds.height.max(30.0),
+            ));
+        }
+
+        Vec2::new(available.width, available.height)
+    }
+
+    fn render(&self, renderer: &mut Renderer) {
+        if let Some(bg) = self.background {
+            renderer.fill_rect(self.bounds, bg);
+        }
+
+        for child in &self.children {
+            child.render(renderer);
+        }
+    }
+
+    fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
+        match event {
+            OxidXEvent::MouseDown { position, .. }
+            | OxidXEvent::MouseUp { position, .. }
+            | OxidXEvent::Click { position, .. }
+            | OxidXEvent::MouseMove { position, .. } => {
+                // Top-to-bottom (last added = on top)
+                for child in self.children.iter_mut().rev() {
+                    if child.bounds().contains(*position) {
+                        if child.on_event(event, ctx) {
+                            return true;
+                        }
+                    }
+                }
+                false
+            }
+            _ => {
+                let mut handled = false;
+                for child in &mut self.children {
+                    if child.on_event(event, ctx) {
+                        handled = true;
+                    }
+                }
+                handled
+            }
+        }
+    }
+
+    fn on_keyboard_input(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) {
+        for child in &mut self.children {
+            child.on_keyboard_input(event, ctx);
+        }
+    }
+
+    fn bounds(&self) -> Rect {
+        self.bounds
+    }
+
+    fn set_position(&mut self, x: f32, y: f32) {
+        // Move canvas but NOT the children (they have absolute positions)
+        self.bounds.x = x;
+        self.bounds.y = y;
+    }
+
+    fn set_size(&mut self, width: f32, height: f32) {
+        self.bounds.width = width;
+        self.bounds.height = height;
+    }
+
+    fn child_count(&self) -> usize {
+        self.children.len()
+    }
+}
+
+impl oxidx_core::schema::ToSchema for AbsoluteCanvas {
+    fn to_schema(&self) -> oxidx_core::schema::ComponentNode {
+        let mut node = oxidx_core::schema::ComponentNode::new("AbsoluteCanvas");
+        node.props.insert(
+            "child_count".to_string(),
+            serde_json::json!(self.children.len()),
+        );
+        node
+    }
+}

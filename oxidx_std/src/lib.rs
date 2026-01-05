@@ -36,7 +36,7 @@ pub use code_editor::{CodeEditor, SyntaxTheme, TextSpan};
 
 // Re-export SyntaxDefinition from oxidx_core for convenience
 pub use combobox::ComboBox;
-pub use containers::{HStack, VStack, ZStack};
+pub use containers::{AbsoluteCanvas, HStack, VStack, ZStack};
 pub use dialog::{Alert, Confirm, Modal};
 pub use grid::{Column, ColumnType, Grid, GridSelectionMode, Row};
 pub use groupbox::GroupBox;

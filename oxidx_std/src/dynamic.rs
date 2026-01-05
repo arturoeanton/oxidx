@@ -2,7 +2,10 @@
 //!
 //! Runtime factory that instantiates UI components from `ComponentNode` schemas.
 
-use crate::{BarChart, Button, HStack, Image, Input, Label, LineChart, PieChart, VStack, ZStack};
+use crate::{
+    AbsoluteCanvas, BarChart, Button, HStack, Image, Input, Label, LineChart, PieChart, VStack,
+    ZStack,
+};
 use oxidx_core::events::OxidXEvent;
 use oxidx_core::schema::ComponentNode;
 use oxidx_core::{OxidXComponent, OxidXContext, Rect, Renderer, Spacing, Vec2};
@@ -82,6 +85,7 @@ pub fn build_component_tree(node: &ComponentNode) -> Box<dyn OxidXComponent> {
         "VStack" => build_vstack(node),
         "HStack" => build_hstack(node),
         "ZStack" => build_zstack(node),
+        "AbsoluteCanvas" | "Canvas" => build_absolute_canvas(node),
         "Button" => build_button(node),
         "Label" => build_label(node),
         "Input" => build_input(node),
@@ -166,6 +170,63 @@ fn build_zstack(node: &ComponentNode) -> Box<dyn OxidXComponent> {
     // ----------------------------
 
     Box::new(stack)
+}
+
+/// Builds an AbsoluteCanvas that positions children using x,y props.
+/// This allows free-form positioning like in a design tool.
+fn build_absolute_canvas(node: &ComponentNode) -> Box<dyn OxidXComponent> {
+    eprintln!(
+        "[dynamic] Building AbsoluteCanvas with {} children",
+        node.children.len()
+    );
+
+    // Use AbsoluteCanvas - it preserves child positions during layout!
+    let mut canvas = AbsoluteCanvas::new();
+
+    // Get canvas offset for coordinate translation
+    let canvas_offset_x = node
+        .props
+        .get("offset_x")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0) as f32;
+    let canvas_offset_y = node
+        .props
+        .get("offset_y")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0) as f32;
+
+    for child in &node.children {
+        let mut component = build_component_tree(child);
+
+        // Apply x,y positioning from child's props
+        let x = child.props.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+        let y = child.props.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+        let width = child
+            .props
+            .get("width")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(120.0) as f32;
+        let height = child
+            .props
+            .get("height")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(36.0) as f32;
+
+        let final_x = x - canvas_offset_x;
+        let final_y = y - canvas_offset_y;
+
+        eprintln!(
+            "[dynamic] Positioning {} at ({}, {}) size {}x{}",
+            child.type_name, final_x, final_y, width, height
+        );
+
+        component.set_position(final_x, final_y);
+        component.set_size(width, height);
+
+        canvas.add_child(component);
+    }
+
+    Box::new(canvas)
 }
 
 // ============================================================================
