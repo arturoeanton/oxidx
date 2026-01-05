@@ -208,7 +208,7 @@ impl PropertyRow {
             value_widget: widget,
             bounds: Rect::ZERO,
             gap: 1.0,
-            key_width: 120.0, // Fixed width
+            key_width: 150.0, // Fixed width
         }
     }
 }

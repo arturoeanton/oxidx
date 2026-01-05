@@ -2186,6 +2186,8 @@ version = "0.1.0"
 dependencies = [
  "oxidx_core",
  "oxidx_std",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -7,10 +7,12 @@ use oxidx_core::{
     run_with_config, AppConfig, Color, OxidXComponent, OxidXContext, OxidXEvent, Rect, Renderer,
     TextStyle, Vec2,
 };
-use oxidx_std::{Button, ButtonVariant, Input};
 use std::fs;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
+
+pub mod panels;
+use panels::inspector::InspectorPanel;
 
 // =============================================================================
 // Color Palette (VS Code Dark Theme)
@@ -45,34 +47,34 @@ mod colors {
 /// 2. Tracking component hierarchy (children, parent).
 /// 3. Providing a disconnected data model separate from the visual `CanvasItem`.
 #[derive(Clone)]
-struct CanvasItemInfo {
-    id: String,
-    component_type: String,
-    label: String,
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    parent_id: Option<String>,        // For nested containers
-    children: Vec<CanvasItemInfo>,    // Child components (for VStack/HStack)
-    width_percent: Option<f32>,       // None = absolute, Some = % of parent (0.0-100.0)
-    height_percent: Option<f32>,      // None = absolute, Some = % of parent (0.0-100.0)
+pub struct CanvasItemInfo {
+    pub id: String,
+    pub component_type: String,
+    pub label: String,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub parent_id: Option<String>,        // For nested containers
+    pub children: Vec<CanvasItemInfo>,    // Child components (for VStack/HStack)
+    pub width_percent: Option<f32>,       // None = absolute, Some = % of parent (0.0-100.0)
+    pub height_percent: Option<f32>,      // None = absolute, Some = % of parent (0.0-100.0)
 }
 
 /// The central application state shared across all panels.
 ///
 /// This struct is wrapped in a `Arc<Mutex<StudioState>>` to allow safe concurrent access
 /// from the `InspectorPanel`, `CanvasPanel`, `ToolboxPanel`, etc.
-struct StudioState {
-    selected_id: Option<String>,
-    canvas_items: Vec<CanvasItemInfo>,
-    preview_mode: bool,
-    exported_json: String,  // JSON from CanvasPanel for preview
+pub struct StudioState {
+    pub selected_id: Option<String>,
+    pub canvas_items: Vec<CanvasItemInfo>,
+    pub preview_mode: bool,
+    pub exported_json: String,  // JSON from CanvasPanel for preview
 }
 
 impl StudioState {
     /// Creates a new, empty application state.
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             selected_id: None,
             canvas_items: Vec::new(),
@@ -81,11 +83,11 @@ impl StudioState {
         }
     }
 
-    fn select(&mut self, id: Option<String>) {
+    pub fn select(&mut self, id: Option<String>) {
         self.selected_id = id;
     }
 
-    fn get_selected_info(&self) -> Option<CanvasItemInfo> {
+    pub fn get_selected_info(&self) -> Option<CanvasItemInfo> {
         let id = self.selected_id.as_ref()?;
         self.canvas_items.iter().find(|i| &i.id == id).cloned()
     }
@@ -256,7 +258,7 @@ impl StudioState {
 }
 
 /// Type alias for thread-safe shared state.
-type SharedState = Arc<Mutex<StudioState>>;
+pub type SharedState = Arc<Mutex<StudioState>>;
 
 // =============================================================================
 // CanvasItem - Wrapper for components on the canvas (EDIT MODE)
@@ -363,6 +365,11 @@ impl CanvasItem {
         
         if let Some(info) = find_info(&state.canvas_items, &self.id) {
             self.label = info.label.clone();
+            // Sync geometry
+            self.bounds.x = info.x;
+            self.bounds.y = info.y;
+            self.bounds.width = info.width;
+            self.bounds.height = info.height;
         }
         
         // Recursively sync children
@@ -1833,279 +1840,6 @@ impl OxidXComponent for CanvasPanel {
 }
 
 // =============================================================================
-// InspectorPanel - Shows properties of selected component
-// =============================================================================
-
-/// The right-side panel showing properties of the selected component.
-///
-/// Allows editing:
-/// - Label (via Input)
-/// - Deletion (via Delete Button)
-/// - Viewing position/size/parent info.
-struct InspectorPanel {
-    bounds: Rect,
-    state: SharedState,
-    label_input: Input,
-    delete_btn: Button,
-    last_selected_id: Option<String>,  // Track selection changes
-}
-
-impl InspectorPanel {
-    /// Creates a new inspector panel.
-    fn new(state: SharedState) -> Self {
-        Self {
-            bounds: Rect::ZERO,
-            state,
-            label_input: Input::new("").with_id("inspector_label"),
-            delete_btn: Button::new().label("🗑️ Delete Component").variant(ButtonVariant::Danger),
-            last_selected_id: None,
-        }
-    }
-    
-    /// Synchronizes input fields with the state of the currently selected component.
-    ///
-    /// Checks `last_selected_id` to detect selection changes and reload data.
-    fn sync_with_selection(&mut self) {
-        let state = self.state.lock().unwrap();
-        let current_id = state.selected_id.clone();
-        
-        // Check if selection changed
-        if current_id != self.last_selected_id {
-            // Selection changed - update input with new component's label
-            if let Some(ref id) = current_id {
-                if let Some(info) = state.canvas_items.iter().find(|i| i.id == *id) {
-                    self.label_input.set_value(&info.label);
-                } else {
-                    self.label_input.set_value("");
-                }
-            } else {
-                self.label_input.set_value("");
-            }
-            drop(state);
-            self.last_selected_id = current_id;
-        }
-    }
-}
-
-impl OxidXComponent for InspectorPanel {
-    fn layout(&mut self, available: Rect) -> Vec2 {
-        // Sync input value when selection changes
-        self.sync_with_selection();
-        
-        self.bounds = available;
-
-        // Layout the label input
-        self.label_input
-            .set_position(available.x + 12.0, available.y + 100.0);
-        self.label_input.set_size(available.width - 24.0, 28.0);
-        self.label_input.layout(Rect::new(
-            available.x + 12.0,
-            available.y + 100.0,
-            available.width - 24.0,
-            28.0,
-        ));
-
-        // Layout Delete Button (at bottom)
-        let btn_height = 36.0;
-        let btn_y = available.y + available.height - btn_height - 12.0;
-        self.delete_btn.set_position(available.x + 12.0, btn_y);
-        self.delete_btn.set_size(available.width - 24.0, btn_height);
-        self.delete_btn.layout(Rect::new(
-             available.x + 12.0,
-             btn_y,
-             available.width - 24.0,
-             btn_height
-        ));
-
-        available.size()
-    }
-
-    fn render(&self, renderer: &mut Renderer) {
-        renderer.fill_rect(self.bounds, colors::PANEL_BG);
-
-        // Left border
-        renderer.fill_rect(
-            Rect::new(self.bounds.x, self.bounds.y, 1.0, self.bounds.height),
-            colors::BORDER,
-        );
-
-        // Title bar
-        let title_rect = Rect::new(self.bounds.x, self.bounds.y, self.bounds.width, 32.0);
-        renderer.fill_rect(title_rect, colors::BORDER);
-
-        renderer.draw_text(
-            "🔧 Properties",
-            Vec2::new(self.bounds.x + 12.0, self.bounds.y + 9.0),
-            TextStyle::default()
-                .with_size(13.0)
-                .with_color(colors::TEXT),
-        );
-
-        // Show selected component info
-        let state = self.state.lock().unwrap();
-        if let Some(info) = state.get_selected_info() {
-            drop(state); // Release lock before rendering
-
-            renderer.draw_text(
-                &format!("Type: {}", info.component_type),
-                Vec2::new(self.bounds.x + 12.0, self.bounds.y + 48.0),
-                TextStyle::default()
-                    .with_size(12.0)
-                    .with_color(colors::TEXT),
-            );
-
-            renderer.draw_text(
-                &format!("ID: {}", info.id),
-                Vec2::new(self.bounds.x + 12.0, self.bounds.y + 66.0),
-                TextStyle::default()
-                    .with_size(11.0)
-                    .with_color(colors::TEXT_DIM),
-            );
-
-            renderer.draw_text(
-                "Label:",
-                Vec2::new(self.bounds.x + 12.0, self.bounds.y + 88.0),
-                TextStyle::default()
-                    .with_size(11.0)
-                    .with_color(colors::TEXT_DIM),
-            );
-
-            self.label_input.render(renderer);
-
-            renderer.draw_text(
-                &format!("Position: ({:.0}, {:.0})", info.x, info.y),
-                Vec2::new(self.bounds.x + 12.0, self.bounds.y + 140.0),
-                TextStyle::default()
-                    .with_size(11.0)
-                    .with_color(colors::TEXT_DIM),
-            );
-
-            renderer.draw_text(
-                &format!("Size: {:.0} × {:.0}", info.width, info.height),
-                Vec2::new(self.bounds.x + 12.0, self.bounds.y + 158.0),
-                TextStyle::default()
-                    .with_size(11.0)
-                    .with_color(colors::TEXT_DIM),
-            );
-
-            // Parent info
-            let parent_text = match &info.parent_id {
-                Some(pid) => format!("Parent: {}", pid),
-                None => "Parent: (none - root level)".to_string(),
-            };
-            renderer.draw_text(
-                &parent_text,
-                Vec2::new(self.bounds.x + 12.0, self.bounds.y + 178.0),
-                TextStyle::default()
-                    .with_size(11.0)
-                    .with_color(colors::TEXT_DIM),
-            );
-
-            // Size Mode
-            let width_mode = match info.width_percent {
-                Some(p) => format!("{:.0}%", p),
-                None => "absolute".to_string(),
-            };
-            let height_mode = match info.height_percent {
-                Some(p) => format!("{:.0}%", p),
-                None => "absolute".to_string(),
-            };
-            renderer.draw_text(
-                &format!("Width: {} | Height: {}", width_mode, height_mode),
-                Vec2::new(self.bounds.x + 12.0, self.bounds.y + 196.0),
-                TextStyle::default()
-                    .with_size(10.0)
-                    .with_color(Color::new(0.5, 0.7, 0.9, 1.0)),
-            );
-            
-            // Render Delete Button
-            self.delete_btn.render(renderer);
-
-        } else {
-             renderer.draw_text(
-                "No component selected",
-                Vec2::new(self.bounds.x + 12.0, self.bounds.y + 48.0),
-                TextStyle::default()
-                    .with_size(12.0)
-                    .with_color(colors::TEXT_DIM),
-            );
-
-            renderer.draw_text(
-                "Click a component on the",
-                Vec2::new(self.bounds.x + 12.0, self.bounds.y + 70.0),
-                TextStyle::default()
-                    .with_size(11.0)
-                    .with_color(colors::TEXT_DIM),
-            );
-
-            renderer.draw_text(
-                "canvas to edit its properties",
-                Vec2::new(self.bounds.x + 12.0, self.bounds.y + 85.0),
-                TextStyle::default()
-                    .with_size(11.0)
-                    .with_color(colors::TEXT_DIM),
-            );
-        }
-    }
-
-    /// Handles input changes (Label) and Delete button clicks.
-    fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
-        // 1. Let Button handle its visual state (hover/press)
-        // We ignore the return value here to ensure we can check for logic ourselves, 
-        // or we check if it handled specifically what we care about.
-        self.delete_btn.on_event(event, ctx);
-
-        // 2. Handle Delete Action Explicitly
-        if let OxidXEvent::Click { position, button, .. } = event {
-            // Check if the delete button was clicked
-            if self.delete_btn.bounds().contains(*position) {
-                 use oxidx_core::events::MouseButton;
-                 if *button == MouseButton::Left {
-                     let mut state = self.state.lock().unwrap();
-                     if let Some(id) = state.selected_id.clone() {
-                         println!("🗑️ Deleting component via Inspector: {}", id);
-                         state.delete_item(&id);
-                         state.select(None); // Clear selection
-                     }
-                     return true; // We handled this action
-                 }
-            }
-        }
-
-        // 3. Forward events to input
-        let handled = self.label_input.on_event(event, ctx);
-
-        // 4. Update state from input
-        let new_text = self.label_input.value().to_string();
-        if !new_text.is_empty() {
-             let mut state = self.state.lock().unwrap();
-             // Only update if selection matches current input context essentially
-             if let Some(ref id) = state.selected_id.clone() {
-                  // Only update if text changed to avoid loop? 
-                  // For now simple sync
-                 if let Some(item) = state.canvas_items.iter_mut().find(|i| i.id == *id) {
-                     item.label = new_text;
-                 }
-             }
-        }
-        
-        handled
-    }
-
-    fn bounds(&self) -> Rect {
-        self.bounds
-    }
-
-    fn set_position(&mut self, x: f32, y: f32) {
-        self.bounds.x = x;
-        self.bounds.y = y;
-    }
-
-    fn set_size(&mut self, w: f32, h: f32) {
-        self.bounds.width = w;
-        self.bounds.height = h;
-    }
-}
 
 // =============================================================================
 // StudioStatusBar
@@ -2301,7 +2035,7 @@ impl OxidXComponent for OxideStudio {
         let main_height = available.height - status_bar_height;
 
         let left_width = 250.0;
-        let right_width = 280.0;
+        let right_width = 320.0;
         let center_width = available.width - left_width - right_width;
 
         self.left_panel

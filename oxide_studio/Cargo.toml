@@ -11,3 +11,5 @@ path = "src/main.rs"
 [dependencies]
 oxidx_core = { path = "../oxidx_core" }
 oxidx_std = { path = "../oxidx_std" }
+serde = { workspace = true, features = ["derive"] }
+serde_json = "1.0.148"
