@@ -1150,19 +1150,14 @@ impl InspectorPanel {
         
         // Check if selection changed
         if current_id != self.last_selected_id {
-            println!("🔄 SYNC: {:?} -> {:?}", self.last_selected_id, current_id);
-            
             // Selection changed - update input with new component's label
             if let Some(ref id) = current_id {
                 if let Some(info) = state.canvas_items.iter().find(|i| i.id == *id) {
-                    println!("   SYNC: Setting input to '{}'", info.label);
                     self.label_input.set_value(&info.label);
                 } else {
-                    println!("   SYNC: Item not found, setting empty");
                     self.label_input.set_value("");
                 }
             } else {
-                println!("   SYNC: No selection, setting empty");
                 self.label_input.set_value("");
             }
             drop(state);
