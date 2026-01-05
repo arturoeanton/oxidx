@@ -59,6 +59,11 @@ pub struct CanvasItemInfo {
     pub children: Vec<CanvasItemInfo>,    // Child components (for VStack/HStack)
     pub width_percent: Option<f32>,       // None = absolute, Some = % of parent (0.0-100.0)
     pub height_percent: Option<f32>,      // None = absolute, Some = % of parent (0.0-100.0)
+    // New Props
+    pub color: Option<String>,
+    pub radius: Option<f32>,
+    pub align_h: Option<String>,
+    pub align_v: Option<String>,
 }
 
 /// The central application state shared across all panels.
@@ -180,10 +185,18 @@ impl StudioState {
                 );
                 
                 match item.component_type.as_str() {
-                    "Button" => format!(
-                        r#"{{ "type": "Button", "id": "{}", "props": {{ {}, "text": "{}" }} }}"#,
-                        item.id, base_props, item.label
-                    ),
+                    "Button" => {
+                        let mut extra = String::new();
+                        if let Some(c) = &item.color { extra.push_str(&format!(", \"color\": \"{}\"", c)); }
+                        if let Some(r) = item.radius { extra.push_str(&format!(", \"radius\": {}", r)); }
+                        if let Some(h) = &item.align_h { extra.push_str(&format!(", \"align_h\": \"{}\"", h)); }
+                        if let Some(v) = &item.align_v { extra.push_str(&format!(", \"align_v\": \"{}\"", v)); }
+                        
+                        format!(
+                            r#"{{ "type": "Button", "id": "{}", "props": {{ {}, "text": "{}"{} }} }}"#,
+                            item.id, base_props, item.label, extra
+                        )
+                    },
                     "Label" => format!(
                         r#"{{ "type": "Label", "id": "{}", "props": {{ {}, "text": "{}" }} }}"#,
                         item.id, base_props, item.label
@@ -289,6 +302,11 @@ struct CanvasItem {
     original_bounds: Rect, // For resize
     state: SharedState,
     children: Vec<CanvasItem>,  // For VStack/HStack containers
+    // Cached visual props
+    color: Option<String>,
+    radius: Option<f32>,
+    align_h: Option<String>,
+    align_v: Option<String>,
 }
 
 const HANDLE_SIZE: f32 = 10.0;
@@ -311,6 +329,11 @@ impl CanvasItem {
                 children: Vec::new(),
                 width_percent: None,
                 height_percent: None,
+                // Defaults
+                color: if component_type == "Button" { Some("#4d66b3".to_string()) } else { None },
+                radius: if component_type == "Button" { Some(8.0) } else { None },
+                align_h: if component_type == "Button" { Some("Center".to_string()) } else { None },
+                align_v: if component_type == "Button" { Some("Center".to_string()) } else { None },
             });
         }
 
@@ -325,6 +348,10 @@ impl CanvasItem {
             original_bounds: bounds,
             state,
             children: Vec::new(),
+            color: if component_type == "Button" { Some("#4d66b3".to_string()) } else { None },
+            radius: if component_type == "Button" { Some(8.0) } else { None },
+            align_h: if component_type == "Button" { Some("Center".to_string()) } else { None },
+            align_v: if component_type == "Button" { Some("Center".to_string()) } else { None },
         }
     }
 
@@ -370,6 +397,11 @@ impl CanvasItem {
             self.bounds.y = info.y;
             self.bounds.width = info.width;
             self.bounds.height = info.height;
+            // Sync new props
+            self.color = info.color.clone();
+            self.radius = info.radius;
+            self.align_h = info.align_h.clone();
+            self.align_v = info.align_v.clone();
         }
         
         // Recursively sync children
@@ -448,16 +480,38 @@ impl OxidXComponent for CanvasItem {
         // Draw based on component type (all in EDIT MODE - just visual representation)
         match self.component_type.as_str() {
             "Button" => {
-                let bg = Color::new(0.3, 0.4, 0.7, alpha);
-                renderer.draw_rounded_rect(self.bounds, bg, 8.0, None, None);
+                let color_hex = self.color.as_deref().unwrap_or("#4d66b3"); // Default blue
+                let radius = self.radius.unwrap_or(8.0);
+                
+                let bg = Color::from_hex(color_hex).unwrap_or(Color::new(0.3, 0.4, 0.7, 1.0)).with_alpha(alpha);
+                
+                renderer.draw_rounded_rect(self.bounds, bg, radius, None, None);
+                
+                // Text Alignment
+                let text = &self.label;
+                let text_size = 14.0;
+                // Simple approx measurement since we don't have measure_text exposed easily here?
+                // Actually renderer has measure_text but we are inside render.
+                let measured_w = renderer.measure_text(text, text_size);
+                let measured_h = text_size; // Approx
+                
+                let x = match self.align_h.as_deref().unwrap_or("Center") {
+                    "Left" => self.bounds.x + 10.0,
+                    "Right" => self.bounds.x + self.bounds.width - measured_w - 10.0,
+                    _ => self.bounds.x + (self.bounds.width - measured_w) / 2.0,
+                };
+                
+                let y = match self.align_v.as_deref().unwrap_or("Center") {
+                    "Top" => self.bounds.y + 10.0,
+                    "Bottom" => self.bounds.y + self.bounds.height - measured_h - 10.0,
+                    _ => self.bounds.y + (self.bounds.height - measured_h) / 2.0,
+                };
+
                 renderer.draw_text(
-                    &self.label,
-                    Vec2::new(
-                        self.bounds.x + self.bounds.width / 2.0 - 30.0,
-                        self.bounds.y + 10.0,
-                    ),
+                    text,
+                    Vec2::new(x, y),
                     TextStyle::default()
-                        .with_size(14.0)
+                        .with_size(text_size)
                         .with_color(Color::WHITE.with_alpha(alpha)),
                 );
             }

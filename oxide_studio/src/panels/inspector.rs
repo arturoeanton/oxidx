@@ -67,6 +67,26 @@ impl InspectorPanel {
                                                 item.y = n as f32;
                                             }
                                         }
+                                        "color" => {
+                                            if let Some(s) = value.as_str() {
+                                                item.color = Some(s.to_string());
+                                            }
+                                        }
+                                        "radius" => {
+                                            if let Some(n) = value.as_f64() {
+                                                item.radius = Some(n as f32);
+                                            }
+                                        }
+                                        "align_h" => {
+                                            if let Some(s) = value.as_str() {
+                                                item.align_h = Some(s.to_string());
+                                            }
+                                        }
+                                        "align_v" => {
+                                            if let Some(s) = value.as_str() {
+                                                item.align_v = Some(s.to_string());
+                                            }
+                                        }
                                         _ => {}
                                     }
                                     return;
@@ -92,7 +112,7 @@ impl InspectorPanel {
 
     /// Convert CanvasItemInfo to props for PropertyGrid
     fn get_item_props(info: &CanvasItemInfo) -> serde_json::Value {
-        json!({
+        let mut props = json!({
             "id": info.id,
             "type": info.component_type,
             "label": info.label,
@@ -100,7 +120,23 @@ impl InspectorPanel {
             "y": info.y,
             "width": info.width,
             "height": info.height,
-        })
+        });
+
+        if let Some(obj) = props.as_object_mut() {
+            if let Some(c) = &info.color {
+                obj.insert("color".to_string(), json!(c));
+            }
+            if let Some(r) = info.radius {
+                obj.insert("radius".to_string(), json!(r));
+            }
+            if let Some(h) = &info.align_h {
+                obj.insert("align_h".to_string(), json!(h));
+            }
+            if let Some(v) = &info.align_v {
+                obj.insert("align_v".to_string(), json!(v));
+            }
+        }
+        props
     }
 
     /// Synchronizes the PropertyGrid with the state of the currently selected component.
