@@ -304,9 +304,53 @@ impl CanvasItem {
     }
 
     fn sync_from_state(&mut self) {
-        let st = self.state.lock().unwrap();
-        if let Some(info) = st.canvas_items.iter().find(|i| i.id == self.id) {
+        let state = self.state.lock().unwrap();
+        
+        // Helper to find info recursively
+        fn find_info<'a>(items: &'a [CanvasItemInfo], target_id: &str) -> Option<&'a CanvasItemInfo> {
+            for item in items {
+                if item.id == target_id {
+                    return Some(item);
+                }
+                if let Some(found) = find_info(&item.children, target_id) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+        
+        if let Some(info) = find_info(&state.canvas_items, &self.id) {
             self.label = info.label.clone();
+        }
+        
+        // Recursively sync children
+        for child in &mut self.children {
+            child.sync_from_state();
+        }
+    }
+
+    fn sync_children_deletion(&mut self, state: &StudioState) {
+        self.children.retain(|child| {
+             fn find_info<'a>(items: &'a [CanvasItemInfo], target_id: &str) -> Option<&'a CanvasItemInfo> {
+                for item in items {
+                    if item.id == target_id {
+                        return Some(item);
+                    }
+                    if let Some(found) = find_info(&item.children, target_id) {
+                        return Some(found);
+                    }
+                }
+                None
+            }
+            
+            if let Some(parent_info) = find_info(&state.canvas_items, &self.id) {
+                return parent_info.children.iter().any(|c| c.id == child.id);
+            }
+            true 
+        });
+        
+        for child in &mut self.children {
+            child.sync_children_deletion(state);
         }
     }
 
@@ -446,7 +490,7 @@ impl OxidXComponent for CanvasItem {
                     
                     // Render child at calculated position
                     // We need to temporarily set bounds for rendering
-                    let mut temp_child = Rect::new(
+                    let temp_child = Rect::new(
                         child_x,
                         child_y,
                         child.bounds.width,
@@ -1570,6 +1614,37 @@ impl OxidXComponent for CanvasPanel {
     }
 
     fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
+        // Garbage Collection: Remove items not in state
+        // This is necessary because delete operations might happen from other panels (Inspector, Context Menu)
+        // and CanvasPanel needs to reflect those changes.
+        {
+            let state = self.state.lock().unwrap();
+            self.items.retain(|item| {
+                // Check if item exists in state (recursively checking children is handled by their own logic ideally, 
+                // but here we check top-level consistency first)
+                // Note: deeply nested items might need more complex sync if we don't rebuild tree.
+                // For now, assuming top-level items or that state deletion handles hierarchy.
+                // Actually, if we delete a parent, state removes it.
+                // If we delete a child, state removes it from parent's children list.
+                
+                // We need to check if this item ID exists in the flat state list OR nested?
+                // StudioState seems to have a flat list `canvas_items`?
+                // Let's check StudioState structure.
+                // Based on `delete_item` logic, it modifies `canvas_items`.
+                
+                let exists = state.canvas_items.iter().any(|i| i.id == item.id);
+                // Also need to handle children if this item is a container?
+                // For now let's just sync top level and rely on rebuild?
+                // No, CanvasItem holds its own children.
+                exists
+            });
+            
+            // Also garbage collect children of items
+             for item in &mut self.items {
+                 item.sync_children_deletion(&state);
+             }
+        }
+
         // Sync items from state (for label updates from inspector)
         for item in &mut self.items {
             item.sync_from_state();
