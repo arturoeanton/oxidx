@@ -113,6 +113,11 @@ impl TextStyle {
         self
     }
 
+    pub fn with_align(mut self, align: TextAlign) -> Self {
+        self.align = align;
+        self
+    }
+
     /// Set the font family name (must be loaded via `renderer.load_font()` first).
     ///
     /// # Example

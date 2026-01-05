@@ -70,5 +70,8 @@ pub use oxidx_derive::{OxidXComponent, OxidXWidget};
 pub use oxidx_core::{
     run, run_with_config, Anchor, AppConfig, Background, Border, Color, ComponentState,
     InteractiveStyle, OxidXComponent, OxidXContainerLogic, OxidXEvent, Rect, Renderer, Shadow,
-    SizeConstraint, Spacing, StackAlignment, Style, TextStyle, Theme, Vec2,
+    Vec2,
 };
+
+pub mod property_grid;
+pub use property_grid::PropertyGrid;
