@@ -881,6 +881,7 @@ impl CanvasPanel {
         };
 
         let bounds = Rect::new(position.x, position.y, width, height);
+        println!("📝 Creating {} with id='{}' label='{}'", component_type, id, label);
         let item = CanvasItem::new(&id, component_type, &label, bounds, Arc::clone(&self.state));
 
         println!("✨ Created {} at {:?}", component_type, position);
@@ -1130,6 +1131,7 @@ struct InspectorPanel {
     bounds: Rect,
     state: SharedState,
     label_input: Input,
+    last_selected_id: Option<String>,  // Track selection changes
 }
 
 impl InspectorPanel {
@@ -1138,12 +1140,47 @@ impl InspectorPanel {
             bounds: Rect::ZERO,
             state,
             label_input: Input::new("").with_id("inspector_label"),
+            last_selected_id: None,
+        }
+    }
+    
+    /// Sync input value when selection changes
+    fn sync_with_selection(&mut self) {
+        let state = self.state.lock().unwrap();
+        let current_id = state.selected_id.clone();
+        
+        // Check if selection changed
+        if current_id != self.last_selected_id {
+            println!("🔄 Selection changed: {:?} -> {:?}", self.last_selected_id, current_id);
+            println!("   canvas_items count: {}", state.canvas_items.len());
+            
+            // Selection changed - update input with new component's label
+            if let Some(ref id) = current_id {
+                if let Some(info) = state.canvas_items.iter().find(|i| i.id == *id) {
+                    println!("   Found item: {} with label '{}'", info.id, info.label);
+                    self.label_input.set_value(&info.label);
+                } else {
+                    println!("   ⚠️ Item not found in canvas_items!");
+                    // List all items for debugging
+                    for item in &state.canvas_items {
+                        println!("      - {} ({})", item.id, item.label);
+                    }
+                    self.label_input.set_value("");
+                }
+            } else {
+                self.label_input.set_value("");
+            }
+            drop(state);
+            self.last_selected_id = current_id;
         }
     }
 }
 
 impl OxidXComponent for InspectorPanel {
     fn layout(&mut self, available: Rect) -> Vec2 {
+        // Sync input value when selection changes
+        self.sync_with_selection();
+        
         self.bounds = available;
 
         // Layout the label input
@@ -1288,13 +1325,15 @@ impl OxidXComponent for InspectorPanel {
         // Forward events to input
         let handled = self.label_input.on_event(event, ctx);
 
-        // Update state when input changes
+        // Only update state when input has content (avoid overwriting with empty on selection change)
         let new_text = self.label_input.value().to_string();
-        let state = self.state.lock().unwrap();
-        if let Some(id) = state.selected_id.clone() {
-            drop(state);
-            let mut state = self.state.lock().unwrap();
-            state.update_label(&id, new_text);
+        if !new_text.is_empty() {
+            let state = self.state.lock().unwrap();
+            if let Some(id) = state.selected_id.clone() {
+                drop(state);
+                let mut state = self.state.lock().unwrap();
+                state.update_label(&id, new_text);
+            }
         }
 
         handled
@@ -1303,13 +1342,15 @@ impl OxidXComponent for InspectorPanel {
         // Propagate keyboard events to the input
         self.label_input.on_keyboard_input(event, ctx);
 
-        // Update state when input changes
+        // Only update state when input has content
         let new_text = self.label_input.value().to_string();
-        if let Ok(state) = self.state.lock() {
-            if let Some(id) = state.selected_id.clone() {
-                drop(state);
-                if let Ok(mut state) = self.state.lock() {
-                    state.update_label(&id, new_text);
+        if !new_text.is_empty() {
+            if let Ok(state) = self.state.lock() {
+                if let Some(id) = state.selected_id.clone() {
+                    drop(state);
+                    if let Ok(mut state) = self.state.lock() {
+                        state.update_label(&id, new_text);
+                    }
                 }
             }
         }
