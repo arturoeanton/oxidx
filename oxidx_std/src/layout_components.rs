@@ -6,6 +6,10 @@ use oxidx_core::primitives::Rect;
 use oxidx_core::renderer::Renderer;
 
 // --- Header ---
+/// A generic header component for application layouts.
+///
+/// Typically placed at the top of a `VStack`.
+/// Supports adding child components (buttons, labels) which are laid out horizontally.
 pub struct Header {
     bounds: Rect,
     height: f32,
@@ -95,6 +99,10 @@ impl OxidXComponent for Header {
 }
 
 // --- Footer ---
+/// A generic footer component.
+///
+/// Typically placed at the bottom of a layout.
+/// Displays centered text.
 pub struct Footer {
     bounds: Rect,
     height: f32,
@@ -165,6 +173,10 @@ impl OxidXComponent for Footer {
 }
 
 // --- SideMenu ---
+/// A vertical side menu component.
+///
+/// Typically placed on the left side of a `HStack` or `SplitView`.
+/// Lays out items vertically.
 pub struct SideMenu {
     bounds: Rect,
     width: f32,

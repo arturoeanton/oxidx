@@ -142,6 +142,9 @@ impl OxidXComponent for MenuEntry {
 }
 
 /// A context menu container.
+///
+/// Displays a floating list of `MenuEntry` items.
+/// Typically shown via `ctx.add_overlay()` at the mouse position.
 #[derive(Debug)]
 pub struct ContextMenu {
     entries: Vec<MenuEntry>,

@@ -16,6 +16,9 @@ use std::sync::{Arc, Mutex};
 // Color Palette (VS Code Dark Theme)
 // =============================================================================
 
+/// # Color Palette
+///
+/// Defines the application-wide color scheme, using a VS Code Dark Theme aesthetic.
 mod colors {
     use oxidx_core::Color;
 
@@ -35,6 +38,12 @@ mod colors {
 // Shared Studio State
 // =============================================================================
 
+/// Represents the serializable state of a component on the canvas.
+///
+/// This struct is used for:
+/// 1. Saving/Loading project state (JSON serialization).
+/// 2. Tracking component hierarchy (children, parent).
+/// 3. Providing a disconnected data model separate from the visual `CanvasItem`.
 #[derive(Clone)]
 struct CanvasItemInfo {
     id: String,
@@ -50,6 +59,10 @@ struct CanvasItemInfo {
     height_percent: Option<f32>,      // None = absolute, Some = % of parent (0.0-100.0)
 }
 
+/// The central application state shared across all panels.
+///
+/// This struct is wrapped in a `Arc<Mutex<StudioState>>` to allow safe concurrent access
+/// from the `InspectorPanel`, `CanvasPanel`, `ToolboxPanel`, etc.
 struct StudioState {
     selected_id: Option<String>,
     canvas_items: Vec<CanvasItemInfo>,
@@ -58,6 +71,7 @@ struct StudioState {
 }
 
 impl StudioState {
+    /// Creates a new, empty application state.
     fn new() -> Self {
         Self {
             selected_id: None,
@@ -76,19 +90,27 @@ impl StudioState {
         self.canvas_items.iter().find(|i| &i.id == id).cloned()
     }
 
-    fn update_label(&mut self, id: &str, new_label: String) {
-        if let Some(item) = self.canvas_items.iter_mut().find(|i| i.id == id) {
-            item.label = new_label;
-        }
-    }
+    // /// Updates the text label of a component by ID.
+    // #[allow(dead_code)]
+    // fn update_label(&mut self, id: &str, new_label: String) {
+    //     if let Some(item) = self.canvas_items.iter_mut().find(|i| i.id == id) {
+    //         item.label = new_label;
+    //     }
+    // }
+    //
+    // /// Updates the size (width/height) of a component by ID.
+    // #[allow(dead_code)]
+    // fn update_size(&mut self, id: &str, width: f32, height: f32) {
+    //     if let Some(item) = self.canvas_items.iter_mut().find(|i| i.id == id) {
+    //         item.width = width;
+    //         item.height = height;
+    //     }
+    // }
 
-    fn update_size(&mut self, id: &str, width: f32, height: f32) {
-        if let Some(item) = self.canvas_items.iter_mut().find(|i| i.id == id) {
-            item.width = width;
-            item.height = height;
-        }
-    }
-
+    /// Toggles "Preview Mode".
+    ///
+    /// - **OFF**: Edit mode (selection, dragging, inspectors).
+    /// - **ON**: Interaction mode (components behave like real UI).
     fn toggle_preview(&mut self) {
         self.preview_mode = !self.preview_mode;
         if self.preview_mode {
@@ -100,6 +122,7 @@ impl StudioState {
         );
     }
 
+    /// Deletes an item by ID, handling selection state.
     fn delete_item(&mut self, id: &str) {
         // If the deleted item was selected, deselect it
         if self.selected_id.as_deref() == Some(id) {
@@ -110,6 +133,7 @@ impl StudioState {
         self.remove_recursive(id);
     }
 
+    /// Recursively removes an item and all its children from the state.
     fn remove_recursive(&mut self, id: &str) {
         // Try to remove from top level
         if let Some(pos) = self.canvas_items.iter().position(|i| i.id == id) {
@@ -123,6 +147,7 @@ impl StudioState {
         }
     }
 
+    /// Helper to remove an item from a list of children recursively.
     fn remove_from_children(children: &mut Vec<CanvasItemInfo>, id: &str) -> bool {
         if let Some(pos) = children.iter().position(|i| i.id == id) {
             children.remove(pos);
@@ -137,7 +162,9 @@ impl StudioState {
         false
     }
 
-    /// Exports canvas items to JSON schema compatible with oxidx_viewer
+    /// Serializes the current canvas state to a JSON string.
+    ///
+    /// This JSON schema is compatible with `oxidx_viewer` and the `dynamic` module.
     fn export_to_json(&self) -> String {
         // Build the children array with absolute positioning
         let children: Vec<String> = self
@@ -189,7 +216,7 @@ impl StudioState {
         )
     }
 
-    /// Export to file and launch oxidx_viewer
+    /// Writes the current state to a temp file and launches `oxidx_viewer`.
     fn launch_preview(&self) -> Result<(), String> {
         // Use exported_json from CanvasPanel (set before calling this)
         let json = if self.exported_json.is_empty() {
@@ -228,12 +255,14 @@ impl StudioState {
     }
 }
 
+/// Type alias for thread-safe shared state.
 type SharedState = Arc<Mutex<StudioState>>;
 
 // =============================================================================
 // CanvasItem - Wrapper for components on the canvas (EDIT MODE)
 // =============================================================================
 
+/// Defines the current interaction mode for a component.
 #[derive(Clone, Copy, PartialEq)]
 enum DragMode {
     None,
@@ -241,6 +270,12 @@ enum DragMode {
     ResizeBR, // Bottom-Right resize
 }
 
+/// A visual wrapper for a component on the design canvas.
+///
+/// Wraps the actual internal state (via `SharedState`) and provides handles for:
+/// - Selection (colored border)
+/// - Dragging (movement)
+/// - Resizing (corner handle)
 struct CanvasItem {
     id: String,
     component_type: String,
@@ -257,6 +292,7 @@ struct CanvasItem {
 const HANDLE_SIZE: f32 = 10.0;
 
 impl CanvasItem {
+    /// Creates a new visual item and registers it in the shared state.
     fn new(id: &str, component_type: &str, label: &str, bounds: Rect, state: SharedState) -> Self {
         // Register in shared state
         {
@@ -290,19 +326,25 @@ impl CanvasItem {
         }
     }
 
+    /// Returns true if this component can hold children (e.g., VStack, HStack).
     fn is_container(&self) -> bool {
         matches!(self.component_type.as_str(), "VStack" | "HStack")
     }
 
+    /// Adds a child item to this container.
     fn add_child(&mut self, child: CanvasItem) {
         self.children.push(child);
     }
 
+    /// Checks if this item is currently selected in the global state.
     fn is_selected(&self) -> bool {
         let st = self.state.lock().unwrap();
         st.selected_id.as_ref() == Some(&self.id)
     }
 
+    /// Synchronizes visual properties (label, etc.) from the shared state.
+    ///
+    /// Call this before rendering to ensure the item reflects Inspector changes.
     fn sync_from_state(&mut self) {
         let state = self.state.lock().unwrap();
         
@@ -329,6 +371,9 @@ impl CanvasItem {
         }
     }
 
+    /// Recursively removes children that have been deleted from the state.
+    ///
+    /// This performs "Garbage Collection" to keep the visual tree in sync with the data model.
     fn sync_children_deletion(&mut self, state: &StudioState) {
         self.children.retain(|child| {
              fn find_info<'a>(items: &'a [CanvasItemInfo], target_id: &str) -> Option<&'a CanvasItemInfo> {
@@ -354,6 +399,9 @@ impl CanvasItem {
         }
     }
 
+    /// Writes current bounds (position/size) back to the shared state.
+    ///
+    /// Call this after dragging or resizing.
     fn update_state(&self) {
         if let Ok(mut st) = self.state.lock() {
             if let Some(info) = st.canvas_items.iter_mut().find(|i| i.id == self.id) {
@@ -365,6 +413,7 @@ impl CanvasItem {
         }
     }
 
+    /// Returns the hit-rect for the bottom-right resize handle.
     fn br_handle_rect(&self) -> Rect {
         Rect::new(
             self.bounds.x + self.bounds.width - HANDLE_SIZE,
@@ -380,6 +429,10 @@ impl CanvasItem {
 }
 
 impl OxidXComponent for CanvasItem {
+    /// Renders the component in "Edit Mode".
+    ///
+    /// Instead of rendering the actual UI widget, this draws a representation
+    /// suitable for the designer (e.g., dashed outlines for containers, drag handles).
     fn render(&self, renderer: &mut Renderer) {
         let is_selected = self.is_selected();
         let is_dragging = self.drag_mode != DragMode::None;
@@ -935,6 +988,11 @@ impl OxidXComponent for CanvasItem {
         }
     }
 
+    /// Handles user interaction events for the canvas item.
+    ///
+    /// - **Move**: Hover updates.
+    /// - **MouseDown**: Selection (exclusive) and drag initiation (move/resize).
+    /// - **MouseUp**: Right-click context menu, end drag/resize.
     fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
         // Skip event handling in preview mode
         if self.is_preview_mode() {
@@ -1049,6 +1107,9 @@ impl OxidXComponent for CanvasItem {
 // ToolboxItem - A draggable component in the toolbox
 // =============================================================================
 
+/// A draggable component icon in the toolbox panel.
+///
+/// represents a "template" that can be dragged onto the canvas to create a new instance.
 struct ToolboxItem {
     id: String,
     bounds: Rect,
@@ -1058,6 +1119,7 @@ struct ToolboxItem {
 }
 
 impl ToolboxItem {
+    /// Creates a new toolbox item.
     fn new(icon: &str, component_type: &str) -> Self {
         Self {
             id: format!("toolbox_{}", component_type.to_lowercase()),
@@ -1070,6 +1132,7 @@ impl ToolboxItem {
 }
 
 impl OxidXComponent for ToolboxItem {
+    /// Renders the toolbox item with a button-like appearance.
     fn render(&self, renderer: &mut Renderer) {
         let bg_color = if self.is_hovered {
             Color::new(0.25, 0.25, 0.28, 1.0)
@@ -1127,6 +1190,7 @@ impl OxidXComponent for ToolboxItem {
         true
     }
 
+    /// Returns the "CREATE:Type" payload when dragged.
     fn on_drag_start(&self, _ctx: &mut OxidXContext) -> Option<String> {
         println!("🎯 Drag started: CREATE:{}", self.component_type);
         Some(format!("CREATE:{}", self.component_type))
@@ -1155,12 +1219,14 @@ impl OxidXComponent for ToolboxItem {
 // ToolboxPanel
 // =============================================================================
 
+/// The left-side panel containing available UI components.
 struct ToolboxPanel {
     bounds: Rect,
     items: Vec<ToolboxItem>,
 }
 
 impl ToolboxPanel {
+    /// Initializes the toolbox with the standard set of OxidX components.
     fn new() -> Self {
         let components = [
             ("📦", "VStack"),
@@ -1194,6 +1260,7 @@ impl ToolboxPanel {
 }
 
 impl OxidXComponent for ToolboxPanel {
+    /// Layouts the items in a vertical list.
     fn layout(&mut self, available: Rect) -> Vec2 {
         self.bounds = available;
 
@@ -1279,6 +1346,9 @@ impl OxidXComponent for ToolboxPanel {
 // DeleteContextMenu - Overlay to delete a component
 // =============================================================================
 
+/// A floating context menu for deleting a component.
+///
+/// Appears on right-click. Only supports "Delete" action currently.
 struct DeleteContextMenu {
     bounds: Rect,
     target_id: String,
@@ -1406,6 +1476,12 @@ impl OxidXComponent for DeleteContextMenu {
 // CanvasPanel
 // =============================================================================
 
+/// The main drawing area where components are placed and manipulated.
+///
+/// Handles:
+/// - Drag-and-drop from Toolbox.
+/// - Rendering of all `CanvasItem`s.
+/// - Background rendering (grid/dots).
 struct CanvasPanel {
     bounds: Rect,
     items: Vec<CanvasItem>,
@@ -1427,6 +1503,9 @@ impl CanvasPanel {
         }
     }
 
+    /// Creates a new component instance at the specified position.
+    ///
+    /// Values for size and defaults are localized here based on component type.
     fn create_item(&mut self, component_type: &str, position: Vec2) {
         self.component_counter += 1;
         let id = format!(
@@ -1463,7 +1542,9 @@ impl CanvasPanel {
         self.items.push(item);
     }
 
-    /// Exports all items to JSON with proper hierarchy
+    /// Exports all items to JSON with proper hierarchy.
+    ///
+    /// Traverses the component tree and generates the JSON schema.
     fn export_items_to_json(&self) -> String {
         let children: Vec<String> = self.items.iter().map(|item| {
             Self::item_to_json(item)
@@ -1482,7 +1563,7 @@ impl CanvasPanel {
         )
     }
 
-    /// Recursively convert CanvasItem to JSON string
+    /// Recursively converts a canvas item into a JSON schema string.
     fn item_to_json(item: &CanvasItem) -> String {
         let base_props = format!(
             r#""x": {}, "y": {}, "width": {}, "height": {}"#,
@@ -1538,11 +1619,13 @@ impl CanvasPanel {
 }
 
 impl OxidXComponent for CanvasPanel {
+    /// Updates the panel bounds.
     fn layout(&mut self, available: Rect) -> Vec2 {
         self.bounds = available;
         available.size()
     }
 
+    /// Renders the canvas background (grid), drop highlights, and all items.
     fn render(&self, renderer: &mut Renderer) {
         renderer.fill_rect(self.bounds, colors::EDITOR_BG);
 
@@ -1613,6 +1696,11 @@ impl OxidXComponent for CanvasPanel {
         }
     }
 
+    /// Handles canvas interactions: dragging, dropping, selecting.
+    ///
+    /// Also performs critical **Garbage Collection**:
+    /// It checks `StudioState` and removes any `CanvasItem`s that have been deleted
+    /// from the shared state (e.g., via Inspector or Context Menu).
     fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
         // Garbage Collection: Remove items not in state
         // This is necessary because delete operations might happen from other panels (Inspector, Context Menu)
@@ -1687,6 +1775,9 @@ impl OxidXComponent for CanvasPanel {
         true
     }
 
+    /// Handles dropping a "CREATE:Type" payload from the Toolbox.
+    ///
+    /// If dropped on a container, adds as a child. Otherwise, adds to root canvas.
     fn on_drop(&mut self, payload: &str, _ctx: &mut OxidXContext) -> bool {
         if let Some(component_type) = payload.strip_prefix("CREATE:") {
             let drop_pos = self.last_drag_position;
@@ -1745,6 +1836,12 @@ impl OxidXComponent for CanvasPanel {
 // InspectorPanel - Shows properties of selected component
 // =============================================================================
 
+/// The right-side panel showing properties of the selected component.
+///
+/// Allows editing:
+/// - Label (via Input)
+/// - Deletion (via Delete Button)
+/// - Viewing position/size/parent info.
 struct InspectorPanel {
     bounds: Rect,
     state: SharedState,
@@ -1754,6 +1851,7 @@ struct InspectorPanel {
 }
 
 impl InspectorPanel {
+    /// Creates a new inspector panel.
     fn new(state: SharedState) -> Self {
         Self {
             bounds: Rect::ZERO,
@@ -1764,7 +1862,9 @@ impl InspectorPanel {
         }
     }
     
-    /// Sync input value when selection changes
+    /// Synchronizes input fields with the state of the currently selected component.
+    ///
+    /// Checks `last_selected_id` to detect selection changes and reload data.
     fn sync_with_selection(&mut self) {
         let state = self.state.lock().unwrap();
         let current_id = state.selected_id.clone();
@@ -1948,6 +2048,7 @@ impl OxidXComponent for InspectorPanel {
         }
     }
 
+    /// Handles input changes (Label) and Delete button clicks.
     fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
         // 1. Let Button handle its visual state (hover/press)
         // We ignore the return value here to ensure we can check for logic ourselves, 
@@ -2010,6 +2111,7 @@ impl OxidXComponent for InspectorPanel {
 // StudioStatusBar
 // =============================================================================
 
+/// The bottom status bar showing mode (Edit/Preview) and app version.
 struct StudioStatusBar {
     bounds: Rect,
     state: SharedState,
@@ -2017,6 +2119,7 @@ struct StudioStatusBar {
 }
 
 impl StudioStatusBar {
+    /// Creates a new status bar.
     fn new(state: SharedState) -> Self {
         Self {
             bounds: Rect::ZERO,
@@ -2157,6 +2260,13 @@ impl OxidXComponent for StudioStatusBar {
 // OxideStudio - Main Application
 // =============================================================================
 
+/// The Main Application Component.
+///
+/// Orchestrates the three main panels:
+/// 1. `ToolboxPanel` (Left)
+/// 2. `CanvasPanel` (Center)
+/// 3. `InspectorPanel` (Right)
+/// 4. `StudioStatusBar` (Bottom)
 struct OxideStudio {
     bounds: Rect,
     left_panel: ToolboxPanel,
@@ -2167,6 +2277,7 @@ struct OxideStudio {
 }
 
 impl OxideStudio {
+    /// Initializes the complete application with shared state.
     fn new() -> Self {
         let state = Arc::new(Mutex::new(StudioState::new()));
 
@@ -2182,6 +2293,7 @@ impl OxideStudio {
 }
 
 impl OxidXComponent for OxideStudio {
+    /// Manages the layout of the 3-column design + footer.
     fn layout(&mut self, available: Rect) -> Vec2 {
         self.bounds = available;
 
@@ -2226,6 +2338,9 @@ impl OxidXComponent for OxideStudio {
         self.status_bar.render(renderer);
     }
 
+    /// distributing events to all panels.
+    ///
+    /// Also intercepts clicks on the "Preview" button to trigger JSON export.
     fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
         if let OxidXEvent::DragOver { position, .. } = event {
             self.last_drag_position = *position;
@@ -2307,6 +2422,10 @@ impl OxidXComponent for OxideStudio {
 // Main Entry Point
 // =============================================================================
 
+/// Application Entry Point.
+///
+/// Sets up the window configuration and launches the `OxideStudio` application
+/// using the `run_with_config` engine function.
 fn main() {
     println!("🚀 Starting Oxide Studio");
     println!("========================");

@@ -1139,6 +1139,10 @@ impl Renderer {
 
     // --- Text Rendering ---
 
+    /// Draws simple text at the specified position.
+    ///
+    /// The text will be rendered on top of geometry in the same batch,
+    /// respecting the current Z-Index.
     pub fn draw_text(&mut self, text: impl Into<String>, position: Vec2, style: TextStyle) {
         self.push_command(RenderOp::Text(TextCommand::Simple {
             text: text.into(),
@@ -1148,6 +1152,9 @@ impl Renderer {
         }));
     }
 
+    /// Calculates the width of the text if it were rendered.
+    ///
+    /// Useful for layout calculations.
     pub fn measure_text(&mut self, text: &str, font_size: f32) -> f32 {
         let mut buffer = Buffer::new(
             &mut self.text_brush.font_system,
@@ -1205,6 +1212,9 @@ impl Renderer {
 
     // --- Overlay Methods (Wrapper for Z-Index) ---
 
+    /// Draws a rectangle on the overlay layer (Z-Index 1000).
+    ///
+    /// Used for tooltips, context menus, and drag ghosts.
     pub fn draw_overlay_rect(&mut self, rect: Rect, color: Color) {
         let old_z = self.current_z_index;
         self.current_z_index = 1000;
@@ -1212,6 +1222,7 @@ impl Renderer {
         self.current_z_index = old_z;
     }
 
+    /// Draws text on the overlay layer (Z-Index 1000).
     pub fn draw_overlay_text(&mut self, text: impl Into<String>, position: Vec2, style: TextStyle) {
         let old_z = self.current_z_index;
         self.current_z_index = 1000;

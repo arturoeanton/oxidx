@@ -9,6 +9,9 @@ use oxidx_core::renderer::Renderer;
 // RadioBox (Single Radio Button)
 // ----------------------------------------------------------------------------
 
+/// A single radio button component.
+///
+/// Typically used within a `RadioGroup`, but can be used standalone.
 pub struct RadioBox {
     id: String,
     bounds: Rect,
@@ -215,6 +218,10 @@ impl OxidXComponent for RadioBox {
 // RadioGroup
 // ----------------------------------------------------------------------------
 
+/// A group of radio buttons.
+///
+/// Manages selection state for a list of options.
+/// Only one option can be selected at a time.
 pub struct RadioGroup {
     id: String,
     bounds: Rect,

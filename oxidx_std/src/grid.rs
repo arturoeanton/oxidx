@@ -6,6 +6,9 @@ use oxidx_core::primitives::{Rect, TextAlign, TextStyle};
 use oxidx_core::renderer::Renderer;
 use std::collections::{HashMap, HashSet};
 
+/// Selection behavior for the grid.
+///
+/// Controls how rows or cells can be selected.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum GridSelectionMode {
     #[default]
@@ -275,6 +278,14 @@ impl Default for GridSize {
     }
 }
 
+/// A data grid component for tabular data.
+///
+/// Features:
+/// - Sortable columns
+/// - Resizable columns
+/// - Row/Cell selection
+/// - Virtual scrolling (renders only visible rows)
+/// - Editable cells (placeholder)
 pub struct Grid {
     // Identity
     id: String,
@@ -339,6 +350,7 @@ pub struct Grid {
 }
 
 impl Grid {
+    /// Creates a new empty grid.
     pub fn new(id: impl Into<String>) -> Self {
         Self {
             id: id.into(),

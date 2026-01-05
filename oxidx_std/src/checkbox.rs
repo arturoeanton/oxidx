@@ -5,6 +5,10 @@ use oxidx_core::events::{KeyCode, OxidXEvent};
 use oxidx_core::primitives::{Rect, TextStyle};
 use oxidx_core::renderer::Renderer;
 
+/// A standard checkbox component.
+///
+/// Wraps a boolean value and provides toggle interaction.
+/// Supports generic labels and callback for change events.
 pub struct Checkbox {
     id: String,
     bounds: Rect,
@@ -17,6 +21,7 @@ pub struct Checkbox {
 }
 
 impl Checkbox {
+    /// Creates a new checkbox with a label.
     pub fn new(id: impl Into<String>, label: impl Into<String>) -> Self {
         Self {
             id: id.into(),
@@ -40,6 +45,9 @@ impl Checkbox {
         self
     }
 
+    /// Sets the change callback.
+    ///
+    /// Triggered when the checkbox state toggles.
     pub fn on_change<F>(mut self, callback: F) -> Self
     where
         F: Fn(bool) + Send + Sync + 'static,

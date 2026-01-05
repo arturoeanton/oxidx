@@ -5,6 +5,10 @@ use oxidx_core::events::OxidXEvent;
 use oxidx_core::primitives::{Rect, TextStyle};
 use oxidx_core::renderer::Renderer;
 
+/// A container with a labeled border.
+///
+/// Can optionally be collapsible.
+/// Useful for grouping related controls.
 pub struct GroupBox {
     id: String,
     bounds: Rect,

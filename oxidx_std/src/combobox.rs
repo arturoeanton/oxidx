@@ -247,6 +247,10 @@ impl OxidXComponent for ComboBoxDropdown {
 
 // --- Main ComboBox ---
 
+/// A dropdown selection component.
+///
+/// Displays a button that opens an overlay list of items.
+/// Supports generic data items (as strings) and selection callback.
 pub struct ComboBox {
     id: String,
     bounds: Rect,

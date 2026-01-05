@@ -8,6 +8,13 @@ use oxidx_core::renderer::Renderer;
 use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 use std::sync::Arc;
 
+/// A monthly calendar view for date selection.
+///
+/// Supports:
+/// - Month navigation (prev/next)
+/// - Date selection
+/// - Highlighting current selection
+/// - Hover states for days
 pub struct Calendar {
     bounds: Rect,
     visible_month: Arc<AtomicU32>,
@@ -15,10 +22,12 @@ pub struct Calendar {
     selected_date: Option<NaiveDate>,
     hovered_day: Option<u32>,
 
+    /// Callback triggered when a date is selected.
     on_select: Option<Arc<dyn Fn(NaiveDate) + Send + Sync>>,
 }
 
 impl Calendar {
+    /// Creates a new calendar, defaulting to the current month.
     pub fn new() -> Self {
         let now = Utc::now().naive_utc();
         Self {
@@ -31,6 +40,7 @@ impl Calendar {
         }
     }
 
+    /// Sets the callback for date selection.
     pub fn on_select(mut self, cb: impl Fn(NaiveDate) + Send + Sync + 'static) -> Self {
         self.on_select = Some(Arc::new(cb));
         self

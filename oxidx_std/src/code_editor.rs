@@ -117,7 +117,15 @@ impl CursorPosition {
     }
 }
 
-/// A full-featured code editor with syntax highlighting, line numbers, and minimap.
+/// A full-featured code editor.
+///
+/// Includes:
+/// - Syntax highlighting
+/// - Line numbering
+/// - Cursor blinking and movement
+/// - Selection ranges
+/// - Undo/Redo stack
+/// - Basic keyboard shortcuts
 pub struct CodeEditor {
     // === Layout ===
     bounds: Rect,
@@ -217,7 +225,7 @@ enum UndoAction {
 }
 
 impl CodeEditor {
-    /// Creates a new empty CodeEditor.
+    /// Creates a new empty CodeEditor with default dark theme settings.
     pub fn new() -> Self {
         let border_color = Color::new(0.3, 0.3, 0.35, 1.0);
         let focus_color = Color::new(0.2, 0.5, 0.9, 1.0);
@@ -293,6 +301,8 @@ impl CodeEditor {
     // === Builder Methods ===
 
     /// Sets the initial text content.
+    ///
+    /// Clears undo history and resets cursor position.
     pub fn text(mut self, text: impl Into<String>) -> Self {
         let text = text.into();
         self.lines = text.lines().map(|s| s.to_string()).collect();

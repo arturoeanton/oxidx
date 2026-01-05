@@ -1,6 +1,16 @@
 //! # OxidX Standard Library
 //!
-//! A collection of standard UI components and layout containers.
+//! A comprehensive collection of standard UI components and layout containers.
+//! This library provides the building blocks for creating rich user interfaces
+//! with OxidX, including buttons, inputs, charts, and layout primitives.
+//!
+//! ## Organization
+//!
+//! - **Primitives**: Basic controls like `Button`, `Label`, `Input`.
+//! - **Containers**: Layout managers like `VStack`, `HStack`, `Grid`.
+//! - **Data Display**: Complex views like `Charts`, `Calendar`, `Tree`.
+//! - **Feedback**: `ProgressBar`, `Dialog` (Alerts/Confirms).
+//! - **Input**: `CodeEditor`, `ComboBox`, `ColorPicker` (future).
 
 pub mod button;
 pub mod calendar;

@@ -50,6 +50,15 @@ pub enum TextOverflow {
 }
 
 /// A text label component for displaying text.
+///
+/// Supports various styles, alignment, wrapping, and optional selection.
+///
+/// # Example
+/// ```ignore
+/// Label::new("Hello World")
+///     .with_style(LabelStyle::Heading1)
+///     .with_align(TextAlign::Center)
+/// ```
 pub struct Label {
     // === Content ===
     text: String,

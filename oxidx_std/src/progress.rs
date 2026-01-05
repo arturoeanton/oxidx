@@ -5,6 +5,10 @@ use oxidx_core::events::OxidXEvent;
 use oxidx_core::primitives::{Color, Rect};
 use oxidx_core::renderer::Renderer;
 
+/// A progress bar component.
+///
+/// Displays completion status of a task.
+/// Supports determinate (0.0 - 1.0) and indeterminate (animated) modes.
 pub struct ProgressBar {
     bounds: Rect,
     progress: f32, // 0.0 to 1.0

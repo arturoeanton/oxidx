@@ -7,6 +7,7 @@ use oxidx_core::renderer::Renderer;
 use std::f32::consts::PI;
 
 // --- Colors for charts ---
+/// Returns a consistent color for a given data index.
 fn get_chart_color(index: usize) -> Color {
     let colors = [
         Color::new(0.2, 0.6, 1.0, 1.0), // Blue
@@ -20,8 +21,13 @@ fn get_chart_color(index: usize) -> Color {
 }
 
 // --- Pie Chart ---
+
+/// A simple pie chart (currently implemented as a stacked bar representation).
+///
+/// Displays data as proportional sections.
 pub struct PieChart {
     bounds: Rect,
+    /// Data pairs: (Label, Value)
     data: Vec<(String, f32)>,
     total: f32,
     _hovered_slice: Option<usize>,
@@ -155,6 +161,10 @@ impl OxidXComponent for PieChart {
 }
 
 // --- Bar Chart ---
+
+/// A standard bar chart for categorical data.
+///
+/// Automatically scales bars based on the maximum value in the dataset.
 pub struct BarChart {
     bounds: Rect,
     data: Vec<(String, f32)>,
@@ -272,6 +282,10 @@ impl OxidXComponent for BarChart {
 }
 
 // --- Line Chart ---
+
+/// A simple line chart for trend data.
+///
+/// Connects data points with lines and markers.
 pub struct LineChart {
     bounds: Rect,
     data: Vec<(String, f32)>,

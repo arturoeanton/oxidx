@@ -12,6 +12,9 @@ use oxidx_core::schema::ComponentNode;
 use oxidx_core::{OxidXComponent, OxidXContext, Rect, Renderer, Spacing, Vec2};
 
 /// A wrapper struct that holds a dynamically-built component tree.
+///
+/// Use this as the root component when running an application built from a schema.
+/// It ensures the root child fills the available window space.
 pub struct DynamicRoot {
     child: Box<dyn OxidXComponent>,
     bounds: Rect,
@@ -78,8 +81,11 @@ impl OxidXComponent for DynamicRoot {
 }
 
 /// Builds a component tree from a `ComponentNode` schema at runtime.
+///
+/// This factory function maps schema type names (e.g., "Button", "VStack")
+/// to actual Rust component instances. It recursively builds children for containers.
 pub fn build_component_tree(node: &ComponentNode) -> Box<dyn OxidXComponent> {
-    // LOG DE DEBUG: Esto nos dirá si el JSON se está procesando
+    // Debug log to trace schema processing
     eprintln!("[dynamic] Building component: {}", node.type_name);
 
     match node.type_name.as_str() {

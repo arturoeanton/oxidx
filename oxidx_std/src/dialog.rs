@@ -6,6 +6,12 @@ use oxidx_core::{
 /// A Modal overlay that blocks interaction with the background.
 ///
 /// It renders a semi-transparent scrim over the entire window and centers its content.
+///
+/// # Example
+/// ```ignore
+/// let modal = Modal::new(Label::new("I am a modal"));
+/// ctx.add_overlay(Box::new(modal));
+/// ```
 pub struct Modal {
     content: Box<dyn OxidXComponent>,
     bounds: Rect,

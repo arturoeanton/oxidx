@@ -7,6 +7,10 @@ pub enum ContentMode {
     Stretch,
 }
 
+/// An image component.
+///
+/// Displays an image from a file path.
+/// Supports different content modes for scaling (Fit, Fill, Stretch).
 pub struct Image {
     path: String,
     width: Option<f32>,
@@ -16,6 +20,7 @@ pub struct Image {
 }
 
 impl Image {
+    /// Creates a new image from a path.
     pub fn new(path: impl Into<String>) -> Self {
         Self {
             path: path.into(),

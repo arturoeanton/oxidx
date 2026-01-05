@@ -6,6 +6,7 @@ use oxidx_core::primitives::{Rect, TextStyle};
 use oxidx_core::renderer::Renderer;
 use std::collections::HashSet;
 
+/// Selection behavior for the list.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum SelectionMode {
     #[default]
@@ -14,6 +15,10 @@ pub enum SelectionMode {
     None,
 }
 
+/// A scrollable list of text items.
+///
+/// Supports single or multiple selection.
+/// Items are provided as strings.
 pub struct ListBox {
     id: String,
     bounds: Rect,

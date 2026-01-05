@@ -70,7 +70,8 @@ pub struct Input {
 
 impl Input {
     /// Creates a new Input with a placeholder.
-    /// Styling is resolved dynamically from the theme during render().
+    ///
+    /// The input starts empty. Styling is resolved dynamically from the theme.
     pub fn new(placeholder: impl Into<String>) -> Self {
         Self {
             bounds: Rect::default(),

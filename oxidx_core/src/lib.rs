@@ -38,18 +38,31 @@
 //! }
 //! ```
 
+/// Resource loading (images, fonts) and caching.
 pub mod assets;
+/// Core traits defining the `OxidXComponent` lifecycle.
 pub mod component;
+/// Global execution context (input state, overlays, focus).
 pub mod context;
+/// Main event loop and window management (Winit integration).
 pub mod engine;
+/// Event system (Mouse, Keyboard, Window).
 pub mod events;
+/// Geometry primitives and layout constants.
 pub mod layout;
+/// Basic data types (Rect, Color, Vec2).
 pub mod primitives;
+/// GPU rendering backend (WGPU).
 pub mod renderer;
+/// UI serialization for saving/loading component trees.
 pub mod schema;
+/// Visual styling system (borders, shadows, backgrounds).
 pub mod style;
+/// Syntax highlighting support for code editors.
 pub mod syntax;
+/// Test harness for headless UI testing.
 pub mod testing;
+/// Theme system for consistent styling.
 pub mod theme;
 
 // Re-export primary types

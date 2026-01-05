@@ -234,6 +234,13 @@ impl OxidXComponent for VStack {
 }
 
 /// A horizontal stack container that arranges children from left to right.
+///
+/// ## Example
+/// ```ignore
+/// let mut row = HStack::new();
+/// row.add_child(Box::new(Label::new("Label:")));
+/// row.add_child(Box::new(Input::new("Value")));
+/// ```
 pub struct HStack {
     bounds: Rect,
     children: Vec<Box<dyn OxidXComponent>>,
@@ -435,10 +442,17 @@ impl OxidXComponent for HStack {
     }
 }
 
-/// A stack container that overlays children at the same position.
+/// A stack container that overlays children at the same position (Z-axis).
 ///
-/// Children are rendered in order (first child at bottom, last on top).
-/// Useful for layered UIs, backgrounds, overlays.
+/// Children are rendered in order: the first child added is at the bottom,
+/// and the last child added is on top.
+///
+/// ## Example
+/// ```ignore
+/// let mut overlay = ZStack::new();
+/// overlay.add_child(Box::new(Image::new("bg.png"))); // Bottom
+/// overlay.add_child(Box::new(Label::new("Overlay Text"))); // Top
+/// ```
 pub struct ZStack {
     bounds: Rect,
     children: Vec<Box<dyn OxidXComponent>>,
@@ -699,8 +713,12 @@ impl oxidx_core::schema::ToSchema for ZStack {
 // =============================================================================
 
 /// A container that allows absolute/free-form positioning of children.
-/// Unlike VStack/HStack, this does NOT reposition children during layout.
-/// Children keep their positions as set by set_position().
+///
+/// Unlike `VStack`/`HStack`, this container **does not** control the positions
+/// of its children during layout. Children retain the `(x, y)` coordinates
+/// set via `set_position` or `add_child_at`.
+///
+/// Useful for canvas-like editors or game UIs.
 pub struct AbsoluteCanvas {
     bounds: Rect,
     children: Vec<Box<dyn OxidXComponent>>,

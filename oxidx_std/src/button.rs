@@ -72,6 +72,14 @@ pub struct Button {
 
 impl Button {
     /// Creates a new button with default styling.
+    ///
+    /// # Default Properties
+    /// * **Size**: 120x48 pixels (resizable via `width`/`height`)
+    /// * **Color**: Primary theme color
+    /// * **Text**: White, 16px
+    /// * **Variant**: `Primary`
+    ///
+    /// Use builder methods to customize the button after creation.
     pub fn new() -> Self {
         Self {
             bounds: Rect::default(),
@@ -95,7 +103,11 @@ impl Button {
         }
     }
 
-    // === Builder Methods ===
+    // =========================================================================
+    // Builder Methods
+    // =========================================================================
+    // The builder pattern allows for method chaining to configure the component.
+    // Example: Button::new().label("Click Me").width(200.0)
 
     /// Creates a button with specific bounds (legacy API).
     pub fn with_bounds(x: f32, y: f32, width: f32, height: f32) -> Self {
@@ -111,6 +123,11 @@ impl Button {
     }
 
     /// Sets the button label text.
+    ///
+    /// # Example
+    /// ```ignore
+    /// Button::new().label("Submit")
+    /// ```
     pub fn label(mut self, label: impl Into<String>) -> Self {
         self.label = Some(label.into());
         self
@@ -172,6 +189,17 @@ impl Button {
     }
 
     /// Sets the click callback.
+    ///
+    /// The callback receives a mutable `OxidXContext`, allowing it to
+    /// modify application state, navigate, or trigger other actions.
+    ///
+    /// # Example
+    /// ```ignore
+    /// Button::new().on_click(|ctx| {
+    ///     println!("Button clicked!");
+    ///     ctx.open_modal(...);
+    /// })
+    /// ```
     pub fn on_click(mut self, callback: impl Fn(&mut OxidXContext) + Send + 'static) -> Self {
         self.on_click = Some(Box::new(callback));
         self
