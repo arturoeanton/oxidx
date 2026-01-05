@@ -456,6 +456,343 @@ impl OxidXComponent for CanvasItem {
                     );
                 }
             }
+            "ComboBox" => {
+                // ComboBox visual - dropdown style
+                renderer.draw_rounded_rect(
+                    self.bounds,
+                    Color::new(0.18, 0.18, 0.20, alpha),
+                    4.0,
+                    Some(colors::BORDER),
+                    Some(1.0),
+                );
+                // Selected text
+                renderer.draw_text(
+                    &self.label,
+                    Vec2::new(self.bounds.x + 8.0, self.bounds.y + 8.0),
+                    TextStyle::default()
+                        .with_size(12.0)
+                        .with_color(colors::TEXT.with_alpha(alpha)),
+                );
+                // Dropdown arrow
+                let arrow_x = self.bounds.x + self.bounds.width - 20.0;
+                renderer.draw_text(
+                    "▼",
+                    Vec2::new(arrow_x, self.bounds.y + 8.0),
+                    TextStyle::default()
+                        .with_size(10.0)
+                        .with_color(colors::TEXT_DIM.with_alpha(alpha)),
+                );
+            }
+            "RadioGroup" => {
+                // RadioGroup visual - multiple radio options
+                renderer.draw_rounded_rect(
+                    self.bounds,
+                    Color::new(0.12, 0.14, 0.16, 0.5 * alpha),
+                    4.0,
+                    Some(Color::new(0.3, 0.35, 0.4, 0.6)),
+                    Some(1.0),
+                );
+                // Title
+                renderer.draw_text(
+                    &self.label,
+                    Vec2::new(self.bounds.x + 6.0, self.bounds.y + 4.0),
+                    TextStyle::default()
+                        .with_size(10.0)
+                        .with_color(Color::new(0.6, 0.7, 0.8, alpha)),
+                );
+                // Sample radio options
+                let options = ["Option A", "Option B"];
+                for (i, opt) in options.iter().enumerate() {
+                    let y = self.bounds.y + 22.0 + (i as f32 * 22.0);
+                    // Radio circle
+                    renderer.draw_rounded_rect(
+                        Rect::new(self.bounds.x + 8.0, y, 14.0, 14.0),
+                        Color::new(0.25, 0.25, 0.28, alpha),
+                        7.0,
+                        Some(colors::BORDER),
+                        Some(1.0),
+                    );
+                    // Option label
+                    renderer.draw_text(
+                        *opt,
+                        Vec2::new(self.bounds.x + 28.0, y),
+                        TextStyle::default()
+                            .with_size(11.0)
+                            .with_color(colors::TEXT.with_alpha(alpha)),
+                    );
+                }
+            }
+            "Grid" => {
+                // Grid visual - table style
+                renderer.draw_rounded_rect(
+                    self.bounds,
+                    Color::new(0.12, 0.14, 0.16, 0.6 * alpha),
+                    4.0,
+                    Some(Color::new(0.25, 0.3, 0.35, 0.8)),
+                    Some(1.0),
+                );
+                // Title
+                renderer.draw_text(
+                    &self.label,
+                    Vec2::new(self.bounds.x + 6.0, self.bounds.y + 4.0),
+                    TextStyle::default()
+                        .with_size(10.0)
+                        .with_color(Color::new(0.6, 0.7, 0.8, alpha)),
+                );
+                // Grid lines sample
+                let header_y = self.bounds.y + 22.0;
+                renderer.fill_rect(
+                    Rect::new(self.bounds.x + 4.0, header_y, self.bounds.width - 8.0, 20.0),
+                    Color::new(0.18, 0.2, 0.24, alpha),
+                );
+                // Column headers
+                let col_width = (self.bounds.width - 8.0) / 2.0;
+                renderer.draw_text(
+                    "Column 1",
+                    Vec2::new(self.bounds.x + 10.0, header_y + 4.0),
+                    TextStyle::default()
+                        .with_size(10.0)
+                        .with_color(colors::TEXT.with_alpha(alpha)),
+                );
+                renderer.draw_text(
+                    "Column 2",
+                    Vec2::new(self.bounds.x + col_width + 10.0, header_y + 4.0),
+                    TextStyle::default()
+                        .with_size(10.0)
+                        .with_color(colors::TEXT.with_alpha(alpha)),
+                );
+                // Data rows
+                for row in 0..2 {
+                    let row_y = header_y + 22.0 + (row as f32 * 18.0);
+                    renderer.draw_text(
+                        &format!("Row {} C1", row + 1),
+                        Vec2::new(self.bounds.x + 10.0, row_y),
+                        TextStyle::default()
+                            .with_size(9.0)
+                            .with_color(colors::TEXT_DIM.with_alpha(alpha)),
+                    );
+                    renderer.draw_text(
+                        &format!("Row {} C2", row + 1),
+                        Vec2::new(self.bounds.x + col_width + 10.0, row_y),
+                        TextStyle::default()
+                            .with_size(9.0)
+                            .with_color(colors::TEXT_DIM.with_alpha(alpha)),
+                    );
+                }
+            }
+            "ZStack" | "AbsoluteCanvas" => {
+                // Container background with different tint for absolute positioning
+                renderer.draw_rounded_rect(
+                    self.bounds,
+                    Color::new(0.18, 0.15, 0.22, 0.6 * alpha),
+                    6.0,
+                    Some(Color::new(0.4, 0.3, 0.5, 0.8)),
+                    Some(2.0),
+                );
+                // Container label
+                renderer.draw_text(
+                    &format!("{} ({})", self.component_type, self.children.len()),
+                    Vec2::new(self.bounds.x + 6.0, self.bounds.y + 4.0),
+                    TextStyle::default()
+                        .with_size(10.0)
+                        .with_color(Color::new(0.8, 0.7, 0.9, alpha)),
+                );
+                // Drop hint if empty
+                if self.children.is_empty() {
+                    renderer.draw_text(
+                        "Drop components here",
+                        Vec2::new(self.bounds.x + 10.0, self.bounds.y + self.bounds.height / 2.0 - 6.0),
+                        TextStyle::default()
+                            .with_size(11.0)
+                            .with_color(Color::new(0.6, 0.5, 0.7, 0.6 * alpha)),
+                    );
+                }
+            }
+            "TextArea" => {
+                // TextArea visual - multi-line text input
+                renderer.draw_rounded_rect(
+                    self.bounds,
+                    Color::new(0.14, 0.14, 0.16, alpha),
+                    4.0,
+                    Some(colors::BORDER),
+                    Some(1.0),
+                );
+                // Title
+                renderer.draw_text(
+                    &self.label,
+                    Vec2::new(self.bounds.x + 6.0, self.bounds.y + 4.0),
+                    TextStyle::default()
+                        .with_size(10.0)
+                        .with_color(Color::new(0.6, 0.7, 0.8, alpha)),
+                );
+                // Sample lines
+                for i in 0..3 {
+                    renderer.draw_text(
+                        "Lorem ipsum dolor sit...",
+                        Vec2::new(self.bounds.x + 8.0, self.bounds.y + 22.0 + (i as f32 * 14.0)),
+                        TextStyle::default()
+                            .with_size(10.0)
+                            .with_color(colors::TEXT_DIM.with_alpha(alpha * 0.7)),
+                    );
+                }
+            }
+            "CodeEditor" => {
+                // CodeEditor visual - code format with line numbers
+                renderer.draw_rounded_rect(
+                    self.bounds,
+                    Color::new(0.1, 0.1, 0.12, alpha),
+                    4.0,
+                    Some(Color::new(0.2, 0.25, 0.3, 0.8)),
+                    Some(1.0),
+                );
+                // Title
+                renderer.draw_text(
+                    &self.label,
+                    Vec2::new(self.bounds.x + 6.0, self.bounds.y + 4.0),
+                    TextStyle::default()
+                        .with_size(10.0)
+                        .with_color(Color::new(0.5, 0.8, 0.6, alpha)),
+                );
+                // Line numbers area
+                renderer.fill_rect(
+                    Rect::new(self.bounds.x + 4.0, self.bounds.y + 20.0, 24.0, self.bounds.height - 24.0),
+                    Color::new(0.08, 0.08, 0.1, alpha),
+                );
+                // Sample code lines
+                let lines = ["fn main() {", "    println!(\"Hi\");", "}"];
+                for (i, line) in lines.iter().enumerate() {
+                    let y = self.bounds.y + 24.0 + (i as f32 * 14.0);
+                    // Line number
+                    renderer.draw_text(
+                        &format!("{}", i + 1),
+                        Vec2::new(self.bounds.x + 10.0, y),
+                        TextStyle::default()
+                            .with_size(9.0)
+                            .with_color(Color::new(0.4, 0.4, 0.5, alpha)),
+                    );
+                    // Code
+                    renderer.draw_text(
+                        *line,
+                        Vec2::new(self.bounds.x + 32.0, y),
+                        TextStyle::default()
+                            .with_size(10.0)
+                            .with_color(Color::new(0.8, 0.85, 0.9, alpha)),
+                    );
+                }
+            }
+            "ListBox" => {
+                // ListBox visual - list of items
+                renderer.draw_rounded_rect(
+                    self.bounds,
+                    Color::new(0.14, 0.14, 0.16, alpha),
+                    4.0,
+                    Some(colors::BORDER),
+                    Some(1.0),
+                );
+                // Title
+                renderer.draw_text(
+                    &self.label,
+                    Vec2::new(self.bounds.x + 6.0, self.bounds.y + 4.0),
+                    TextStyle::default()
+                        .with_size(10.0)
+                        .with_color(Color::new(0.6, 0.7, 0.8, alpha)),
+                );
+                // Sample list items
+                let items = ["Item 1", "Item 2", "Item 3"];
+                for (i, item) in items.iter().enumerate() {
+                    let y = self.bounds.y + 22.0 + (i as f32 * 20.0);
+                    // Highlight first item
+                    if i == 0 {
+                        renderer.fill_rect(
+                            Rect::new(self.bounds.x + 4.0, y - 2.0, self.bounds.width - 8.0, 18.0),
+                            Color::new(0.25, 0.35, 0.5, alpha),
+                        );
+                    }
+                    renderer.draw_text(
+                        *item,
+                        Vec2::new(self.bounds.x + 10.0, y),
+                        TextStyle::default()
+                            .with_size(11.0)
+                            .with_color(colors::TEXT.with_alpha(alpha)),
+                    );
+                }
+            }
+            "Progress" => {
+                // Progress bar visual
+                renderer.draw_rounded_rect(
+                    self.bounds,
+                    Color::new(0.15, 0.15, 0.18, alpha),
+                    4.0,
+                    Some(colors::BORDER),
+                    Some(1.0),
+                );
+                // Progress fill (60%)
+                let fill_width = (self.bounds.width - 4.0) * 0.6;
+                renderer.draw_rounded_rect(
+                    Rect::new(self.bounds.x + 2.0, self.bounds.y + 2.0, fill_width, self.bounds.height - 4.0),
+                    Color::new(0.2, 0.6, 0.4, alpha),
+                    3.0,
+                    None,
+                    None,
+                );
+                // Percentage text
+                renderer.draw_text(
+                    "60%",
+                    Vec2::new(self.bounds.x + self.bounds.width / 2.0 - 10.0, self.bounds.y + 4.0),
+                    TextStyle::default()
+                        .with_size(11.0)
+                        .with_color(colors::TEXT.with_alpha(alpha)),
+                );
+            }
+            "SplitView" => {
+                // SplitView visual - two panes
+                renderer.draw_rounded_rect(
+                    self.bounds,
+                    Color::new(0.12, 0.14, 0.16, 0.6 * alpha),
+                    6.0,
+                    Some(Color::new(0.25, 0.3, 0.35, 0.8)),
+                    Some(2.0),
+                );
+                // Title
+                renderer.draw_text(
+                    &self.label,
+                    Vec2::new(self.bounds.x + 6.0, self.bounds.y + 4.0),
+                    TextStyle::default()
+                        .with_size(10.0)
+                        .with_color(Color::new(0.6, 0.7, 0.8, alpha)),
+                );
+                // Left pane
+                let split = self.bounds.width / 2.0;
+                renderer.fill_rect(
+                    Rect::new(self.bounds.x + 4.0, self.bounds.y + 20.0, split - 8.0, self.bounds.height - 24.0),
+                    Color::new(0.16, 0.18, 0.2, alpha),
+                );
+                // Divider
+                renderer.fill_rect(
+                    Rect::new(self.bounds.x + split - 2.0, self.bounds.y + 20.0, 4.0, self.bounds.height - 24.0),
+                    Color::new(0.35, 0.4, 0.45, alpha),
+                );
+                // Right pane
+                renderer.fill_rect(
+                    Rect::new(self.bounds.x + split + 4.0, self.bounds.y + 20.0, split - 8.0, self.bounds.height - 24.0),
+                    Color::new(0.16, 0.18, 0.2, alpha),
+                );
+                // Pane labels
+                renderer.draw_text(
+                    "Left",
+                    Vec2::new(self.bounds.x + 10.0, self.bounds.y + 26.0),
+                    TextStyle::default()
+                        .with_size(9.0)
+                        .with_color(colors::TEXT_DIM.with_alpha(alpha)),
+                );
+                renderer.draw_text(
+                    "Right",
+                    Vec2::new(self.bounds.x + split + 10.0, self.bounds.y + 26.0),
+                    TextStyle::default()
+                        .with_size(9.0)
+                        .with_color(colors::TEXT_DIM.with_alpha(alpha)),
+                );
+            }
             _ => {
                 // Generic unknown component
                 renderer.draw_rounded_rect(
@@ -734,12 +1071,20 @@ impl ToolboxPanel {
         let components = [
             ("📦", "VStack"),
             ("📦", "HStack"),
-            ("�", "ZStack"),
+            ("📦", "ZStack"),
             ("🎨", "AbsoluteCanvas"),
-            ("🔠", "Button"),
+            ("🔘", "Button"),
             ("📝", "Input"),
             ("🔤", "Label"),
             ("✅", "Checkbox"),
+            ("📋", "ComboBox"),
+            ("🔘", "RadioGroup"),
+            ("📊", "Grid"),
+            ("📄", "TextArea"),
+            ("💻", "CodeEditor"),
+            ("📃", "ListBox"),
+            ("📈", "Progress"),
+            ("↔️", "SplitView"),
         ];
 
         let items: Vec<ToolboxItem> = components
@@ -875,8 +1220,18 @@ impl CanvasPanel {
             "Label" => (80.0, 20.0),
             "Input" => (180.0, 32.0),
             "Checkbox" => (120.0, 20.0),
+            "ComboBox" => (150.0, 32.0),
+            "RadioGroup" => (120.0, 80.0),
+            "Grid" => (300.0, 150.0),
+            "TextArea" => (250.0, 120.0),
+            "CodeEditor" => (300.0, 180.0),
+            "ListBox" => (150.0, 120.0),
+            "Progress" => (200.0, 24.0),
+            "SplitView" => (400.0, 200.0),
             "VStack" => (200.0, 100.0),
             "HStack" => (200.0, 50.0),
+            "ZStack" => (200.0, 100.0),
+            "AbsoluteCanvas" => (300.0, 200.0),
             _ => (100.0, 30.0),
         };
 

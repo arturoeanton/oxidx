@@ -3,8 +3,9 @@
 //! Runtime factory that instantiates UI components from `ComponentNode` schemas.
 
 use crate::{
-    AbsoluteCanvas, BarChart, Button, Checkbox, HStack, Image, Input, Label, LineChart, PieChart,
-    VStack, ZStack,
+    AbsoluteCanvas, BarChart, Button, Checkbox, CodeEditor, ComboBox, Grid, HStack, Image, Input,
+    Label, LineChart, ListBox, PieChart, ProgressBar, RadioGroup, SplitView, TextArea, VStack,
+    ZStack,
 };
 use oxidx_core::events::OxidXEvent;
 use oxidx_core::schema::ComponentNode;
@@ -91,6 +92,14 @@ pub fn build_component_tree(node: &ComponentNode) -> Box<dyn OxidXComponent> {
         "Input" => build_input(node),
         "Image" => build_image(node),
         "Checkbox" => build_checkbox(node),
+        "ComboBox" => build_combobox(node),
+        "RadioGroup" => build_radiogroup(node),
+        "Grid" => build_grid(node),
+        "TextArea" => build_textarea(node),
+        "CodeEditor" => build_code_editor(node),
+        "ListBox" => build_listbox(node),
+        "Progress" => build_progress(node),
+        "SplitView" => build_splitview(node),
         "Chart" => build_chart(node),
         "PieChart" => build_pie_chart(node),
         "BarChart" => build_bar_chart(node),
@@ -326,6 +335,49 @@ fn build_checkbox(node: &ComponentNode) -> Box<dyn OxidXComponent> {
 
     Box::new(Checkbox::new(id, label))
 }
+
+fn build_combobox(node: &ComponentNode) -> Box<dyn OxidXComponent> {
+    let id = node.id.as_deref().unwrap_or("combobox");
+    Box::new(ComboBox::new(id))
+}
+
+fn build_radiogroup(node: &ComponentNode) -> Box<dyn OxidXComponent> {
+    let id = node.id.as_deref().unwrap_or("radiogroup");
+    let options = vec!["Option A".to_string(), "Option B".to_string()];
+    Box::new(RadioGroup::new(id, options))
+}
+
+fn build_grid(node: &ComponentNode) -> Box<dyn OxidXComponent> {
+    let id = node.id.as_deref().unwrap_or("grid");
+    Box::new(Grid::new(id))
+}
+
+fn build_textarea(_node: &ComponentNode) -> Box<dyn OxidXComponent> {
+    Box::new(TextArea::new())
+}
+
+fn build_code_editor(_node: &ComponentNode) -> Box<dyn OxidXComponent> {
+    Box::new(CodeEditor::new())
+}
+
+fn build_listbox(node: &ComponentNode) -> Box<dyn OxidXComponent> {
+    let id = node.id.as_deref().unwrap_or("listbox");
+    Box::new(ListBox::new(id))
+}
+
+fn build_progress(_node: &ComponentNode) -> Box<dyn OxidXComponent> {
+    Box::new(ProgressBar::new())
+}
+
+fn build_splitview(_node: &ComponentNode) -> Box<dyn OxidXComponent> {
+    use crate::SplitDirection;
+    Box::new(SplitView::new(
+        Label::new("Left"),
+        Label::new("Right"),
+        SplitDirection::Horizontal,
+    ))
+}
+
 fn build_image(node: &ComponentNode) -> Box<dyn OxidXComponent> {
     let path = node
         .props
