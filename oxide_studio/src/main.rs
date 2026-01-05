@@ -44,12 +44,15 @@ struct CanvasItemInfo {
     y: f32,
     width: f32,
     height: f32,
+    parent_id: Option<String>,        // For nested containers
+    children: Vec<CanvasItemInfo>,    // Child components (for VStack/HStack)
 }
 
 struct StudioState {
     selected_id: Option<String>,
     canvas_items: Vec<CanvasItemInfo>,
     preview_mode: bool,
+    exported_json: String,  // JSON from CanvasPanel for preview
 }
 
 impl StudioState {
@@ -58,6 +61,7 @@ impl StudioState {
             selected_id: None,
             canvas_items: Vec::new(),
             preview_mode: false,
+            exported_json: String::new(),
         }
     }
 
@@ -148,7 +152,13 @@ impl StudioState {
 
     /// Export to file and launch oxidx_viewer
     fn launch_preview(&self) -> Result<(), String> {
-        let json = self.export_to_json();
+        // Use exported_json from CanvasPanel (set before calling this)
+        let json = if self.exported_json.is_empty() {
+            self.export_to_json() // Fallback to old method
+        } else {
+            self.exported_json.clone()
+        };
+        
         let session_id = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
@@ -202,6 +212,7 @@ struct CanvasItem {
     drag_offset: Vec2,
     original_bounds: Rect, // For resize
     state: SharedState,
+    children: Vec<CanvasItem>,  // For VStack/HStack containers
 }
 
 const HANDLE_SIZE: f32 = 10.0;
@@ -219,6 +230,8 @@ impl CanvasItem {
                 y: bounds.y,
                 width: bounds.width,
                 height: bounds.height,
+                parent_id: None,
+                children: Vec::new(),
             });
         }
 
@@ -232,7 +245,16 @@ impl CanvasItem {
             drag_offset: Vec2::ZERO,
             original_bounds: bounds,
             state,
+            children: Vec::new(),
         }
+    }
+
+    fn is_container(&self) -> bool {
+        matches!(self.component_type.as_str(), "VStack" | "HStack")
+    }
+
+    fn add_child(&mut self, child: CanvasItem) {
+        self.children.push(child);
     }
 
     fn is_selected(&self) -> bool {
@@ -344,8 +366,94 @@ impl OxidXComponent for CanvasItem {
                         .with_color(colors::TEXT.with_alpha(alpha)),
                 );
             }
+            "VStack" | "HStack" => {
+                // Container background
+                renderer.draw_rounded_rect(
+                    self.bounds,
+                    Color::new(0.15, 0.18, 0.22, 0.6 * alpha),
+                    6.0,
+                    Some(Color::new(0.3, 0.4, 0.5, 0.8)),
+                    Some(2.0),
+                );
+                
+                // Container label
+                renderer.draw_text(
+                    &format!("{} ({})", self.component_type, self.children.len()),
+                    Vec2::new(self.bounds.x + 6.0, self.bounds.y + 4.0),
+                    TextStyle::default()
+                        .with_size(10.0)
+                        .with_color(Color::new(0.7, 0.8, 0.9, alpha)),
+                );
+                
+                // Render children with proper layout
+                let gap = 8.0;
+                let padding = 24.0; // Space for title
+                let is_vertical = self.component_type == "VStack";
+                
+                let mut offset = padding;
+                for child in &self.children {
+                    let child_x = if is_vertical {
+                        self.bounds.x + 4.0
+                    } else {
+                        self.bounds.x + offset
+                    };
+                    let child_y = if is_vertical {
+                        self.bounds.y + offset
+                    } else {
+                        self.bounds.y + padding
+                    };
+                    
+                    // Render child at calculated position
+                    // We need to temporarily set bounds for rendering
+                    let mut temp_child = Rect::new(
+                        child_x,
+                        child_y,
+                        child.bounds.width,
+                        child.bounds.height,
+                    );
+                    
+                    // Draw child based on type
+                    match child.component_type.as_str() {
+                        "Button" => {
+                            renderer.draw_rounded_rect(temp_child, Color::new(0.3, 0.4, 0.7, alpha), 8.0, None, None);
+                            renderer.draw_text(&child.label, Vec2::new(temp_child.x + 10.0, temp_child.y + 8.0),
+                                TextStyle::default().with_size(13.0).with_color(Color::WHITE));
+                        }
+                        "Label" => {
+                            renderer.draw_text(&child.label, Vec2::new(temp_child.x + 4.0, temp_child.y + 4.0),
+                                TextStyle::default().with_size(13.0).with_color(colors::TEXT));
+                        }
+                        "Input" => {
+                            renderer.draw_rounded_rect(temp_child, Color::new(0.15, 0.15, 0.17, alpha), 4.0, Some(colors::BORDER), Some(1.0));
+                            renderer.draw_text(&child.label, Vec2::new(temp_child.x + 6.0, temp_child.y + 6.0),
+                                TextStyle::default().with_size(12.0).with_color(colors::TEXT_DIM));
+                        }
+                        _ => {
+                            renderer.draw_rounded_rect(temp_child, Color::new(0.2, 0.2, 0.22, alpha), 4.0, Some(colors::BORDER), Some(1.0));
+                        }
+                    }
+                    
+                    // Advance offset
+                    if is_vertical {
+                        offset += child.bounds.height + gap;
+                    } else {
+                        offset += child.bounds.width + gap;
+                    }
+                }
+                
+                // Drop hint if empty
+                if self.children.is_empty() {
+                    renderer.draw_text(
+                        "Drop components here",
+                        Vec2::new(self.bounds.x + 10.0, self.bounds.y + self.bounds.height / 2.0 - 6.0),
+                        TextStyle::default()
+                            .with_size(11.0)
+                            .with_color(Color::new(0.5, 0.6, 0.7, 0.6 * alpha)),
+                    );
+                }
+            }
             _ => {
-                // Generic container (VStack, HStack)
+                // Generic unknown component
                 renderer.draw_rounded_rect(
                     self.bounds,
                     Color::new(0.12, 0.12, 0.14, 0.5 * alpha),
@@ -772,6 +880,67 @@ impl CanvasPanel {
         println!("✨ Created {} at {:?}", component_type, position);
         self.items.push(item);
     }
+
+    /// Exports all items to JSON with proper hierarchy
+    fn export_items_to_json(&self) -> String {
+        let children: Vec<String> = self.items.iter().map(|item| {
+            Self::item_to_json(item)
+        }).collect();
+
+        format!(
+            r#"{{
+    "type": "AbsoluteCanvas",
+    "id": "root",
+    "props": {{ "offset_x": 250, "offset_y": 0 }},
+    "children": [
+        {}
+    ]
+}}"#,
+            children.join(",\n        ")
+        )
+    }
+
+    /// Recursively convert CanvasItem to JSON string
+    fn item_to_json(item: &CanvasItem) -> String {
+        let base_props = format!(
+            r#""x": {}, "y": {}, "width": {}, "height": {}"#,
+            item.bounds.x, item.bounds.y, item.bounds.width, item.bounds.height
+        );
+
+        match item.component_type.as_str() {
+            "VStack" | "HStack" => {
+                // Recursively export children
+                let children_json: Vec<String> = item.children.iter()
+                    .map(|child| Self::item_to_json(child))
+                    .collect();
+                
+                format!(
+                    r#"{{ "type": "{}", "id": "{}", "props": {{ {}, "spacing": 8 }}, "children": [{}] }}"#,
+                    item.component_type, item.id, base_props, children_json.join(", ")
+                )
+            }
+            "Button" => format!(
+                r#"{{ "type": "Button", "id": "{}", "props": {{ {}, "text": "{}" }} }}"#,
+                item.id, base_props, item.label
+            ),
+            "Label" => format!(
+                r#"{{ "type": "Label", "id": "{}", "props": {{ {}, "text": "{}" }} }}"#,
+                item.id, base_props, item.label
+            ),
+            "Input" => format!(
+                r#"{{ "type": "Input", "id": "{}", "props": {{ {}, "placeholder": "{}" }} }}"#,
+                item.id, base_props, item.label
+            ),
+            "Checkbox" => format!(
+                r#"{{ "type": "Checkbox", "id": "{}", "props": {{ {}, "label": "{}", "checked": false }} }}"#,
+                item.id, base_props, item.label
+            ),
+            _ => format!(
+                r#"{{ "type": "Label", "id": "{}", "props": {{ {}, "text": "{}" }} }}"#,
+                item.id, base_props, item.label
+            ),
+        }
+    }
 }
 
 impl OxidXComponent for CanvasPanel {
@@ -895,7 +1064,37 @@ impl OxidXComponent for CanvasPanel {
 
     fn on_drop(&mut self, payload: &str, _ctx: &mut OxidXContext) -> bool {
         if let Some(component_type) = payload.strip_prefix("CREATE:") {
-            self.create_item(component_type, self.last_drag_position);
+            let drop_pos = self.last_drag_position;
+            
+            // Check if drop position is inside a container (VStack/HStack)
+            let mut added_to_container = false;
+            for item in &mut self.items {
+                if item.is_container() && item.bounds.contains(drop_pos) {
+                    // Create child component
+                    let child_id = format!("{}_{}", component_type.to_lowercase(), item.children.len() + 1);
+                    let label = format!("{} {}", component_type, item.children.len() + 1);
+                    let child_bounds = Rect::new(0.0, 0.0, 100.0, 30.0); // Relative position
+                    
+                    let child = CanvasItem::new(
+                        &child_id,
+                        component_type,
+                        &label,
+                        child_bounds,
+                        self.state.clone(),
+                    );
+                    
+                    item.add_child(child);
+                    println!("📦 Added {} to {} container", component_type, item.component_type);
+                    added_to_container = true;
+                    break;
+                }
+            }
+            
+            // If not dropped on a container, create at root level
+            if !added_to_container {
+                self.create_item(component_type, drop_pos);
+            }
+            
             self.is_drag_over = false;
             return true;
         }
@@ -1318,6 +1517,18 @@ impl OxidXComponent for OxideStudio {
     fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
         if let OxidXEvent::DragOver { position, .. } = event {
             self.last_drag_position = *position;
+        }
+
+        // Before status_bar handles preview, export JSON from center_panel
+        // Check if this is a click on the preview button area
+        if let OxidXEvent::Click { position, .. } = event {
+            if self.status_bar.preview_btn.contains(*position) {
+                // Export JSON from center_panel before preview
+                let json = self.center_panel.export_items_to_json();
+                if let Ok(mut state) = self.center_panel.state.lock() {
+                    state.exported_json = json;
+                }
+            }
         }
 
         // Propagate to status bar FIRST (so Preview button works)
