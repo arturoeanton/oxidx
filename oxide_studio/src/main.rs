@@ -46,6 +46,8 @@ struct CanvasItemInfo {
     height: f32,
     parent_id: Option<String>,        // For nested containers
     children: Vec<CanvasItemInfo>,    // Child components (for VStack/HStack)
+    width_percent: Option<f32>,       // None = absolute, Some = % of parent (0.0-100.0)
+    height_percent: Option<f32>,      // None = absolute, Some = % of parent (0.0-100.0)
 }
 
 struct StudioState {
@@ -232,6 +234,8 @@ impl CanvasItem {
                 height: bounds.height,
                 parent_id: None,
                 children: Vec::new(),
+                width_percent: None,
+                height_percent: None,
             });
         }
 
@@ -1222,6 +1226,36 @@ impl OxidXComponent for InspectorPanel {
                 TextStyle::default()
                     .with_size(11.0)
                     .with_color(colors::TEXT_DIM),
+            );
+
+            // Parent info
+            let parent_text = match &info.parent_id {
+                Some(pid) => format!("Parent: {}", pid),
+                None => "Parent: (none - root level)".to_string(),
+            };
+            renderer.draw_text(
+                &parent_text,
+                Vec2::new(self.bounds.x + 12.0, self.bounds.y + 178.0),
+                TextStyle::default()
+                    .with_size(11.0)
+                    .with_color(colors::TEXT_DIM),
+            );
+
+            // Size Mode
+            let width_mode = match info.width_percent {
+                Some(p) => format!("{:.0}%", p),
+                None => "absolute".to_string(),
+            };
+            let height_mode = match info.height_percent {
+                Some(p) => format!("{:.0}%", p),
+                None => "absolute".to_string(),
+            };
+            renderer.draw_text(
+                &format!("Width: {} | Height: {}", width_mode, height_mode),
+                Vec2::new(self.bounds.x + 12.0, self.bounds.y + 196.0),
+                TextStyle::default()
+                    .with_size(10.0)
+                    .with_color(Color::new(0.5, 0.7, 0.9, 1.0)),
             );
         } else {
             renderer.draw_text(
