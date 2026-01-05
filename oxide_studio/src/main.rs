@@ -197,14 +197,30 @@ impl StudioState {
                             item.id, base_props, item.label, extra
                         )
                     },
-                    "Label" => format!(
-                        r#"{{ "type": "Label", "id": "{}", "props": {{ {}, "text": "{}" }} }}"#,
-                        item.id, base_props, item.label
-                    ),
-                    "Input" => format!(
-                        r#"{{ "type": "Input", "id": "{}", "props": {{ {}, "placeholder": "{}" }} }}"#,
-                        item.id, base_props, item.label
-                    ),
+                    "Label" => {
+                        let mut extra = String::new();
+                        if let Some(c) = &item.color { extra.push_str(&format!(", \"color\": \"{}\"", c)); }
+                        if let Some(r) = item.radius { extra.push_str(&format!(", \"radius\": {}", r)); }
+                        if let Some(h) = &item.align_h { extra.push_str(&format!(", \"align_h\": \"{}\"", h)); }
+                        if let Some(v) = &item.align_v { extra.push_str(&format!(", \"align_v\": \"{}\"", v)); }
+
+                        format!(
+                            r#"{{ "type": "Label", "id": "{}", "props": {{ {}, "text": "{}"{} }} }}"#,
+                            item.id, base_props, item.label, extra
+                        )
+                    },
+                    "Input" => {
+                        let mut extra = String::new();
+                        if let Some(c) = &item.color { extra.push_str(&format!(", \"color\": \"{}\"", c)); }
+                        if let Some(r) = item.radius { extra.push_str(&format!(", \"radius\": {}", r)); }
+                        if let Some(h) = &item.align_h { extra.push_str(&format!(", \"align_h\": \"{}\"", h)); }
+                        if let Some(v) = &item.align_v { extra.push_str(&format!(", \"align_v\": \"{}\"", v)); }
+
+                        format!(
+                            r#"{{ "type": "Input", "id": "{}", "props": {{ {}, "placeholder": "{}"{} }} }}"#,
+                            item.id, base_props, item.label, extra
+                        )
+                    },
                     "Checkbox" => format!(
                         r#"{{ "type": "Checkbox", "id": "{}", "props": {{ {}, "label": "{}", "checked": false }} }}"#,
                         item.id, base_props, item.label
@@ -330,28 +346,86 @@ impl CanvasItem {
                 width_percent: None,
                 height_percent: None,
                 // Defaults
-                color: if component_type == "Button" { Some("#4d66b3".to_string()) } else { None },
-                radius: if component_type == "Button" { Some(8.0) } else { None },
-                align_h: if component_type == "Button" { Some("Center".to_string()) } else { None },
-                align_v: if component_type == "Button" { Some("Center".to_string()) } else { None },
+                color: match component_type {
+                    "Button" => Some("#4d66b3".to_string()),
+                    "Label" => Some("#ffffff".to_string()), // Default white text
+                    "Input" => Some("#1e1e1e".to_string()), // Default dark bg
+                    _ => None
+                },
+                radius: match component_type {
+                    "Button" => Some(8.0),
+                    "Label" => Some(0.0), // No bg usually, but can be set
+                    "Input" => Some(4.0),
+                    _ => None
+                },
+                align_h: match component_type {
+                    "Button" | "Label" => Some("Center".to_string()),
+                    "Input" => Some("Left".to_string()),
+                    _ => None
+                },
+                align_v: match component_type {
+                    "Button" | "Label" | "Input" => Some("Center".to_string()),
+                    _ => None
+                },
             });
         }
 
+        Self::from_info(
+            &CanvasItemInfo {
+                id: id.to_string(),
+                component_type: component_type.to_string(),
+                label: label.to_string(),
+                x: bounds.x,
+                y: bounds.y,
+                width: bounds.width,
+                height: bounds.height,
+                parent_id: None,
+                children: Vec::new(),
+                width_percent: None,
+                height_percent: None,
+                color: match component_type {
+                    "Button" => Some("#4d66b3".to_string()),
+                    "Label" => Some("#ffffff".to_string()),
+                    "Input" => Some("#1e1e1e".to_string()),
+                    _ => None
+                },
+                radius: match component_type {
+                    "Button" => Some(8.0),
+                    "Label" => Some(0.0),
+                    "Input" => Some(4.0),
+                    _ => None
+                },
+                align_h: match component_type {
+                    "Button" | "Label" => Some("Center".to_string()),
+                    "Input" => Some("Left".to_string()),
+                    _ => None
+                },
+                align_v: match component_type {
+                    "Button" | "Label" | "Input" => Some("Center".to_string()),
+                    _ => None
+                },
+            },
+            state,
+        )
+    }
+
+    /// Creates a visual item from a state info object.
+    fn from_info(info: &CanvasItemInfo, state: SharedState) -> Self {
         Self {
-            id: id.to_string(),
-            component_type: component_type.to_string(),
-            bounds,
-            label: label.to_string(),
+            id: info.id.clone(),
+            component_type: info.component_type.clone(),
+            bounds: Rect::new(info.x, info.y, info.width, info.height),
+            label: info.label.clone(),
             is_hovered: false,
             drag_mode: DragMode::None,
             drag_offset: Vec2::ZERO,
-            original_bounds: bounds,
+            original_bounds: Rect::new(info.x, info.y, info.width, info.height),
             state,
             children: Vec::new(),
-            color: if component_type == "Button" { Some("#4d66b3".to_string()) } else { None },
-            radius: if component_type == "Button" { Some(8.0) } else { None },
-            align_h: if component_type == "Button" { Some("Center".to_string()) } else { None },
-            align_v: if component_type == "Button" { Some("Center".to_string()) } else { None },
+            color: info.color.clone(),
+            radius: info.radius,
+            align_h: info.align_h.clone(),
+            align_v: info.align_v.clone(),
         }
     }
 
@@ -407,6 +481,40 @@ impl CanvasItem {
         // Recursively sync children
         for child in &mut self.children {
             child.sync_from_state();
+        }
+    }
+
+    /// Recursively adds children that have been created in the state but not yet in the visual tree.
+    fn sync_children_creation(&mut self, state: &StudioState) {
+        fn find_info<'a>(items: &'a [CanvasItemInfo], target_id: &str) -> Option<&'a CanvasItemInfo> {
+            for item in items {
+                if item.id == target_id {
+                    return Some(item);
+                }
+                if let Some(found) = find_info(&item.children, target_id) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+
+        if let Some(info) = find_info(&state.canvas_items, &self.id) {
+            // Find children in State that are NOT in self.children
+            for child_info in &info.children {
+                if !self.children.iter().any(|c| c.id == child_info.id) {
+                    println!("[CanvasItem] Reconciliation: creating missing child '{}'", child_info.id);
+                    // Create new child from info
+                    let mut child = CanvasItem::from_info(child_info, self.state.clone());
+                    // Since it's new, we must also sync its children immediately
+                    child.sync_children_creation(state);
+                    self.children.push(child);
+                }
+            }
+        }
+        
+        // Recurse for existing children
+        for child in &mut self.children {
+            child.sync_children_creation(state);
         }
     }
 
@@ -516,35 +624,93 @@ impl OxidXComponent for CanvasItem {
                 );
             }
             "Label" => {
-                // Label with background for visibility in edit mode
+                let color_hex = self.color.as_deref().unwrap_or("#ffffff");
+                let radius = self.radius.unwrap_or(0.0);
+                
+                // Only draw bg if radius > 0 or color is explicitly set different from default?
+                // Actually for Label in render, user might want bg.
+                // But normally Label is transparent. Property Grid default was white text.
+                // If user sets color, does it mean text color or bg color?
+                // For Button, color was BG. For Label, it usually means Text color.
+                // BUT "color" field is generic.
+                // Let's decide: "color" = Text Color for Label. "radius" = ignored unless we add "background" prop later?
+                // OR: "color" = Background, and text is auto/inverse?
+                // Standard: "color" implies primary visualization.
+                // For Label, let's treat "color" as TEXT COLOR.
+                // And we use current transparent-ish bg for edit mode visibility.
+                
+                let text_color = Color::from_hex(color_hex).unwrap_or(colors::TEXT);
+                
                 renderer.draw_rounded_rect(
                     self.bounds,
                     Color::new(0.15, 0.15, 0.17, 0.3 * alpha),
-                    4.0,
+                    radius,
                     Some(colors::BORDER),
                     Some(1.0),
                 );
+                
+                // Alignment
+                let text = &self.label;
+                let text_size = 14.0;
+                let measured_w = renderer.measure_text(text, text_size);
+                let measured_h = text_size;
+
+                let x = match self.align_h.as_deref().unwrap_or("Left") {
+                    "Left" => self.bounds.x + 4.0,
+                    "Right" => self.bounds.x + self.bounds.width - measured_w - 4.0,
+                    _ => self.bounds.x + (self.bounds.width - measured_w) / 2.0,
+                };
+                
+                let y = match self.align_v.as_deref().unwrap_or("Center") {
+                    "Top" => self.bounds.y + 2.0,
+                    "Bottom" => self.bounds.y + self.bounds.height - measured_h - 2.0,
+                    _ => self.bounds.y + (self.bounds.height - measured_h) / 2.0,
+                };
+
                 renderer.draw_text(
                     &self.label,
-                    Vec2::new(self.bounds.x + 4.0, self.bounds.y + 2.0),
+                    Vec2::new(x, y),
                     TextStyle::default()
-                        .with_size(14.0)
-                        .with_color(colors::TEXT.with_alpha(alpha)),
+                        .with_size(text_size)
+                        .with_color(text_color.with_alpha(alpha)),
                 );
             }
             "Input" => {
+                let color_hex = self.color.as_deref().unwrap_or("#1e1e1e");
+                let radius = self.radius.unwrap_or(4.0);
+                let bg_color = Color::from_hex(color_hex).unwrap_or(Color::new(0.15, 0.15, 0.17, 1.0));
+
                 renderer.draw_rounded_rect(
                     self.bounds,
-                    Color::new(0.15, 0.15, 0.17, alpha),
-                    4.0,
+                    bg_color.with_alpha(alpha),
+                    radius,
                     Some(colors::BORDER),
                     Some(1.0),
                 );
+                
+                 // Alignment
+                let text = &self.label; // Placeholder
+                let text_size = 13.0;
+                let measured_w = renderer.measure_text(text, text_size);
+                let measured_h = text_size;
+
+                let x = match self.align_h.as_deref().unwrap_or("Left") {
+                    "Left" => self.bounds.x + 8.0,
+                    "Right" => self.bounds.x + self.bounds.width - measured_w - 8.0,
+                    _ => self.bounds.x + (self.bounds.width - measured_w) / 2.0,
+                };
+                
+                let y = match self.align_v.as_deref().unwrap_or("Center") {
+                    "Top" => self.bounds.y + 8.0,
+                    "Bottom" => self.bounds.y + self.bounds.height - measured_h - 8.0,
+                    _ => self.bounds.y + (self.bounds.height - measured_h) / 2.0,
+                };
+                
                 renderer.draw_text(
                     &self.label,
-                    Vec2::new(self.bounds.x + 8.0, self.bounds.y + 8.0),
+                    Vec2::new(x, y),
                     TextStyle::default()
-                        .with_size(13.0)
+                        .with_size(text_size)
                         .with_color(colors::TEXT_DIM.with_alpha(alpha)),
                 );
             }
@@ -1792,6 +1958,24 @@ impl OxidXComponent for CanvasPanel {
              for item in &mut self.items {
                  item.sync_children_deletion(&state);
              }
+
+            // Reconciliation: Create missing root items
+            // This handles cases where items are created/renamed only in State (e.g. from Inspector)
+            // and need to be reflected in the Visual tree.
+            for info in &state.canvas_items {
+                if !self.items.iter().any(|i| i.id == info.id) {
+                    println!("[CanvasPanel] Reconciliation: creating missing root item '{}'", info.id);
+                    let mut item = CanvasItem::from_info(info, self.state.clone());
+                    // Since it's new, sync its children immediately
+                    item.sync_children_creation(&state); 
+                    self.items.push(item);
+                }
+            }
+
+            // Sync creation for existing items (recurse)
+            for item in &mut self.items {
+                item.sync_children_creation(&state);
+            }
         }
 
         // Sync items from state (for label updates from inspector)
