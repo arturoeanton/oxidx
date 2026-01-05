@@ -3,8 +3,8 @@
 //! Runtime factory that instantiates UI components from `ComponentNode` schemas.
 
 use crate::{
-    AbsoluteCanvas, BarChart, Button, HStack, Image, Input, Label, LineChart, PieChart, VStack,
-    ZStack,
+    AbsoluteCanvas, BarChart, Button, Checkbox, HStack, Image, Input, Label, LineChart, PieChart,
+    VStack, ZStack,
 };
 use oxidx_core::events::OxidXEvent;
 use oxidx_core::schema::ComponentNode;
@@ -90,6 +90,7 @@ pub fn build_component_tree(node: &ComponentNode) -> Box<dyn OxidXComponent> {
         "Label" => build_label(node),
         "Input" => build_input(node),
         "Image" => build_image(node),
+        "Checkbox" => build_checkbox(node),
         "Chart" => build_chart(node),
         "PieChart" => build_pie_chart(node),
         "BarChart" => build_bar_chart(node),
@@ -313,6 +314,18 @@ fn build_input(node: &ComponentNode) -> Box<dyn OxidXComponent> {
     Box::new(input)
 }
 
+fn build_checkbox(node: &ComponentNode) -> Box<dyn OxidXComponent> {
+    let id = node.id.as_deref().unwrap_or("checkbox");
+
+    let label = node
+        .props
+        .get("label")
+        .or(node.props.get("text"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("Checkbox");
+
+    Box::new(Checkbox::new(id, label))
+}
 fn build_image(node: &ComponentNode) -> Box<dyn OxidXComponent> {
     let path = node
         .props

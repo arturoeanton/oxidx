@@ -730,7 +730,9 @@ impl ToolboxPanel {
         let components = [
             ("📦", "VStack"),
             ("📦", "HStack"),
-            ("🔘", "Button"),
+            ("�", "ZStack"),
+            ("🎨", "AbsoluteCanvas"),
+            ("�🔘", "Button"),
             ("📝", "Input"),
             ("🔤", "Label"),
             ("✅", "Checkbox"),
