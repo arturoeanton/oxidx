@@ -881,7 +881,6 @@ impl CanvasPanel {
         };
 
         let bounds = Rect::new(position.x, position.y, width, height);
-        println!("📝 Creating {} with id='{}' label='{}'", component_type, id, label);
         let item = CanvasItem::new(&id, component_type, &label, bounds, Arc::clone(&self.state));
 
         println!("✨ Created {} at {:?}", component_type, position);
@@ -1151,23 +1150,19 @@ impl InspectorPanel {
         
         // Check if selection changed
         if current_id != self.last_selected_id {
-            println!("🔄 Selection changed: {:?} -> {:?}", self.last_selected_id, current_id);
-            println!("   canvas_items count: {}", state.canvas_items.len());
+            println!("🔄 SYNC: {:?} -> {:?}", self.last_selected_id, current_id);
             
             // Selection changed - update input with new component's label
             if let Some(ref id) = current_id {
                 if let Some(info) = state.canvas_items.iter().find(|i| i.id == *id) {
-                    println!("   Found item: {} with label '{}'", info.id, info.label);
+                    println!("   SYNC: Setting input to '{}'", info.label);
                     self.label_input.set_value(&info.label);
                 } else {
-                    println!("   ⚠️ Item not found in canvas_items!");
-                    // List all items for debugging
-                    for item in &state.canvas_items {
-                        println!("      - {} ({})", item.id, item.label);
-                    }
+                    println!("   SYNC: Item not found, setting empty");
                     self.label_input.set_value("");
                 }
             } else {
+                println!("   SYNC: No selection, setting empty");
                 self.label_input.set_value("");
             }
             drop(state);
@@ -1325,14 +1320,19 @@ impl OxidXComponent for InspectorPanel {
         // Forward events to input
         let handled = self.label_input.on_event(event, ctx);
 
-        // Only update state when input has content (avoid overwriting with empty on selection change)
+        // Only update state when input has content AND selection hasn't changed
+        // This prevents overwriting new component's label with old component's text
         let new_text = self.label_input.value().to_string();
         if !new_text.is_empty() {
             let state = self.state.lock().unwrap();
             if let Some(id) = state.selected_id.clone() {
                 drop(state);
-                let mut state = self.state.lock().unwrap();
-                state.update_label(&id, new_text);
+                
+                // Only update if the selection matches what the input was synced to
+                if Some(id.clone()) == self.last_selected_id {
+                    let mut state = self.state.lock().unwrap();
+                    state.update_label(&id, new_text);
+                }
             }
         }
 
@@ -1342,14 +1342,18 @@ impl OxidXComponent for InspectorPanel {
         // Propagate keyboard events to the input
         self.label_input.on_keyboard_input(event, ctx);
 
-        // Only update state when input has content
+        // Only update state when input has content AND selection matches
         let new_text = self.label_input.value().to_string();
         if !new_text.is_empty() {
             if let Ok(state) = self.state.lock() {
                 if let Some(id) = state.selected_id.clone() {
                     drop(state);
-                    if let Ok(mut state) = self.state.lock() {
-                        state.update_label(&id, new_text);
+                    
+                    // Only update if the selection matches what the input was synced to
+                    if Some(id.clone()) == self.last_selected_id {
+                        if let Ok(mut state) = self.state.lock() {
+                            state.update_label(&id, new_text);
+                        }
                     }
                 }
             }
