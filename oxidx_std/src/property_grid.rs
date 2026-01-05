@@ -246,16 +246,16 @@ impl OxidXComponent for PropertyRow {
             Color::from_hex("#2d2d30").unwrap_or(Color::BLACK),
         );
 
-        // Key Text (Right aligned with padding)
-        let text_padding = 8.0;
+        // Key Text (Left aligned with padding)
+        let text_padding = 10.0;
         let text_style = TextStyle::new(13.0)
             .with_color(Color::from_hex("#cccccc").unwrap_or(Color::WHITE))
-            .with_align(TextAlign::Right);
+            .with_align(TextAlign::Left);
 
         renderer.draw_text_bounded(
             &self.key,
-            Vec2::new(self.bounds.x, self.bounds.y + 6.0),
-            self.key_width - text_padding, // Width for right alignment calc
+            Vec2::new(self.bounds.x + text_padding, self.bounds.y + 6.0),
+            self.key_width - text_padding,
             text_style,
         );
 
