@@ -8,6 +8,8 @@ use oxidx_core::{
     TextStyle, Vec2,
 };
 use oxidx_std::Input;
+use std::fs;
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 
 // =============================================================================
@@ -20,12 +22,13 @@ mod colors {
     pub const EDITOR_BG: Color = Color::new(0.118, 0.118, 0.118, 1.0); // #1e1e1e
     pub const PANEL_BG: Color = Color::new(0.145, 0.145, 0.149, 1.0); // #252526
     pub const BORDER: Color = Color::new(0.243, 0.243, 0.259, 1.0); // #3e3e42
-    pub const TEXT: Color = Color::new(0.9, 0.9, 0.9, 1.0); // brighter #e5e5e5
-    pub const TEXT_DIM: Color = Color::new(0.6, 0.6, 0.6, 1.0); // brighter
+    pub const TEXT: Color = Color::new(0.95, 0.95, 0.95, 1.0); // Almost white
+    pub const TEXT_DIM: Color = Color::new(0.75, 0.75, 0.75, 1.0); // Brighter gray
     pub const ACCENT: Color = Color::new(0.0, 0.478, 0.8, 1.0); // #007acc
     pub const STATUS_BAR: Color = Color::new(0.0, 0.478, 0.8, 1.0); // #007acc
     pub const DROP_HIGHLIGHT: Color = Color::new(0.0, 0.6, 0.3, 0.3);
-    pub const SELECTION: Color = Color::new(0.0, 0.478, 0.8, 0.5); // Blue selection
+    pub const PREVIEW_BTN: Color = Color::new(0.2, 0.65, 0.35, 1.0); // Saturated green
+    pub const STOP_BTN: Color = Color::new(0.75, 0.25, 0.2, 1.0); // Red
 }
 
 // =============================================================================
@@ -89,6 +92,101 @@ impl StudioState {
             "🔄 Preview mode: {}",
             if self.preview_mode { "ON" } else { "OFF" }
         );
+    }
+
+    /// Exports canvas items to JSON schema compatible with oxidx_viewer
+    fn export_to_json(&self) -> String {
+        // Build the children array
+        let children: Vec<String> = self
+            .canvas_items
+            .iter()
+            .map(|item| match item.component_type.as_str() {
+                "Button" => format!(
+                    r#"{{
+                        "type": "Button",
+                        "id": "{}",
+                        "props": {{ "text": "{}" }}
+                    }}"#,
+                    item.id, item.label
+                ),
+                "Label" => format!(
+                    r#"{{
+                        "type": "Label",
+                        "id": "{}",
+                        "props": {{ "text": "{}" }}
+                    }}"#,
+                    item.id, item.label
+                ),
+                "Input" => format!(
+                    r#"{{
+                        "type": "Input",
+                        "id": "{}",
+                        "props": {{ "placeholder": "{}" }}
+                    }}"#,
+                    item.id, item.label
+                ),
+                "Checkbox" => format!(
+                    r#"{{
+                        "type": "Checkbox",
+                        "id": "{}",
+                        "props": {{ "label": "{}", "checked": false }}
+                    }}"#,
+                    item.id, item.label
+                ),
+                _ => format!(
+                    r#"{{
+                        "type": "VStack",
+                        "id": "{}",
+                        "props": {{}},
+                        "children": []
+                    }}"#,
+                    item.id
+                ),
+            })
+            .collect();
+
+        // Wrap in a VStack root
+        format!(
+            r#"{{
+    "type": "VStack",
+    "id": "root",
+    "props": {{ "spacing": 10 }},
+    "children": [{}]
+}}"#,
+            children.join(",\n        ")
+        )
+    }
+
+    /// Export to file and launch oxidx_viewer
+    fn launch_preview(&self) -> Result<(), String> {
+        let json = self.export_to_json();
+        let session_id = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        let filepath = format!("/tmp/oxide_studio_{}.json", session_id);
+
+        fs::write(&filepath, &json).map_err(|e| format!("Failed to write JSON: {}", e))?;
+
+        println!("📄 Exported to: {}", filepath);
+        println!("📝 JSON:\n{}", json);
+
+        // Launch oxidx_viewer in background
+        match Command::new("cargo")
+            .args(["run", "-p", "oxidx_viewer", "--", &filepath])
+            .current_dir("/Users/arturoeanton/github.com/arturoeanton/oxidx")
+            .spawn()
+        {
+            Ok(_) => {
+                println!("🚀 Launched oxidx_viewer with {}", filepath);
+                Ok(())
+            }
+            Err(e) => {
+                println!("⚠️ Could not launch viewer: {}", e);
+                Err(format!("Failed to launch viewer: {}", e))
+            }
+        }
     }
 }
 
@@ -1035,11 +1133,11 @@ impl StudioStatusBar {
 impl OxidXComponent for StudioStatusBar {
     fn layout(&mut self, available: Rect) -> Vec2 {
         self.bounds = available;
-        // Preview button at center-right
+        // Preview button - larger and centered
         self.preview_btn = Rect::new(
-            available.x + available.width / 2.0 - 50.0,
+            available.x + available.width / 2.0 - 60.0,
             available.y + 2.0,
-            100.0,
+            120.0,
             18.0,
         );
         available.size()
@@ -1050,7 +1148,7 @@ impl OxidXComponent for StudioStatusBar {
 
         // Background color changes based on mode
         let bg_color = if is_preview {
-            Color::new(0.2, 0.7, 0.3, 1.0) // Green for preview
+            Color::new(0.15, 0.5, 0.2, 1.0) // Dark green for preview
         } else {
             colors::STATUS_BAR // Blue for edit
         };
@@ -1058,9 +1156,9 @@ impl OxidXComponent for StudioStatusBar {
 
         // Left text
         let mode_text = if is_preview {
-            "▶ PREVIEW MODE • Components are active"
+            "▶ PREVIEW MODE • Click Stop to edit"
         } else {
-            "✏ EDIT MODE • Drag to move • Resize from corner"
+            "✏ EDIT MODE • Drag to move"
         };
         renderer.draw_text(
             mode_text,
@@ -1070,22 +1168,30 @@ impl OxidXComponent for StudioStatusBar {
                 .with_color(Color::WHITE),
         );
 
-        // Preview/Edit button
+        // Preview/Edit button - using theme colors
         let btn_bg = if is_preview {
-            Color::new(0.15, 0.5, 0.2, 1.0)
+            colors::STOP_BTN
         } else {
-            Color::new(0.0, 0.35, 0.6, 1.0)
+            colors::PREVIEW_BTN
         };
-        renderer.draw_rounded_rect(self.preview_btn, btn_bg, 4.0, None, None);
+
+        // Draw button with subtle dark border
+        renderer.draw_rounded_rect(
+            self.preview_btn,
+            btn_bg,
+            6.0,
+            Some(colors::BORDER),
+            Some(1.5),
+        );
 
         let btn_text = if is_preview {
-            "⏹ Stop"
+            "⏹ STOP"
         } else {
-            "▶ Preview"
+            "▶ PREVIEW"
         };
         renderer.draw_text(
             btn_text,
-            Vec2::new(self.preview_btn.x + 20.0, self.preview_btn.y + 2.0),
+            Vec2::new(self.preview_btn.x + 25.0, self.preview_btn.y + 2.0),
             TextStyle::default()
                 .with_size(12.0)
                 .with_color(Color::WHITE),
@@ -1108,8 +1214,21 @@ impl OxidXComponent for StudioStatusBar {
         match event {
             OxidXEvent::Click { position, .. } => {
                 if self.preview_btn.contains(*position) {
-                    if let Ok(mut state) = self.state.lock() {
-                        state.toggle_preview();
+                    if let Ok(state) = self.state.lock() {
+                        if state.preview_mode {
+                            // Stop preview - just toggle
+                            drop(state);
+                            if let Ok(mut state) = self.state.lock() {
+                                state.toggle_preview();
+                            }
+                        } else {
+                            // Start preview - export and launch viewer
+                            let _ = state.launch_preview();
+                            drop(state);
+                            if let Ok(mut state) = self.state.lock() {
+                                state.toggle_preview();
+                            }
+                        }
                     }
                     return true;
                 }
@@ -1210,6 +1329,11 @@ impl OxidXComponent for OxideStudio {
     fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
         if let OxidXEvent::DragOver { position, .. } = event {
             self.last_drag_position = *position;
+        }
+
+        // Propagate to status bar FIRST (so Preview button works)
+        if self.status_bar.on_event(event, ctx) {
+            return true;
         }
 
         if self.left_panel.on_event(event, ctx) {
