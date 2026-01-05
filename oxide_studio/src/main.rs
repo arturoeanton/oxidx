@@ -7,7 +7,8 @@ use oxidx_core::{
     run_with_config, AppConfig, Color, OxidXComponent, OxidXContext, OxidXEvent, Rect, Renderer,
     TextStyle, Vec2,
 };
-use oxidx_std::{Button, Input, Label, Spacing, StackAlignment, VStack};
+use oxidx_std::Input;
+use std::sync::{Arc, Mutex};
 
 // =============================================================================
 // Color Palette (VS Code Dark Theme)
@@ -19,11 +20,399 @@ mod colors {
     pub const EDITOR_BG: Color = Color::new(0.118, 0.118, 0.118, 1.0); // #1e1e1e
     pub const PANEL_BG: Color = Color::new(0.145, 0.145, 0.149, 1.0); // #252526
     pub const BORDER: Color = Color::new(0.243, 0.243, 0.259, 1.0); // #3e3e42
-    pub const TEXT: Color = Color::new(0.8, 0.8, 0.8, 1.0); // #cccccc
-    pub const TEXT_DIM: Color = Color::new(0.5, 0.5, 0.5, 1.0);
+    pub const TEXT: Color = Color::new(0.9, 0.9, 0.9, 1.0); // brighter #e5e5e5
+    pub const TEXT_DIM: Color = Color::new(0.6, 0.6, 0.6, 1.0); // brighter
     pub const ACCENT: Color = Color::new(0.0, 0.478, 0.8, 1.0); // #007acc
     pub const STATUS_BAR: Color = Color::new(0.0, 0.478, 0.8, 1.0); // #007acc
-    pub const DROP_HIGHLIGHT: Color = Color::new(0.0, 0.6, 0.3, 0.3); // Green highlight
+    pub const DROP_HIGHLIGHT: Color = Color::new(0.0, 0.6, 0.3, 0.3);
+    pub const SELECTION: Color = Color::new(0.0, 0.478, 0.8, 0.5); // Blue selection
+}
+
+// =============================================================================
+// Shared Studio State
+// =============================================================================
+
+#[derive(Clone)]
+struct CanvasItemInfo {
+    id: String,
+    component_type: String,
+    label: String,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+}
+
+struct StudioState {
+    selected_id: Option<String>,
+    canvas_items: Vec<CanvasItemInfo>,
+    preview_mode: bool,
+}
+
+impl StudioState {
+    fn new() -> Self {
+        Self {
+            selected_id: None,
+            canvas_items: Vec::new(),
+            preview_mode: false,
+        }
+    }
+
+    fn select(&mut self, id: Option<String>) {
+        self.selected_id = id;
+    }
+
+    fn get_selected_info(&self) -> Option<CanvasItemInfo> {
+        let id = self.selected_id.as_ref()?;
+        self.canvas_items.iter().find(|i| &i.id == id).cloned()
+    }
+
+    fn update_label(&mut self, id: &str, new_label: String) {
+        if let Some(item) = self.canvas_items.iter_mut().find(|i| i.id == id) {
+            item.label = new_label;
+        }
+    }
+
+    fn update_size(&mut self, id: &str, width: f32, height: f32) {
+        if let Some(item) = self.canvas_items.iter_mut().find(|i| i.id == id) {
+            item.width = width;
+            item.height = height;
+        }
+    }
+
+    fn toggle_preview(&mut self) {
+        self.preview_mode = !self.preview_mode;
+        if self.preview_mode {
+            self.selected_id = None; // Deselect in preview mode
+        }
+        println!(
+            "🔄 Preview mode: {}",
+            if self.preview_mode { "ON" } else { "OFF" }
+        );
+    }
+}
+
+type SharedState = Arc<Mutex<StudioState>>;
+
+// =============================================================================
+// CanvasItem - Wrapper for components on the canvas (EDIT MODE)
+// =============================================================================
+
+#[derive(Clone, Copy, PartialEq)]
+enum DragMode {
+    None,
+    Move,
+    ResizeBR, // Bottom-Right resize
+}
+
+struct CanvasItem {
+    id: String,
+    component_type: String,
+    bounds: Rect,
+    label: String,
+    is_hovered: bool,
+    drag_mode: DragMode,
+    drag_offset: Vec2,
+    original_bounds: Rect, // For resize
+    state: SharedState,
+}
+
+const HANDLE_SIZE: f32 = 10.0;
+
+impl CanvasItem {
+    fn new(id: &str, component_type: &str, label: &str, bounds: Rect, state: SharedState) -> Self {
+        // Register in shared state
+        {
+            let mut st = state.lock().unwrap();
+            st.canvas_items.push(CanvasItemInfo {
+                id: id.to_string(),
+                component_type: component_type.to_string(),
+                label: label.to_string(),
+                x: bounds.x,
+                y: bounds.y,
+                width: bounds.width,
+                height: bounds.height,
+            });
+        }
+
+        Self {
+            id: id.to_string(),
+            component_type: component_type.to_string(),
+            bounds,
+            label: label.to_string(),
+            is_hovered: false,
+            drag_mode: DragMode::None,
+            drag_offset: Vec2::ZERO,
+            original_bounds: bounds,
+            state,
+        }
+    }
+
+    fn is_selected(&self) -> bool {
+        let st = self.state.lock().unwrap();
+        st.selected_id.as_ref() == Some(&self.id)
+    }
+
+    fn sync_from_state(&mut self) {
+        let st = self.state.lock().unwrap();
+        if let Some(info) = st.canvas_items.iter().find(|i| i.id == self.id) {
+            self.label = info.label.clone();
+        }
+    }
+
+    fn update_state(&self) {
+        if let Ok(mut st) = self.state.lock() {
+            if let Some(info) = st.canvas_items.iter_mut().find(|i| i.id == self.id) {
+                info.x = self.bounds.x;
+                info.y = self.bounds.y;
+                info.width = self.bounds.width;
+                info.height = self.bounds.height;
+            }
+        }
+    }
+
+    fn br_handle_rect(&self) -> Rect {
+        Rect::new(
+            self.bounds.x + self.bounds.width - HANDLE_SIZE,
+            self.bounds.y + self.bounds.height - HANDLE_SIZE,
+            HANDLE_SIZE,
+            HANDLE_SIZE,
+        )
+    }
+
+    fn is_preview_mode(&self) -> bool {
+        self.state.lock().map(|s| s.preview_mode).unwrap_or(false)
+    }
+}
+
+impl OxidXComponent for CanvasItem {
+    fn render(&self, renderer: &mut Renderer) {
+        let is_selected = self.is_selected();
+        let is_dragging = self.drag_mode != DragMode::None;
+        let alpha = if is_dragging { 0.7 } else { 1.0 };
+
+        // Draw based on component type (all in EDIT MODE - just visual representation)
+        match self.component_type.as_str() {
+            "Button" => {
+                let bg = Color::new(0.3, 0.4, 0.7, alpha);
+                renderer.draw_rounded_rect(self.bounds, bg, 8.0, None, None);
+                renderer.draw_text(
+                    &self.label,
+                    Vec2::new(
+                        self.bounds.x + self.bounds.width / 2.0 - 30.0,
+                        self.bounds.y + 10.0,
+                    ),
+                    TextStyle::default()
+                        .with_size(14.0)
+                        .with_color(Color::WHITE.with_alpha(alpha)),
+                );
+            }
+            "Label" => {
+                // Label with background for visibility in edit mode
+                renderer.draw_rounded_rect(
+                    self.bounds,
+                    Color::new(0.15, 0.15, 0.17, 0.3 * alpha),
+                    4.0,
+                    Some(colors::BORDER),
+                    Some(1.0),
+                );
+                renderer.draw_text(
+                    &self.label,
+                    Vec2::new(self.bounds.x + 4.0, self.bounds.y + 2.0),
+                    TextStyle::default()
+                        .with_size(14.0)
+                        .with_color(colors::TEXT.with_alpha(alpha)),
+                );
+            }
+            "Input" => {
+                renderer.draw_rounded_rect(
+                    self.bounds,
+                    Color::new(0.15, 0.15, 0.17, alpha),
+                    4.0,
+                    Some(colors::BORDER),
+                    Some(1.0),
+                );
+                renderer.draw_text(
+                    &self.label,
+                    Vec2::new(self.bounds.x + 8.0, self.bounds.y + 8.0),
+                    TextStyle::default()
+                        .with_size(13.0)
+                        .with_color(colors::TEXT_DIM.with_alpha(alpha)),
+                );
+            }
+            "Checkbox" => {
+                let box_rect = Rect::new(self.bounds.x, self.bounds.y, 18.0, 18.0);
+                renderer.draw_rounded_rect(
+                    box_rect,
+                    Color::new(0.2, 0.2, 0.22, alpha),
+                    3.0,
+                    Some(colors::BORDER),
+                    Some(1.0),
+                );
+                renderer.draw_text(
+                    &self.label,
+                    Vec2::new(self.bounds.x + 26.0, self.bounds.y + 2.0),
+                    TextStyle::default()
+                        .with_size(13.0)
+                        .with_color(colors::TEXT.with_alpha(alpha)),
+                );
+            }
+            _ => {
+                // Generic container (VStack, HStack)
+                renderer.draw_rounded_rect(
+                    self.bounds,
+                    Color::new(0.12, 0.12, 0.14, 0.5 * alpha),
+                    4.0,
+                    Some(colors::BORDER),
+                    Some(1.0),
+                );
+                renderer.draw_text(
+                    &self.label,
+                    Vec2::new(self.bounds.x + 8.0, self.bounds.y + 8.0),
+                    TextStyle::default()
+                        .with_size(11.0)
+                        .with_color(colors::TEXT_DIM.with_alpha(alpha)),
+                );
+            }
+        }
+
+        // Selection UI (only when NOT in preview mode)
+        if is_selected && !self.is_preview_mode() {
+            // Selection border
+            renderer.draw_rounded_rect(
+                Rect::new(
+                    self.bounds.x - 2.0,
+                    self.bounds.y - 2.0,
+                    self.bounds.width + 4.0,
+                    self.bounds.height + 4.0,
+                ),
+                Color::TRANSPARENT,
+                8.0,
+                Some(colors::ACCENT),
+                Some(2.0),
+            );
+
+            // Resize handle (bottom-right)
+            let br = self.br_handle_rect();
+            renderer.fill_rect(br, colors::ACCENT);
+
+            // Size indicator
+            renderer.draw_text(
+                &format!("{:.0}×{:.0}", self.bounds.width, self.bounds.height),
+                Vec2::new(self.bounds.x, self.bounds.y + self.bounds.height + 4.0),
+                TextStyle::default()
+                    .with_size(10.0)
+                    .with_color(colors::ACCENT),
+            );
+        }
+
+        // Hover effect (not when in preview mode)
+        if self.is_hovered && !is_selected && !self.is_preview_mode() {
+            renderer.draw_rounded_rect(
+                self.bounds,
+                Color::new(1.0, 1.0, 1.0, 0.05),
+                4.0,
+                Some(Color::new(1.0, 1.0, 1.0, 0.2)),
+                Some(1.0),
+            );
+        }
+    }
+
+    fn on_event(&mut self, event: &OxidXEvent, _ctx: &mut OxidXContext) -> bool {
+        // Skip event handling in preview mode
+        if self.is_preview_mode() {
+            return false;
+        }
+
+        match event {
+            OxidXEvent::MouseMove { position, .. } => {
+                self.is_hovered = self.bounds.contains(*position);
+
+                match self.drag_mode {
+                    DragMode::Move => {
+                        self.bounds.x = position.x - self.drag_offset.x;
+                        self.bounds.y = position.y - self.drag_offset.y;
+                        self.update_state();
+                        return true;
+                    }
+                    DragMode::ResizeBR => {
+                        // Calculate new size from mouse position
+                        let new_width = (position.x - self.bounds.x).max(30.0);
+                        let new_height = (position.y - self.bounds.y).max(20.0);
+                        self.bounds.width = new_width;
+                        self.bounds.height = new_height;
+                        self.update_state();
+                        return true;
+                    }
+                    DragMode::None => {}
+                }
+                false
+            }
+            OxidXEvent::MouseDown { position, .. } => {
+                // Check resize handle first (when selected)
+                if self.is_selected() && self.br_handle_rect().contains(*position) {
+                    self.drag_mode = DragMode::ResizeBR;
+                    self.original_bounds = self.bounds;
+                    println!("📐 Resizing: {}", self.id);
+                    return true;
+                }
+
+                // Then check for move/select
+                if self.bounds.contains(*position) {
+                    {
+                        let mut st = self.state.lock().unwrap();
+                        st.select(Some(self.id.clone()));
+                    }
+
+                    self.drag_mode = DragMode::Move;
+                    self.drag_offset =
+                        Vec2::new(position.x - self.bounds.x, position.y - self.bounds.y);
+                    println!("🔵 Selected: {}", self.id);
+                    return true;
+                }
+                false
+            }
+            OxidXEvent::MouseUp { .. } => {
+                if self.drag_mode != DragMode::None {
+                    let mode = self.drag_mode;
+                    self.drag_mode = DragMode::None;
+                    self.update_state();
+                    match mode {
+                        DragMode::Move => println!(
+                            "📍 Moved {} to ({:.0}, {:.0})",
+                            self.id, self.bounds.x, self.bounds.y
+                        ),
+                        DragMode::ResizeBR => println!(
+                            "📐 Resized {} to {:.0}×{:.0}",
+                            self.id, self.bounds.width, self.bounds.height
+                        ),
+                        _ => {}
+                    }
+                    return true;
+                }
+                false
+            }
+            _ => false,
+        }
+    }
+
+    fn bounds(&self) -> Rect {
+        self.bounds
+    }
+
+    fn set_position(&mut self, x: f32, y: f32) {
+        self.bounds.x = x;
+        self.bounds.y = y;
+    }
+
+    fn set_size(&mut self, w: f32, h: f32) {
+        self.bounds.width = w;
+        self.bounds.height = h;
+    }
+
+    fn id(&self) -> &str {
+        &self.id
+    }
 }
 
 // =============================================================================
@@ -52,7 +441,6 @@ impl ToolboxItem {
 
 impl OxidXComponent for ToolboxItem {
     fn render(&self, renderer: &mut Renderer) {
-        // Background with hover effect
         let bg_color = if self.is_hovered {
             Color::new(0.25, 0.25, 0.28, 1.0)
         } else {
@@ -61,7 +449,6 @@ impl OxidXComponent for ToolboxItem {
 
         renderer.fill_rect(self.bounds, bg_color);
 
-        // Border
         renderer.fill_rect(
             Rect::new(
                 self.bounds.x,
@@ -72,7 +459,6 @@ impl OxidXComponent for ToolboxItem {
             colors::BORDER,
         );
 
-        // Icon and text
         renderer.draw_text(
             &format!("{} {}", self.icon, self.component_type),
             Vec2::new(self.bounds.x + 12.0, self.bounds.y + 9.0),
@@ -81,7 +467,6 @@ impl OxidXComponent for ToolboxItem {
                 .with_color(colors::TEXT),
         );
 
-        // Drag handle indicator
         renderer.draw_text(
             "⋮⋮",
             Vec2::new(
@@ -137,7 +522,7 @@ impl OxidXComponent for ToolboxItem {
 }
 
 // =============================================================================
-// ToolboxPanel - Left sidebar with draggable component palette
+// ToolboxPanel
 // =============================================================================
 
 struct ToolboxPanel {
@@ -153,7 +538,6 @@ impl ToolboxPanel {
             ("🔘", "Button"),
             ("📝", "Input"),
             ("🔤", "Label"),
-            ("📜", "TextArea"),
             ("✅", "Checkbox"),
         ];
 
@@ -173,7 +557,6 @@ impl OxidXComponent for ToolboxPanel {
     fn layout(&mut self, available: Rect) -> Vec2 {
         self.bounds = available;
 
-        // Layout items vertically
         let item_height = 36.0;
         let start_y = available.y + 40.0;
         let item_width = available.width - 16.0;
@@ -187,10 +570,8 @@ impl OxidXComponent for ToolboxPanel {
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        // Panel background
         renderer.fill_rect(self.bounds, colors::PANEL_BG);
 
-        // Title bar
         let title_rect = Rect::new(self.bounds.x, self.bounds.y, self.bounds.width, 32.0);
         renderer.fill_rect(title_rect, colors::BORDER);
 
@@ -202,7 +583,6 @@ impl OxidXComponent for ToolboxPanel {
                 .with_color(colors::TEXT),
         );
 
-        // Right border
         renderer.fill_rect(
             Rect::new(
                 self.bounds.x + self.bounds.width - 1.0,
@@ -213,7 +593,6 @@ impl OxidXComponent for ToolboxPanel {
             colors::BORDER,
         );
 
-        // Render items
         for item in &self.items {
             item.render(renderer);
         }
@@ -242,16 +621,11 @@ impl OxidXComponent for ToolboxPanel {
         self.bounds.height = h;
     }
 
-    fn child_count(&self) -> usize {
-        self.items.len()
-    }
-
     fn is_draggable(&self) -> bool {
-        true // Panel can source drags from its items
+        true
     }
 
     fn on_drag_start(&self, ctx: &mut OxidXContext) -> Option<String> {
-        // Find the hovered item (like kanban_demo pattern)
         for item in &self.items {
             if item.is_hovered && item.is_draggable() {
                 return item.on_drag_start(ctx);
@@ -262,199 +636,122 @@ impl OxidXComponent for ToolboxPanel {
 }
 
 // =============================================================================
-// CanvasPanel - Center editing area with drop support
+// CanvasPanel
 // =============================================================================
 
 struct CanvasPanel {
     bounds: Rect,
-    children: Vec<Box<dyn OxidXComponent>>,
+    items: Vec<CanvasItem>,
     is_drag_over: bool,
     component_counter: usize,
     last_drag_position: Vec2,
+    state: SharedState,
 }
 
 impl CanvasPanel {
-    fn new() -> Self {
+    fn new(state: SharedState) -> Self {
         Self {
             bounds: Rect::ZERO,
-            children: Vec::new(),
+            items: Vec::new(),
             is_drag_over: false,
             component_counter: 0,
             last_drag_position: Vec2::ZERO,
+            state,
         }
     }
 
-    fn create_component(&mut self, component_type: &str, position: Vec2) {
+    fn create_item(&mut self, component_type: &str, position: Vec2) {
         self.component_counter += 1;
         let id = format!(
             "canvas_{}_{}",
             component_type.to_lowercase(),
             self.component_counter
         );
+        let label = format!("{} {}", component_type, self.component_counter);
 
-        println!("✨ Creating {} at position {:?}", component_type, position);
-
-        let component: Box<dyn OxidXComponent> = match component_type {
-            "Button" => {
-                let mut btn = Button::new()
-                    .label(&format!("Button {}", self.component_counter))
-                    .with_id(&id);
-                btn.set_position(position.x, position.y);
-                btn.set_size(120.0, 36.0);
-                Box::new(btn)
-            }
-            "Label" => {
-                let mut lbl = Label::new(&format!("Label {}", self.component_counter))
-                    .with_size(14.0)
-                    .with_color(colors::TEXT);
-                lbl.set_position(position.x, position.y);
-                Box::new(lbl)
-            }
-            "Input" => {
-                let mut inp = Input::new("Enter text...").with_id(&id);
-                inp.set_position(position.x, position.y);
-                inp.set_size(180.0, 32.0);
-                Box::new(inp)
-            }
-            "VStack" => {
-                let mut vs = VStack::with_spacing(Spacing::new(8.0, 4.0));
-                vs.set_position(position.x, position.y);
-                vs.set_size(200.0, 100.0);
-                // Add placeholder children
-                vs.add_child(Box::new(
-                    Label::new("VStack")
-                        .with_size(12.0)
-                        .with_color(colors::TEXT),
-                ));
-                Box::new(vs)
-            }
-            "HStack" => {
-                let mut hs = oxidx_std::HStack::with_spacing(Spacing::new(8.0, 4.0));
-                hs.set_position(position.x, position.y);
-                hs.set_size(200.0, 50.0);
-                hs.add_child(Box::new(
-                    Label::new("HStack")
-                        .with_size(12.0)
-                        .with_color(colors::TEXT),
-                ));
-                Box::new(hs)
-            }
-            "TextArea" => {
-                let mut ta = oxidx_std::TextArea::new()
-                    .text("// Write code here...")
-                    .with_id(&id);
-                ta.set_position(position.x, position.y);
-                ta.set_size(250.0, 150.0);
-                Box::new(ta)
-            }
-            "Checkbox" => {
-                let mut cb = oxidx_std::Checkbox::new(&id, "Checkbox");
-                cb.set_position(position.x, position.y);
-                cb.set_size(120.0, 24.0);
-                Box::new(cb)
-            }
-            _ => {
-                // Default to a label for unknown types
-                let mut lbl = Label::new(&format!("[{}]", component_type))
-                    .with_size(12.0)
-                    .with_color(colors::ACCENT);
-                lbl.set_position(position.x, position.y);
-                Box::new(lbl)
-            }
+        let (width, height) = match component_type {
+            "Button" => (120.0, 36.0),
+            "Label" => (80.0, 20.0),
+            "Input" => (180.0, 32.0),
+            "Checkbox" => (120.0, 20.0),
+            "VStack" => (200.0, 100.0),
+            "HStack" => (200.0, 50.0),
+            _ => (100.0, 30.0),
         };
 
-        self.children.push(component);
+        let bounds = Rect::new(position.x, position.y, width, height);
+        let item = CanvasItem::new(&id, component_type, &label, bounds, Arc::clone(&self.state));
+
+        println!("✨ Created {} at {:?}", component_type, position);
+        self.items.push(item);
     }
 }
 
 impl OxidXComponent for CanvasPanel {
     fn layout(&mut self, available: Rect) -> Vec2 {
         self.bounds = available;
-
-        // Layout children at their positions
-        for child in &mut self.children {
-            let bounds = child.bounds();
-            child.layout(Rect::new(bounds.x, bounds.y, bounds.width, bounds.height));
-        }
-
         available.size()
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        // Editor background
         renderer.fill_rect(self.bounds, colors::EDITOR_BG);
 
-        // Draw grid pattern
+        // Grid
         let grid_size = 20.0;
         let grid_color = Color::new(0.15, 0.15, 0.15, 1.0);
 
-        let start_x = self.bounds.x;
-        let end_x = self.bounds.x + self.bounds.width;
-        let start_y = self.bounds.y;
-        let end_y = self.bounds.y + self.bounds.height;
-
-        // Vertical lines
-        let mut x = start_x;
-        while x < end_x {
-            renderer.fill_rect(Rect::new(x, start_y, 1.0, self.bounds.height), grid_color);
+        let mut x = self.bounds.x;
+        while x < self.bounds.x + self.bounds.width {
+            renderer.fill_rect(
+                Rect::new(x, self.bounds.y, 1.0, self.bounds.height),
+                grid_color,
+            );
             x += grid_size;
         }
 
-        // Horizontal lines
-        let mut y = start_y;
-        while y < end_y {
-            renderer.fill_rect(Rect::new(start_x, y, self.bounds.width, 1.0), grid_color);
+        let mut y = self.bounds.y;
+        while y < self.bounds.y + self.bounds.height {
+            renderer.fill_rect(
+                Rect::new(self.bounds.x, y, self.bounds.width, 1.0),
+                grid_color,
+            );
             y += grid_size;
         }
 
-        // Drop highlight when dragging over
+        // Drop highlight
         if self.is_drag_over {
             renderer.fill_rect(self.bounds, colors::DROP_HIGHLIGHT);
-
-            // Drop indicator text
-            renderer.draw_text(
-                "⬇ Drop here to create component",
-                Vec2::new(
-                    self.bounds.x + self.bounds.width / 2.0 - 110.0,
-                    self.bounds.y + 20.0,
-                ),
-                TextStyle::default()
-                    .with_size(14.0)
-                    .with_color(Color::new(0.3, 0.9, 0.5, 1.0)),
-            );
         }
 
-        // Render children
-        for child in &self.children {
-            child.render(renderer);
+        // Render items
+        for item in &self.items {
+            item.render(renderer);
         }
 
-        // Show placeholder if no children
-        if self.children.is_empty() && !self.is_drag_over {
-            let center_x = self.bounds.x + self.bounds.width / 2.0;
-            let center_y = self.bounds.y + self.bounds.height / 2.0;
-
+        // Placeholder
+        if self.items.is_empty() && !self.is_drag_over {
+            let cx = self.bounds.x + self.bounds.width / 2.0;
+            let cy = self.bounds.y + self.bounds.height / 2.0;
             renderer.draw_text(
                 "🎨 Canvas Area",
-                Vec2::new(center_x - 60.0, center_y - 20.0),
+                Vec2::new(cx - 60.0, cy - 20.0),
                 TextStyle::default()
                     .with_size(18.0)
                     .with_color(colors::TEXT_DIM),
             );
-
             renderer.draw_text(
-                "Drag components from the left panel",
-                Vec2::new(center_x - 120.0, center_y + 10.0),
+                "Drag components • Click to select",
+                Vec2::new(cx - 100.0, cy + 10.0),
                 TextStyle::default()
                     .with_size(12.0)
                     .with_color(colors::TEXT_DIM),
             );
         }
 
-        // Show component count
-        if !self.children.is_empty() {
+        // Component count
+        if !self.items.is_empty() {
             renderer.draw_text(
-                &format!("📦 {} components", self.children.len()),
+                &format!("📦 {} components", self.items.len()),
                 Vec2::new(
                     self.bounds.x + 10.0,
                     self.bounds.y + self.bounds.height - 24.0,
@@ -467,9 +764,14 @@ impl OxidXComponent for CanvasPanel {
     }
 
     fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
-        // Forward events to children first
-        for child in &mut self.children {
-            if child.on_event(event, ctx) {
+        // Sync items from state (for label updates from inspector)
+        for item in &mut self.items {
+            item.sync_from_state();
+        }
+
+        // Forward to items (reverse for z-order)
+        for item in self.items.iter_mut().rev() {
+            if item.on_event(event, ctx) {
                 return true;
             }
         }
@@ -486,6 +788,16 @@ impl OxidXComponent for CanvasPanel {
                 self.is_drag_over = false;
                 false
             }
+            OxidXEvent::Click { position, .. } => {
+                // Click on empty canvas = deselect
+                if self.bounds.contains(*position) {
+                    let clicked_item = self.items.iter().any(|i| i.bounds.contains(*position));
+                    if !clicked_item {
+                        self.state.lock().unwrap().select(None);
+                    }
+                }
+                false
+            }
             _ => false,
         }
     }
@@ -496,15 +808,8 @@ impl OxidXComponent for CanvasPanel {
 
     fn on_drop(&mut self, payload: &str, _ctx: &mut OxidXContext) -> bool {
         if let Some(component_type) = payload.strip_prefix("CREATE:") {
-            // Use the last captured drag position (from DragOver event)
-            let drop_pos = self.last_drag_position;
-
-            println!("📥 Drop: {} at position {:?}", component_type, drop_pos);
-
-            // Create the component at the drop position
-            self.create_component(component_type, drop_pos);
+            self.create_item(component_type, self.last_drag_position);
             self.is_drag_over = false;
-
             return true;
         }
         false
@@ -523,35 +828,24 @@ impl OxidXComponent for CanvasPanel {
         self.bounds.width = w;
         self.bounds.height = h;
     }
-
-    fn child_count(&self) -> usize {
-        self.children.len()
-    }
 }
 
 // =============================================================================
-// InspectorPanel - Right sidebar with properties
+// InspectorPanel - Shows properties of selected component
 // =============================================================================
 
 struct InspectorPanel {
     bounds: Rect,
-    content: VStack,
+    state: SharedState,
+    label_input: Input,
 }
 
 impl InspectorPanel {
-    fn new() -> Self {
-        let mut content = VStack::with_spacing(Spacing::new(12.0, 8.0));
-        content.set_alignment(StackAlignment::Stretch);
-
-        content.add_child(Box::new(
-            Label::new("No component selected")
-                .with_size(12.0)
-                .with_color(colors::TEXT_DIM),
-        ));
-
+    fn new(state: SharedState) -> Self {
         Self {
             bounds: Rect::ZERO,
-            content,
+            state,
+            label_input: Input::new("").with_id("inspector_label"),
         }
     }
 }
@@ -560,13 +854,16 @@ impl OxidXComponent for InspectorPanel {
     fn layout(&mut self, available: Rect) -> Vec2 {
         self.bounds = available;
 
-        let content_area = Rect::new(
+        // Layout the label input
+        self.label_input
+            .set_position(available.x + 12.0, available.y + 100.0);
+        self.label_input.set_size(available.width - 24.0, 28.0);
+        self.label_input.layout(Rect::new(
             available.x + 12.0,
-            available.y + 44.0,
+            available.y + 100.0,
             available.width - 24.0,
-            available.height - 56.0,
-        );
-        self.content.layout(content_area);
+            28.0,
+        ));
 
         available.size()
     }
@@ -592,11 +889,108 @@ impl OxidXComponent for InspectorPanel {
                 .with_color(colors::TEXT),
         );
 
-        self.content.render(renderer);
+        // Show selected component info
+        let state = self.state.lock().unwrap();
+        if let Some(info) = state.get_selected_info() {
+            drop(state); // Release lock before rendering
+
+            renderer.draw_text(
+                &format!("Type: {}", info.component_type),
+                Vec2::new(self.bounds.x + 12.0, self.bounds.y + 48.0),
+                TextStyle::default()
+                    .with_size(12.0)
+                    .with_color(colors::TEXT),
+            );
+
+            renderer.draw_text(
+                &format!("ID: {}", info.id),
+                Vec2::new(self.bounds.x + 12.0, self.bounds.y + 66.0),
+                TextStyle::default()
+                    .with_size(11.0)
+                    .with_color(colors::TEXT_DIM),
+            );
+
+            renderer.draw_text(
+                "Label:",
+                Vec2::new(self.bounds.x + 12.0, self.bounds.y + 88.0),
+                TextStyle::default()
+                    .with_size(11.0)
+                    .with_color(colors::TEXT_DIM),
+            );
+
+            self.label_input.render(renderer);
+
+            renderer.draw_text(
+                &format!("Position: ({:.0}, {:.0})", info.x, info.y),
+                Vec2::new(self.bounds.x + 12.0, self.bounds.y + 140.0),
+                TextStyle::default()
+                    .with_size(11.0)
+                    .with_color(colors::TEXT_DIM),
+            );
+
+            renderer.draw_text(
+                &format!("Size: {:.0} × {:.0}", info.width, info.height),
+                Vec2::new(self.bounds.x + 12.0, self.bounds.y + 158.0),
+                TextStyle::default()
+                    .with_size(11.0)
+                    .with_color(colors::TEXT_DIM),
+            );
+        } else {
+            renderer.draw_text(
+                "No component selected",
+                Vec2::new(self.bounds.x + 12.0, self.bounds.y + 48.0),
+                TextStyle::default()
+                    .with_size(12.0)
+                    .with_color(colors::TEXT_DIM),
+            );
+
+            renderer.draw_text(
+                "Click a component on the",
+                Vec2::new(self.bounds.x + 12.0, self.bounds.y + 70.0),
+                TextStyle::default()
+                    .with_size(11.0)
+                    .with_color(colors::TEXT_DIM),
+            );
+
+            renderer.draw_text(
+                "canvas to edit its properties",
+                Vec2::new(self.bounds.x + 12.0, self.bounds.y + 85.0),
+                TextStyle::default()
+                    .with_size(11.0)
+                    .with_color(colors::TEXT_DIM),
+            );
+        }
     }
 
     fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
-        self.content.on_event(event, ctx)
+        // Forward events to input
+        let handled = self.label_input.on_event(event, ctx);
+
+        // Update state when input changes
+        let new_text = self.label_input.value().to_string();
+        let state = self.state.lock().unwrap();
+        if let Some(id) = state.selected_id.clone() {
+            drop(state);
+            let mut state = self.state.lock().unwrap();
+            state.update_label(&id, new_text);
+        }
+
+        handled
+    }
+    fn on_keyboard_input(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) {
+        // Propagate keyboard events to the input
+        self.label_input.on_keyboard_input(event, ctx);
+
+        // Update state when input changes
+        let new_text = self.label_input.value().to_string();
+        if let Ok(state) = self.state.lock() {
+            if let Some(id) = state.selected_id.clone() {
+                drop(state);
+                if let Ok(mut state) = self.state.lock() {
+                    state.update_label(&id, new_text);
+                }
+            }
+        }
     }
 
     fn bounds(&self) -> Rect {
@@ -615,48 +1009,114 @@ impl OxidXComponent for InspectorPanel {
 }
 
 // =============================================================================
-// StudioStatusBar - Bottom status bar
+// StudioStatusBar
 // =============================================================================
 
 struct StudioStatusBar {
     bounds: Rect,
+    state: SharedState,
+    preview_btn: Rect,
 }
 
 impl StudioStatusBar {
-    fn new() -> Self {
-        Self { bounds: Rect::ZERO }
+    fn new(state: SharedState) -> Self {
+        Self {
+            bounds: Rect::ZERO,
+            state,
+            preview_btn: Rect::ZERO,
+        }
+    }
+
+    fn is_preview(&self) -> bool {
+        self.state.lock().map(|s| s.preview_mode).unwrap_or(false)
     }
 }
 
 impl OxidXComponent for StudioStatusBar {
     fn layout(&mut self, available: Rect) -> Vec2 {
         self.bounds = available;
+        // Preview button at center-right
+        self.preview_btn = Rect::new(
+            available.x + available.width / 2.0 - 50.0,
+            available.y + 2.0,
+            100.0,
+            18.0,
+        );
         available.size()
     }
 
     fn render(&self, renderer: &mut Renderer) {
-        renderer.fill_rect(self.bounds, colors::STATUS_BAR);
+        let is_preview = self.is_preview();
 
+        // Background color changes based on mode
+        let bg_color = if is_preview {
+            Color::new(0.2, 0.7, 0.3, 1.0) // Green for preview
+        } else {
+            colors::STATUS_BAR // Blue for edit
+        };
+        renderer.fill_rect(self.bounds, bg_color);
+
+        // Left text
+        let mode_text = if is_preview {
+            "▶ PREVIEW MODE • Components are active"
+        } else {
+            "✏ EDIT MODE • Drag to move • Resize from corner"
+        };
         renderer.draw_text(
-            "⚡ OxidX Core: Ready • Drag components to canvas",
+            mode_text,
             Vec2::new(self.bounds.x + 12.0, self.bounds.y + 4.0),
             TextStyle::default()
                 .with_size(12.0)
                 .with_color(Color::WHITE),
         );
 
-        let right_x = self.bounds.x + self.bounds.width - 140.0;
+        // Preview/Edit button
+        let btn_bg = if is_preview {
+            Color::new(0.15, 0.5, 0.2, 1.0)
+        } else {
+            Color::new(0.0, 0.35, 0.6, 1.0)
+        };
+        renderer.draw_rounded_rect(self.preview_btn, btn_bg, 4.0, None, None);
+
+        let btn_text = if is_preview {
+            "⏹ Stop"
+        } else {
+            "▶ Preview"
+        };
+        renderer.draw_text(
+            btn_text,
+            Vec2::new(self.preview_btn.x + 20.0, self.preview_btn.y + 2.0),
+            TextStyle::default()
+                .with_size(12.0)
+                .with_color(Color::WHITE),
+        );
+
+        // Right version
         renderer.draw_text(
             "Oxide Studio v0.1.0",
-            Vec2::new(right_x, self.bounds.y + 4.0),
+            Vec2::new(
+                self.bounds.x + self.bounds.width - 140.0,
+                self.bounds.y + 4.0,
+            ),
             TextStyle::default()
                 .with_size(12.0)
                 .with_color(Color::WHITE.with_alpha(0.8)),
         );
     }
 
-    fn on_event(&mut self, _event: &OxidXEvent, _ctx: &mut OxidXContext) -> bool {
-        false
+    fn on_event(&mut self, event: &OxidXEvent, _ctx: &mut OxidXContext) -> bool {
+        match event {
+            OxidXEvent::Click { position, .. } => {
+                if self.preview_btn.contains(*position) {
+                    if let Ok(mut state) = self.state.lock() {
+                        state.toggle_preview();
+                    }
+                    return true;
+                }
+                false
+            }
+            _ => false,
+        }
     }
 
     fn bounds(&self) -> Rect {
@@ -689,12 +1149,14 @@ struct OxideStudio {
 
 impl OxideStudio {
     fn new() -> Self {
+        let state = Arc::new(Mutex::new(StudioState::new()));
+
         Self {
             bounds: Rect::ZERO,
             left_panel: ToolboxPanel::new(),
-            center_panel: CanvasPanel::new(),
-            right_panel: InspectorPanel::new(),
-            status_bar: StudioStatusBar::new(),
+            center_panel: CanvasPanel::new(Arc::clone(&state)),
+            right_panel: InspectorPanel::new(Arc::clone(&state)),
+            status_bar: StudioStatusBar::new(Arc::clone(&state)),
             last_drag_position: Vec2::ZERO,
         }
     }
@@ -707,12 +1169,10 @@ impl OxidXComponent for OxideStudio {
         let status_bar_height = 22.0;
         let main_height = available.height - status_bar_height;
 
-        // Calculate panel widths
         let left_width = 250.0;
         let right_width = 280.0;
         let center_width = available.width - left_width - right_width;
 
-        // Layout panels
         self.left_panel
             .layout(Rect::new(available.x, available.y, left_width, main_height));
 
@@ -748,17 +1208,14 @@ impl OxidXComponent for OxideStudio {
     }
 
     fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
-        // Track drag position for accurate drop
         if let OxidXEvent::DragOver { position, .. } = event {
             self.last_drag_position = *position;
         }
 
-        // Forward to left panel first (for drag start)
         if self.left_panel.on_event(event, ctx) {
             return true;
         }
 
-        // Then to center panel (for drop)
         if self.center_panel.on_event(event, ctx) {
             return true;
         }
@@ -771,7 +1228,6 @@ impl OxidXComponent for OxideStudio {
     }
 
     fn on_drop(&mut self, payload: &str, ctx: &mut OxidXContext) -> bool {
-        // Check if drop is in center panel bounds
         let drop_pos = self.last_drag_position;
         if self.center_panel.bounds().contains(drop_pos) {
             return self.center_panel.on_drop(payload, ctx);
@@ -784,12 +1240,16 @@ impl OxidXComponent for OxideStudio {
     }
 
     fn is_draggable(&self) -> bool {
-        true // App can source drags from toolbox
+        true
     }
 
     fn on_drag_start(&self, ctx: &mut OxidXContext) -> Option<String> {
-        // Propagate to left panel (toolbox) - it will check is_hovered
         self.left_panel.on_drag_start(ctx)
+    }
+
+    fn on_keyboard_input(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) {
+        // Propagate keyboard events to the inspector panel (for the input)
+        self.right_panel.on_keyboard_input(event, ctx);
     }
 
     fn bounds(&self) -> Rect {
@@ -805,10 +1265,6 @@ impl OxidXComponent for OxideStudio {
         self.bounds.width = w;
         self.bounds.height = h;
     }
-
-    fn child_count(&self) -> usize {
-        4 // left, center, right, status
-    }
 }
 
 // =============================================================================
@@ -820,7 +1276,7 @@ fn main() {
     println!("========================");
     println!("The official IDE for OxidX Framework");
     println!();
-    println!("🎯 Drag components from the left panel onto the canvas!");
+    println!("🎯 Drag components • Click to select • Edit properties");
     println!();
 
     let app = OxideStudio::new();
