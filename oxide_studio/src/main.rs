@@ -7,7 +7,7 @@ use oxidx_core::{
     run_with_config, AppConfig, Color, OxidXComponent, OxidXContext, OxidXEvent, Rect, Renderer,
     TextStyle, Vec2,
 };
-use oxidx_std::Input;
+use oxidx_std::{Button, ButtonVariant, Input};
 use std::fs;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -98,6 +98,43 @@ impl StudioState {
             "🔄 Preview mode: {}",
             if self.preview_mode { "ON" } else { "OFF" }
         );
+    }
+
+    fn delete_item(&mut self, id: &str) {
+        // If the deleted item was selected, deselect it
+        if self.selected_id.as_deref() == Some(id) {
+            self.selected_id = None;
+        }
+
+        // Recursively find and remove the item
+        self.remove_recursive(id);
+    }
+
+    fn remove_recursive(&mut self, id: &str) {
+        // Try to remove from top level
+        if let Some(pos) = self.canvas_items.iter().position(|i| i.id == id) {
+            self.canvas_items.remove(pos);
+            return;
+        }
+
+        // Search recursively in children
+        for item in &mut self.canvas_items {
+            Self::remove_from_children(&mut item.children, id);
+        }
+    }
+
+    fn remove_from_children(children: &mut Vec<CanvasItemInfo>, id: &str) -> bool {
+        if let Some(pos) = children.iter().position(|i| i.id == id) {
+            children.remove(pos);
+            return true;
+        }
+
+        for child in children {
+            if Self::remove_from_children(&mut child.children, id) {
+                return true;
+            }
+        }
+        false
     }
 
     /// Exports canvas items to JSON schema compatible with oxidx_viewer
@@ -854,7 +891,7 @@ impl OxidXComponent for CanvasItem {
         }
     }
 
-    fn on_event(&mut self, event: &OxidXEvent, _ctx: &mut OxidXContext) -> bool {
+    fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
         // Skip event handling in preview mode
         if self.is_preview_mode() {
             return false;
@@ -908,7 +945,19 @@ impl OxidXComponent for CanvasItem {
                 }
                 false
             }
-            OxidXEvent::MouseUp { .. } => {
+            OxidXEvent::MouseUp { button, position, .. } => {
+                use oxidx_core::events::MouseButton;
+                
+                if *button == MouseButton::Right && self.bounds.contains(*position) {
+                    println!("🖱️ Right Click on {}", self.id);
+                    ctx.add_overlay(Box::new(DeleteContextMenu::new(
+                        *position, 
+                        &self.id, 
+                        self.state.clone()
+                    )));
+                    return true;
+                }
+
                 if self.drag_mode != DragMode::None {
                     let mode = self.drag_mode;
                     self.drag_mode = DragMode::None;
@@ -931,6 +980,7 @@ impl OxidXComponent for CanvasItem {
             _ => false,
         }
     }
+
 
     fn bounds(&self) -> Rect {
         self.bounds
@@ -1178,6 +1228,133 @@ impl OxidXComponent for ToolboxPanel {
             }
         }
         None
+    }
+}
+
+// =============================================================================
+// DeleteContextMenu - Overlay to delete a component
+// =============================================================================
+
+struct DeleteContextMenu {
+    bounds: Rect,
+    target_id: String,
+    state: SharedState,
+    is_hovered: bool,
+}
+
+impl DeleteContextMenu {
+    fn new(position: Vec2, target_id: &str, state: SharedState) -> Self {
+        Self {
+            bounds: Rect::new(position.x, position.y, 120.0, 32.0),
+            target_id: target_id.to_string(),
+            state,
+            is_hovered: false,
+        }
+    }
+}
+
+impl OxidXComponent for DeleteContextMenu {
+    fn render(&self, renderer: &mut Renderer) {
+        // Menu Background
+        renderer.draw_shadow(self.bounds, 8.0, 10.0, Color::new(0.0, 0.0, 0.0, 0.4));
+        renderer.fill_rect(self.bounds, colors::PANEL_BG);
+        renderer.stroke_rect(self.bounds, colors::BORDER, 1.0);
+
+        // Hover Effect
+        if self.is_hovered {
+            renderer.fill_rect(
+                Rect::new(
+                    self.bounds.x + 2.0,
+                    self.bounds.y + 2.0,
+                    self.bounds.width - 4.0,
+                    self.bounds.height - 4.0,
+                ),
+                colors::STOP_BTN.with_alpha(0.2),
+            );
+        }
+
+        // Delete Text
+        renderer.draw_text(
+            "🗑️ Delete",
+            Vec2::new(self.bounds.x + 12.0, self.bounds.y + 8.0),
+            TextStyle::default()
+                .with_size(13.0)
+                .with_color(if self.is_hovered { colors::STOP_BTN } else { colors::TEXT }),
+        );
+    }
+
+    fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
+        match event {
+            OxidXEvent::MouseMove { position, .. } => {
+                self.is_hovered = self.bounds.contains(*position);
+                if self.is_hovered {
+                    return true;
+                }
+                false
+            }
+            OxidXEvent::MouseUp { button, position, .. } => {
+                use oxidx_core::events::MouseButton;
+                
+                if self.bounds.contains(*position) {
+                    // Only Delete on Left Click
+                    if *button == MouseButton::Left {
+                        println!("🗑️ Deleting component: {}", self.target_id);
+                        {
+                            let mut st = self.state.lock().unwrap();
+                            st.delete_item(&self.target_id);
+                        }
+                        ctx.clear_overlays();
+                    }
+                    return true;
+                } else {
+                    // Click outside (any button) closes menu
+                    ctx.clear_overlays();
+                    return true;
+                }
+            }
+            OxidXEvent::Click { button, position, .. } => {
+                use oxidx_core::events::MouseButton;
+                // Double safety for Click event
+                 if self.bounds.contains(*position) {
+                    if *button == MouseButton::Left {
+                        println!("🗑️ Deleting component: {}", self.target_id);
+                         {
+                            let mut st = self.state.lock().unwrap();
+                            st.delete_item(&self.target_id);
+                        }
+                        ctx.clear_overlays();
+                    }
+                    return true;
+                 } else {
+                     ctx.clear_overlays();
+                     return true;
+                 }
+            }
+             OxidXEvent::MouseDown { .. } => {
+                 // Capture mouse down to prevent propagation
+                 true 
+             }
+            _ => false,
+        }
+    }
+
+    fn bounds(&self) -> Rect {
+        self.bounds
+    }
+
+    fn layout(&mut self, _available: Rect) -> Vec2 {
+        // Keep absolute position, ignore available space constraint
+        Vec2::new(self.bounds.width, self.bounds.height)
+    }
+
+    fn set_position(&mut self, x: f32, y: f32) {
+        self.bounds.x = x;
+        self.bounds.y = y;
+    }
+
+    fn set_size(&mut self, w: f32, h: f32) {
+        self.bounds.width = w;
+        self.bounds.height = h;
     }
 }
 
@@ -1497,6 +1674,7 @@ struct InspectorPanel {
     bounds: Rect,
     state: SharedState,
     label_input: Input,
+    delete_btn: Button,
     last_selected_id: Option<String>,  // Track selection changes
 }
 
@@ -1506,6 +1684,7 @@ impl InspectorPanel {
             bounds: Rect::ZERO,
             state,
             label_input: Input::new("").with_id("inspector_label"),
+            delete_btn: Button::new().label("🗑️ Delete Component").variant(ButtonVariant::Danger),
             last_selected_id: None,
         }
     }
@@ -1549,6 +1728,18 @@ impl OxidXComponent for InspectorPanel {
             available.y + 100.0,
             available.width - 24.0,
             28.0,
+        ));
+
+        // Layout Delete Button (at bottom)
+        let btn_height = 36.0;
+        let btn_y = available.y + available.height - btn_height - 12.0;
+        self.delete_btn.set_position(available.x + 12.0, btn_y);
+        self.delete_btn.set_size(available.width - 24.0, btn_height);
+        self.delete_btn.layout(Rect::new(
+             available.x + 12.0,
+             btn_y,
+             available.width - 24.0,
+             btn_height
         ));
 
         available.size()
@@ -1651,8 +1842,12 @@ impl OxidXComponent for InspectorPanel {
                     .with_size(10.0)
                     .with_color(Color::new(0.5, 0.7, 0.9, 1.0)),
             );
+            
+            // Render Delete Button
+            self.delete_btn.render(renderer);
+
         } else {
-            renderer.draw_text(
+             renderer.draw_text(
                 "No component selected",
                 Vec2::new(self.bounds.x + 12.0, self.bounds.y + 48.0),
                 TextStyle::default()
@@ -1679,47 +1874,46 @@ impl OxidXComponent for InspectorPanel {
     }
 
     fn on_event(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) -> bool {
-        // Forward events to input
+        // 1. Let Button handle its visual state (hover/press)
+        // We ignore the return value here to ensure we can check for logic ourselves, 
+        // or we check if it handled specifically what we care about.
+        self.delete_btn.on_event(event, ctx);
+
+        // 2. Handle Delete Action Explicitly
+        if let OxidXEvent::Click { position, button, .. } = event {
+            // Check if the delete button was clicked
+            if self.delete_btn.bounds().contains(*position) {
+                 use oxidx_core::events::MouseButton;
+                 if *button == MouseButton::Left {
+                     let mut state = self.state.lock().unwrap();
+                     if let Some(id) = state.selected_id.clone() {
+                         println!("🗑️ Deleting component via Inspector: {}", id);
+                         state.delete_item(&id);
+                         state.select(None); // Clear selection
+                     }
+                     return true; // We handled this action
+                 }
+            }
+        }
+
+        // 3. Forward events to input
         let handled = self.label_input.on_event(event, ctx);
 
-        // Only update state when input has content AND selection hasn't changed
-        // This prevents overwriting new component's label with old component's text
+        // 4. Update state from input
         let new_text = self.label_input.value().to_string();
         if !new_text.is_empty() {
-            let state = self.state.lock().unwrap();
-            if let Some(id) = state.selected_id.clone() {
-                drop(state);
-                
-                // Only update if the selection matches what the input was synced to
-                if Some(id.clone()) == self.last_selected_id {
-                    let mut state = self.state.lock().unwrap();
-                    state.update_label(&id, new_text);
-                }
-            }
+             let mut state = self.state.lock().unwrap();
+             // Only update if selection matches current input context essentially
+             if let Some(ref id) = state.selected_id.clone() {
+                  // Only update if text changed to avoid loop? 
+                  // For now simple sync
+                 if let Some(item) = state.canvas_items.iter_mut().find(|i| i.id == *id) {
+                     item.label = new_text;
+                 }
+             }
         }
-
+        
         handled
-    }
-    fn on_keyboard_input(&mut self, event: &OxidXEvent, ctx: &mut OxidXContext) {
-        // Propagate keyboard events to the input
-        self.label_input.on_keyboard_input(event, ctx);
-
-        // Only update state when input has content AND selection matches
-        let new_text = self.label_input.value().to_string();
-        if !new_text.is_empty() {
-            if let Ok(state) = self.state.lock() {
-                if let Some(id) = state.selected_id.clone() {
-                    drop(state);
-                    
-                    // Only update if the selection matches what the input was synced to
-                    if Some(id.clone()) == self.last_selected_id {
-                        if let Ok(mut state) = self.state.lock() {
-                            state.update_label(&id, new_text);
-                        }
-                    }
-                }
-            }
-        }
     }
 
     fn bounds(&self) -> Rect {
