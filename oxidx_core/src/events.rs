@@ -171,6 +171,33 @@ pub enum OxidXEvent {
     /// Used for components to register themselves as focusable.
     /// This is dispatched AFTER clearing the focus registry.
     Tick,
+
+    // =========================================================================
+    // Drag and Drop Events
+    // =========================================================================
+    /// A drag operation has started.
+    /// Contains the payload data and starting position.
+    DragStart {
+        payload: String,
+        position: Vec2,
+        source_id: Option<String>,
+    },
+
+    /// A drag operation is moving.
+    /// Contains current position and delta from start.
+    DragMove {
+        payload: String,
+        position: Vec2,
+        delta: Vec2,
+    },
+
+    /// A drag operation has ended (drop occurred).
+    /// Contains the payload and final drop position.
+    DragEnd { payload: String, position: Vec2 },
+
+    /// A dragged item is hovering over this component.
+    /// Components can use this to show visual drop target feedback.
+    DragOver { payload: String, position: Vec2 },
 }
 
 impl OxidXEvent {
@@ -201,6 +228,17 @@ impl OxidXEvent {
         matches!(
             self,
             OxidXEvent::FocusGained { .. } | OxidXEvent::FocusLost { .. }
+        )
+    }
+
+    /// Returns true if this is a drag-and-drop related event.
+    pub fn is_drag_event(&self) -> bool {
+        matches!(
+            self,
+            OxidXEvent::DragStart { .. }
+                | OxidXEvent::DragMove { .. }
+                | OxidXEvent::DragEnd { .. }
+                | OxidXEvent::DragOver { .. }
         )
     }
 }

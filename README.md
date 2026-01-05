@@ -10,6 +10,8 @@ OxidX is a modern GUI framework for Rust designed for high performance and devel
 - **GPU Accelerated**: Built on top of `wgpu` for cross-platform hardware acceleration.
 - **Component System**: Familiar retained-mode architecture using the `OxidXComponent` trait.
 - **Batched Rendering**: Efficiently draws thousands of primitives in a single draw call.
+- **Modern Styling**: CSS-like `Style` system with gradients, shadows, rounded corners, and theming.
+- **Drag & Drop**: Complete payload-based drag and drop with visual feedback and ghost rendering.
 - **Runtime Capabilities**:
   - **Scissor Clipping**: Full support for clipping logic (e.g., ScrollViews).
   - **OS Integration**: Native Clipboard support (Copy/Paste) and Cursor management.
@@ -93,7 +95,7 @@ python3 oxidx_ollama.py
 
 ## 🎮 Components (`oxidx_std`)
 
-OxidX comes with a polished standard library:
+OxidX comes with a polished standard library of 25+ components:
 
 | Component | Description |
 |-----------|-------------|
@@ -120,6 +122,58 @@ OxidX comes with a polished standard library:
 | **Modal / Alert / Confirm** | Dialog overlays for user prompts and confirmations |
 | **SideMenu / Header / Footer** | High-level application layout structures |
 
+## 🎨 Modern Styling System
+
+OxidX features a powerful CSS-like styling system:
+
+```rust
+use oxidx_core::style::Style;
+
+// Create a modern card style
+let card = Style::new()
+    .bg_gradient(Color::new(0.2, 0.3, 0.5, 1.0), Color::new(0.1, 0.15, 0.25, 1.0), 90.0)
+    .rounded(16.0)
+    .shadow(Vec2::new(0.0, 4.0), 12.0, Color::new(0.0, 0.0, 0.0, 0.4))
+    .border(1.0, Color::new(0.3, 0.4, 0.6, 1.0));
+
+// Use InteractiveStyle for state-based components
+let button_style = InteractiveStyle {
+    idle: Style::new().bg_solid(Color::BLUE).rounded(8.0),
+    hover: Style::new().bg_solid(Color::new(0.4, 0.5, 1.0, 1.0)).rounded(8.0),
+    pressed: Style::new().bg_solid(Color::new(0.2, 0.3, 0.8, 1.0)).rounded(8.0),
+    disabled: Style::new().bg_solid(Color::GRAY).rounded(8.0),
+};
+```
+
+## 🔄 Drag & Drop System
+
+Build interactive applications with the built-in drag and drop system:
+
+```rust
+impl OxidXComponent for MyDraggableCard {
+    fn is_draggable(&self) -> bool { true }
+    
+    fn on_drag_start(&self, _ctx: &mut OxidXContext) -> Option<String> {
+        Some(format!("CARD:{}", self.id))  // Return payload
+    }
+}
+
+impl OxidXComponent for MyDropZone {
+    fn is_drop_target(&self) -> bool { true }
+    
+    fn on_drop(&mut self, payload: &str, _ctx: &mut OxidXContext) -> bool {
+        if let Some(id) = payload.strip_prefix("CARD:") {
+            println!("Received card: {}", id);
+            true
+        } else {
+            false
+        }
+    }
+}
+```
+
+See the **Kanban Demo** (`cargo run -p showcase --bin kanban_demo`) for a complete drag and drop example.
+
 ## 👩‍💻 Quick Start
 
 ```rust
@@ -137,6 +191,8 @@ fn main() {
 
 ## 📚 Documentation
 
+- **[Tutorial (English)](docs/TUTORIAL.md)** — Step-by-step guide to building apps
+- **[Tutorial (Español)](docs/TUTORIAL.es.md)** — Guía paso a paso en español
 - **[API Reference (English)](docs/DOC_API.md)** — Complete public API documentation
 - **[API Reference (Español)](docs/DOC_API.es.md)** — Documentación completa en español
 - **[Architecture Guide](docs/ARCHITECTURE.md)** — System design and internals
@@ -149,8 +205,6 @@ use oxidx_std::prelude::*;
 use std::sync::{Arc, Mutex};
 
 fn main() {
-    let theme = Theme::dark();
-    
     let username = Arc::new(Mutex::new(String::new()));
     let password = Arc::new(Mutex::new(String::new()));
     
@@ -207,8 +261,10 @@ fn main() {
 - [x] **Runtime Capabilities** (Clipping, Clipboard, Cursors, IME)
 - [x] Text Layout & Shaping (Cosmic Text)
 - [x] Asset Loading (Images)
+- [x] **Modern Styling System** (Style, InteractiveStyle, Theme)
+- [x] **Drag & Drop System** (Payload-based with ghost rendering)
 - [ ] Custom Font Support
-- [ ] Theming System Expansion
+- [ ] Animation System
 - [ ] Accessibility (a11y)
 
 ## 📄 License

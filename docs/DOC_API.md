@@ -95,6 +95,15 @@ All UI widgets implement this trait. The engine calls methods in order each fram
 | `is_focusable() -> bool` | `false` | Can receive focus? |
 | `child_count() -> usize` | `0` | Number of children |
 
+### Drag & Drop Hooks
+
+| Method | Default | Description |
+|--------|---------|-------------|
+| `is_draggable() -> bool` | `false` | Can this component be dragged? |
+| `is_drop_target() -> bool` | `false` | Can receive drops? |
+| `on_drag_start(&self, ctx) -> Option<String>` | `None` | Return payload when drag starts |
+| `on_drop(&mut self, payload, ctx) -> bool` | `false` | Handle dropped payload |
+
 ---
 
 ## OxidXContext
@@ -130,6 +139,24 @@ Manages GPU context and OS integration. Passed to event handlers.
 | `to_logical(physical)` | Convert physical → logical |
 | `to_physical(logical)` | Convert logical → physical |
 
+### Drag State
+
+Access drag state during drag operations via `ctx.drag`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `is_active` | `bool` | Currently dragging? |
+| `payload` | `Option<String>` | Drag payload data |
+| `source_id` | `Option<String>` | ID of dragged component |
+| `start_position` | `Vec2` | Where drag started |
+| `current_position` | `Vec2` | Current drag position |
+
+```rust
+if ctx.drag.is_active {
+    println!("Dragging: {:?}", ctx.drag.payload);
+}
+```
+
 ---
 
 ## Events
@@ -153,6 +180,9 @@ Manages GPU context and OS integration. Passed to event handlers.
 | `ImePreedit` | `text, cursor_start, cursor_end` | IME composing |
 | `ImeCommit` | `String` | IME committed text |
 | `Tick` | — | Every frame (for registration) |
+| `DragStart` | `source_id, payload, position` | Drag operation started |
+| `DragOver` | `position, payload` | Dragging over this component |
+| `DragEnd` | `position, payload, success` | Drag operation ended |
 
 ### `MouseButton` Enum
 `Left`, `Right`, `Middle`, `Other(u16)`
@@ -180,6 +210,9 @@ Manages GPU context and OS integration. Passed to event handlers.
 | `fill_rect(rect, color)` | Filled rectangle |
 | `stroke_rect(rect, color, thickness)` | Outlined rectangle |
 | `draw_style_rect(rect, style)` | Rectangle with Style |
+| `draw_rounded_rect(rect, color, radius, border_color, border_width)` | Rounded corners |
+| `draw_shadow(rect, radius, blur, color)` | Drop shadow |
+| `draw_line(start, end, color, width)` | Draw a line |
 
 ### Text
 

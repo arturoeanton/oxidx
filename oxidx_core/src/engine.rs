@@ -18,6 +18,9 @@ use winit::{
     window::WindowBuilder,
 };
 
+/// Drag threshold in pixels. Mouse must move more than this to start dragging.
+const DRAG_THRESHOLD: f32 = 5.0;
+
 /// Configuration for running an OxidX application.
 pub struct AppConfig {
     /// Window title
@@ -74,6 +77,8 @@ struct InputState {
     modifiers: Modifiers,
     /// Button that started a press (for click detection).
     pressed_button: Option<MouseButton>,
+    /// Position where mouse was pressed (for drag detection).
+    press_start_position: Option<Vec2>,
 }
 
 impl Default for InputState {
@@ -83,6 +88,7 @@ impl Default for InputState {
             prev_mouse_position: Vec2::ZERO,
             modifiers: Modifiers::default(),
             pressed_button: None,
+            press_start_position: None,
         }
     }
 }
@@ -304,13 +310,69 @@ fn process_window_event<C: OxidXComponent>(
 
             // Always dispatch MouseMove to root - let components handle hit-testing
             let delta = input.mouse_position - input.prev_mouse_position;
-            component.on_event(
-                &OxidXEvent::MouseMove {
-                    position: input.mouse_position,
-                    delta,
-                },
-                ctx,
-            );
+
+            // Check for drag initiation
+            if input.press_start_position.is_some() && !ctx.drag.is_dragging {
+                let start = input.press_start_position.unwrap();
+                let drag_delta = input.mouse_position - start;
+
+                // Check if mouse moved beyond threshold
+                if drag_delta.length() > DRAG_THRESHOLD {
+                    // Try to start drag - ask component for payload
+                    if let Some(payload) = component.on_drag_start(ctx) {
+                        let source_id = Some(component.id().to_string()).filter(|s| !s.is_empty());
+                        ctx.drag.start(payload.clone(), start, source_id.clone());
+
+                        // Dispatch DragStart event
+                        component.on_event(
+                            &OxidXEvent::DragStart {
+                                payload,
+                                position: start,
+                                source_id,
+                            },
+                            ctx,
+                        );
+                    } else {
+                        // Component doesn't want to drag, clear potential drag state
+                        input.press_start_position = None;
+                    }
+                }
+            }
+
+            // If currently dragging, update position and dispatch DragMove
+            if ctx.drag.is_dragging {
+                ctx.drag.update(input.mouse_position);
+
+                if let Some(payload) = ctx.drag.payload.clone() {
+                    // Dispatch DragMove
+                    component.on_event(
+                        &OxidXEvent::DragMove {
+                            payload: payload.clone(),
+                            position: input.mouse_position,
+                            delta: ctx.drag.delta(),
+                        },
+                        ctx,
+                    );
+
+                    // Dispatch DragOver for drop target feedback
+                    component.on_event(
+                        &OxidXEvent::DragOver {
+                            payload,
+                            position: input.mouse_position,
+                        },
+                        ctx,
+                    );
+                }
+            } else {
+                // Normal mouse move (not dragging)
+                component.on_event(
+                    &OxidXEvent::MouseMove {
+                        position: input.mouse_position,
+                        delta,
+                    },
+                    ctx,
+                );
+            }
         }
 
         // Handle mouse wheel scrolling
@@ -376,6 +438,7 @@ fn process_window_event<C: OxidXComponent>(
             match state {
                 ElementState::Pressed => {
                     input.pressed_button = Some(mouse_button);
+                    input.press_start_position = Some(input.mouse_position);
 
                     // 1. Dispatch to overlays first (reverse order)
                     let mut event_handled = false;
@@ -482,7 +545,29 @@ fn process_window_event<C: OxidXComponent>(
                         );
                     }
 
-                    // Fire Click if same button that was pressed
+                    // Handle drag end (drop)
+                    if ctx.drag.is_dragging {
+                        if let Some(payload) = ctx.drag.end() {
+                            // Dispatch DragEnd event
+                            component.on_event(
+                                &OxidXEvent::DragEnd {
+                                    payload: payload.clone(),
+                                    position: input.mouse_position,
+                                },
+                                ctx,
+                            );
+
+                            // Try to drop on the component
+                            component.on_drop(&payload, ctx);
+                        }
+
+                        // Clear press state and skip Click
+                        input.pressed_button = None;
+                        input.press_start_position = None;
+                        return;
+                    }
+
+                    // Fire Click if same button that was pressed (and not dragging)
                     if input.pressed_button == Some(mouse_button) {
                         // Dispatch Click to overlays
                         let mut click_handled = false;
@@ -521,6 +606,7 @@ fn process_window_event<C: OxidXComponent>(
                         }
                     }
                     input.pressed_button = None;
+                    input.press_start_position = None;
                 }
             }
         }
@@ -659,6 +745,28 @@ fn render_frame<C: OxidXComponent>(
 
     for overlay in queue {
         overlay.render(renderer);
+    }
+
+    // Render drag ghost (visual feedback while dragging)
+    if ctx.drag.is_dragging {
+        let pos = ctx.drag.current_position;
+        let renderer = &mut ctx.renderer;
+
+        // Draw a semi-transparent indicator
+        renderer.draw_overlay_rect(
+            Rect::new(pos.x - 20.0, pos.y - 20.0, 40.0, 40.0),
+            Color::new(0.4, 0.6, 1.0, 0.6),
+        );
+
+        // Draw a small "drag" icon (crosshair pattern)
+        renderer.draw_overlay_rect(
+            Rect::new(pos.x - 2.0, pos.y - 10.0, 4.0, 20.0),
+            Color::new(1.0, 1.0, 1.0, 0.8),
+        );
+        renderer.draw_overlay_rect(
+            Rect::new(pos.x - 10.0, pos.y - 2.0, 20.0, 4.0),
+            Color::new(1.0, 1.0, 1.0, 0.8),
+        );
     }
 
     // End frame - flushes all draw calls and submits

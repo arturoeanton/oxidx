@@ -95,6 +95,15 @@ Todos los widgets de UI implementan este trait. El motor llama métodos en orden
 | `is_focusable() -> bool` | `false` | ¿Puede recibir focus? |
 | `child_count() -> usize` | `0` | Número de hijos |
 
+### Hooks de Drag & Drop
+
+| Método | Por Defecto | Descripción |
+|--------|-------------|-------------|
+| `is_draggable() -> bool` | `false` | ¿Se puede arrastrar este componente? |
+| `is_drop_target() -> bool` | `false` | ¿Puede recibir drops? |
+| `on_drag_start(&self, ctx) -> Option<String>` | `None` | Retorna payload al iniciar drag |
+| `on_drop(&mut self, payload, ctx) -> bool` | `false` | Manejar payload soltado |
+
 ---
 
 ## OxidXContext
@@ -130,6 +139,24 @@ Gestiona el contexto GPU e integración con el SO. Se pasa a los manejadores de 
 | `to_logical(physical)` | Convertir físico → lógico |
 | `to_physical(logical)` | Convertir lógico → físico |
 
+### Estado de Drag
+
+Accede al estado del drag durante operaciones de arrastre via `ctx.drag`:
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| `is_active` | `bool` | ¿Arrastrando actualmente? |
+| `payload` | `Option<String>` | Datos del payload |
+| `source_id` | `Option<String>` | ID del componente arrastrado |
+| `start_position` | `Vec2` | Donde inició el drag |
+| `current_position` | `Vec2` | Posición actual del drag |
+
+```rust
+if ctx.drag.is_active {
+    println!("Arrastrando: {:?}", ctx.drag.payload);
+}
+```
+
 ---
 
 ## Eventos
@@ -153,6 +180,9 @@ Gestiona el contexto GPU e integración con el SO. Se pasa a los manejadores de 
 | `ImePreedit` | `text, cursor_start, cursor_end` | IME componiendo |
 | `ImeCommit` | `String` | IME texto confirmado |
 | `Tick` | — | Cada frame (para registro) |
+| `DragStart` | `source_id, payload, position` | Operación de drag iniciada |
+| `DragOver` | `position, payload` | Arrastrando sobre este componente |
+| `DragEnd` | `position, payload, success` | Operación de drag terminada |
 
 ### Enum `MouseButton`
 `Left`, `Right`, `Middle`, `Other(u16)`
@@ -180,6 +210,9 @@ Gestiona el contexto GPU e integración con el SO. Se pasa a los manejadores de 
 | `fill_rect(rect, color)` | Rectángulo relleno |
 | `stroke_rect(rect, color, thickness)` | Rectángulo con borde |
 | `draw_style_rect(rect, style)` | Rectángulo con Style |
+| `draw_rounded_rect(rect, color, radius, border_color, border_width)` | Esquinas redondeadas |
+| `draw_shadow(rect, radius, blur, color)` | Sombra |
+| `draw_line(start, end, color, width)` | Dibujar línea |
 
 ### Texto
 

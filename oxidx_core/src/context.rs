@@ -8,6 +8,7 @@ use crate::events::Modifiers;
 use crate::primitives::Rect;
 use crate::renderer::Renderer;
 use crate::theme::Theme;
+use glam::Vec2;
 use std::sync::Arc;
 use thiserror::Error;
 use winit::window::{CursorIcon, Window};
@@ -60,6 +61,8 @@ pub struct OxidXContext {
     pub(crate) pending_overlay_clear: bool,
     /// Number of overlays to pop from the stack after event processing
     pub(crate) pending_overlay_removals: usize,
+    /// Global drag state for drag-and-drop operations
+    pub drag: DragState,
 }
 
 /// Manages focus state for components.
@@ -191,6 +194,74 @@ impl FocusManager {
     }
 }
 
+/// State for tracking drag operations.
+///
+/// Drag operations allow users to pick up a component (source) and
+/// drop it onto another component (target). The payload is a String
+/// that can contain an ID, JSON, or any serialized data.
+#[derive(Debug, Clone, Default)]
+pub struct DragState {
+    /// Whether a drag operation is currently active.
+    pub is_dragging: bool,
+    /// Position where the drag started (for delta calculation).
+    pub start_position: Vec2,
+    /// Current drag position (follows mouse).
+    pub current_position: Vec2,
+    /// The payload being transferred (component ID, JSON data, etc.).
+    pub payload: Option<String>,
+    /// Optional source component ID (for visual feedback and identification).
+    pub source_id: Option<String>,
+}
+
+impl DragState {
+    /// Creates a new empty drag state.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Starts a drag operation.
+    pub fn start(&mut self, payload: String, start_pos: Vec2, source_id: Option<String>) {
+        self.is_dragging = true;
+        self.start_position = start_pos;
+        self.current_position = start_pos;
+        self.payload = Some(payload);
+        self.source_id = source_id;
+    }
+
+    /// Updates the current drag position.
+    pub fn update(&mut self, current_pos: Vec2) {
+        self.current_position = current_pos;
+    }
+
+    /// Ends the drag operation and returns the payload if was dragging.
+    pub fn end(&mut self) -> Option<String> {
+        if self.is_dragging {
+            self.is_dragging = false;
+            let payload = self.payload.take();
+            self.source_id = None;
+            self.start_position = Vec2::ZERO;
+            self.current_position = Vec2::ZERO;
+            payload
+        } else {
+            None
+        }
+    }
+
+    /// Cancels the drag operation without returning payload.
+    pub fn cancel(&mut self) {
+        self.is_dragging = false;
+        self.payload = None;
+        self.source_id = None;
+        self.start_position = Vec2::ZERO;
+        self.current_position = Vec2::ZERO;
+    }
+
+    /// Returns the delta from start position to current position.
+    pub fn delta(&self) -> Vec2 {
+        self.current_position - self.start_position
+    }
+}
+
 impl OxidXContext {
     /// Creates a new OxidXContext for the given window.
     ///
@@ -285,6 +356,7 @@ impl OxidXContext {
             overlay_queue: Vec::new(),
             pending_overlay_clear: false,
             pending_overlay_removals: 0,
+            drag: DragState::new(),
         })
     }
 
@@ -315,6 +387,7 @@ impl OxidXContext {
             overlay_queue: Vec::new(),
             pending_overlay_clear: false,
             pending_overlay_removals: 0,
+            drag: DragState::new(),
         }
     }
 

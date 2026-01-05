@@ -142,6 +142,42 @@ pub trait OxidXComponent: Send {
     fn child_count(&self) -> usize {
         0
     }
+
+    // =========================================================================
+    // Drag and Drop Hooks
+    // =========================================================================
+
+    /// Called when a drag operation might start on this component.
+    ///
+    /// Return `Some(payload)` to initiate dragging with that payload.
+    /// Return `None` to cancel the drag operation.
+    ///
+    /// The payload is a String that can contain any data (ID, JSON, etc.).
+    fn on_drag_start(&self, _ctx: &mut OxidXContext) -> Option<String> {
+        None
+    }
+
+    /// Called when a dragged item is dropped on this component.
+    ///
+    /// Return `true` if the drop was accepted and handled.
+    /// Return `false` to reject the drop.
+    fn on_drop(&mut self, _payload: &str, _ctx: &mut OxidXContext) -> bool {
+        false
+    }
+
+    /// Returns whether this component can be dragged.
+    ///
+    /// Override to return `true` for draggable components.
+    fn is_draggable(&self) -> bool {
+        false
+    }
+
+    /// Returns whether this component can accept drops.
+    ///
+    /// Override to return `true` for drop target components.
+    fn is_drop_target(&self) -> bool {
+        false
+    }
 }
 
 /// Trait for custom container logic when using `#[derive(OxidXComponent)]`.

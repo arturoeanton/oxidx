@@ -170,3 +170,121 @@ Charts accept data in two formats via the `data` prop:
 ```
 
 Use `chart_type` prop to select chart type: `"pie"`, `"bar"`, or `"line"` (default: `"bar"`).
+
+## 7. Drag & Drop System
+
+OxidX provides a complete payload-based drag and drop system with visual feedback.
+
+```mermaid
+graph LR
+    Source[Draggable Component] -->|on_drag_start| Engine[Engine]
+    Engine -->|DragStart Event| All[All Components]
+    Engine -->|DragOver Event| Targets[Drop Targets]
+    Engine -->|on_drop| Target[Drop Target]
+    Engine -->|Ghost Rendering| Renderer[Renderer]
+```
+
+### Component Hooks
+
+Implement these in your `OxidXComponent` to enable drag and drop:
+
+```rust
+// For draggable components
+fn is_draggable(&self) -> bool { true }
+fn on_drag_start(&self, ctx: &mut OxidXContext) -> Option<String> {
+    Some(format!("PAYLOAD:{}", self.id))  // Return payload string
+}
+
+// For drop targets
+fn is_drop_target(&self) -> bool { true }
+fn on_drop(&mut self, payload: &str, ctx: &mut OxidXContext) -> bool {
+    if payload.starts_with("PAYLOAD:") {
+        // Handle drop
+        true
+    } else {
+        false
+    }
+}
+```
+
+### Drag State (`ctx.drag`)
+
+Access drag state during operations:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `is_active` | `bool` | Currently dragging? |
+| `payload` | `Option<String>` | Payload data |
+| `source_id` | `Option<String>` | ID of source component |
+| `start_position` | `Vec2` | Where drag started |
+| `current_position` | `Vec2` | Current cursor position |
+
+### Visual Feedback
+
+- **Ghost Rendering**: The engine automatically renders a semi-transparent ghost at the cursor position during drag.
+- **DragOver Event**: Components receive `DragOver` events to provide visual feedback (e.g., highlight drop zones).
+- **Event Flow**: `DragStart` → `DragOver` (continuous) → `DragEnd`
+
+## 8. Modern Styling System
+
+OxidX features a CSS-like styling system for professional UI design.
+
+### Style Struct
+
+```rust
+pub struct Style {
+    pub background: Background,    // Solid or Gradient
+    pub border: Option<Border>,    // Optional border
+    pub shadow: Option<Shadow>,    // Drop shadow
+    pub text_color: Color,
+    pub rounded: f32,              // Corner radius
+    pub padding: Vec2,
+}
+```
+
+### Builder Pattern
+
+```rust
+let card_style = Style::new()
+    .bg_gradient(Color::BLUE, Color::PURPLE, 90.0)
+    .rounded(16.0)
+    .shadow(Vec2::new(0.0, 4.0), 12.0, Color::new(0.0, 0.0, 0.0, 0.3))
+    .border(1.0, Color::WHITE);
+```
+
+### InteractiveStyle
+
+For components with multiple states:
+
+```rust
+pub struct InteractiveStyle {
+    pub idle: Style,
+    pub hover: Style,
+    pub pressed: Style,
+    pub disabled: Style,
+}
+
+// Usage
+let state = self.current_state();  // ComponentState enum
+let style = interactive_style.resolve(state);
+renderer.draw_style_rect(bounds, style);
+```
+
+### Theme System
+
+OxidX includes a theming system accessible via `renderer.theme`:
+
+```rust
+impl OxidXComponent for MyWidget {
+    fn render(&self, renderer: &mut Renderer) {
+        let button_style = Self::style_for_variant(&renderer.theme, ButtonVariant::Primary);
+        renderer.draw_style_rect(self.bounds, button_style.resolve(self.state));
+    }
+}
+```
+
+Theme provides:
+- Pre-built button styles (Primary, Secondary, Danger, Ghost)
+- Color palette (primary, success, danger, surface colors)
+- Spacing and border radius defaults
+
