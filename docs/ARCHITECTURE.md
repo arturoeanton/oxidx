@@ -137,7 +137,17 @@ graph LR
 - **Live Preview**: Automatically launches `oxidx-viewer` to render the generated UI.
 - **Clients**: Claude Desktop, Cursor, or any MCP-compatible assistant
 
-## 6. Dynamic Component Loader (`oxidx_std::dynamic`)
+## 6. Oxide Studio (Visual Editor)
+
+Oxide Studio is a standalone GUI application built *with* OxidX that serves as a visual layout editor.
+
+- **Canvas**: Supports absolute positioning and resizing of components.
+- **Drag & Drop Palette**: Uses the `oxidx_std::dynamic` registry to instantiate components.
+- **Property Editor**: Inspects and modifies component properties via `ComponentNode`.
+- **Export**: Generates JSON Schema layouts compatible with `oxidx_viewer` and `oxidx_codegen`.
+
+## 7. Dynamic Component Loader (`oxidx_std::dynamic`)
+
 
 OxidX supports runtime instantiation of UI components from JSON schemas.
 
@@ -171,7 +181,8 @@ Charts accept data in two formats via the `data` prop:
 
 Use `chart_type` prop to select chart type: `"pie"`, `"bar"`, or `"line"` (default: `"bar"`).
 
-## 7. Drag & Drop System
+## 8. Drag & Drop System
+
 
 OxidX provides a complete payload-based drag and drop system with visual feedback.
 
@@ -225,7 +236,8 @@ Access drag state during operations:
 - **DragOver Event**: Components receive `DragOver` events to provide visual feedback (e.g., highlight drop zones).
 - **Event Flow**: `DragStart` → `DragOver` (continuous) → `DragEnd`
 
-## 8. Modern Styling System
+## 9. Modern Styling System
+
 
 OxidX features a CSS-like styling system for professional UI design.
 

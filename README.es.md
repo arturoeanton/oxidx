@@ -1,5 +1,7 @@
 # OxidX
 
+![OxidX Logo](logo.jpeg)
+
 > **RAD (Desarrollo Rápido de Aplicaciones) en Rust.**
 > Un motor de UI acelerado por GPU con modo retenido, construido sobre `wgpu`.
 
@@ -58,6 +60,12 @@ Genera manualmente código Rust desde un archivo de layout.
 ```bash
 oxidx generate -i login.json -o src/generated_login.rs
 ```
+
+## 🎨 Oxide Studio
+
+OxidX incluye un editor visual, **Oxide Studio**, para la construcción de UI mediante arrastrar y soltar.
+
+![Oxide Studio](OxidxStudioV1.png)
 
 ## 🤖 Integración con IA
 

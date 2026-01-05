@@ -148,6 +148,7 @@ Based on the audit, all capabilities are **READY**. No blocking gaps exist.
 | `Dynamic Loader` | 🟢 Stable | Runtime factory (`build_component_tree`) supports all widgets including Charts. |
 | `Schema/ToSchema` | 🟢 Stable | Serialize UI components to JSON for code generation. |
 | `Hot-Reload` | 🟡 Beta | Layout reloading works, logic reloading requires recompile. |
+| `Oxide Studio` | 🟡 Beta | Visual editor V1. Drag & drop construction, property editing, JSON export. |
 
 
 ## Roadmap / In Progress

@@ -1296,9 +1296,21 @@ impl CanvasPanel {
                 r#"{{ "type": "Checkbox", "id": "{}", "props": {{ {}, "label": "{}", "checked": false }} }}"#,
                 item.id, base_props, item.label
             ),
+            "ZStack" | "AbsoluteCanvas" => {
+                // Containers with children
+                let children_json: Vec<String> = item.children.iter()
+                    .map(|child| Self::item_to_json(child))
+                    .collect();
+                
+                format!(
+                    r#"{{ "type": "{}", "id": "{}", "props": {{ {} }}, "children": [{}] }}"#,
+                    item.component_type, item.id, base_props, children_json.join(", ")
+                )
+            }
+            // Generic components - export with actual type
             _ => format!(
-                r#"{{ "type": "Label", "id": "{}", "props": {{ {}, "text": "{}" }} }}"#,
-                item.id, base_props, item.label
+                r#"{{ "type": "{}", "id": "{}", "props": {{ {}, "text": "{}" }} }}"#,
+                item.component_type, item.id, base_props, item.label
             ),
         }
     }

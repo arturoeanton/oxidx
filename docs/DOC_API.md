@@ -399,6 +399,16 @@ Positioning within parent:
 
 ## Standard Components (oxidx_std)
 
+The standard library provides a rich set of components:
+
+- **Input**: Button, Input, TextArea, Checkbox, RadioGroup, ComboBox
+- **Layout**: VStack, HStack, ZStack, Grid, SplitView, ScrollView
+- **Data Display**: Label, ListBox, TreeView, ProgressBar, Image, Charts, Calendar
+- **Grouping**: GroupBox, SideMenu, Header, Footer
+- **Overlay**: ContextMenu, Modal, Alert, Confirm
+- **Advanced**: CodeEditor
+
+
 ### Button
 
 ```rust

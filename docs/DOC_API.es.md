@@ -399,6 +399,16 @@ Posicionamiento dentro del padre:
 
 ## Componentes Estándar (oxidx_std)
 
+La librería estándar proporciona un rico conjunto de componentes:
+
+- **Entrada**: Button, Input, TextArea, Checkbox, RadioGroup, ComboBox
+- **Layout**: VStack, HStack, ZStack, Grid, SplitView, ScrollView
+- **Visualización de Datos**: Label, ListBox, TreeView, ProgressBar, Image, Charts, Calendar
+- **Agrupación**: GroupBox, SideMenu, Header, Footer
+- **Superposición**: ContextMenu, Modal, Alert, Confirm
+- **Avanzado**: CodeEditor
+
+
 ### Button
 
 ```rust
