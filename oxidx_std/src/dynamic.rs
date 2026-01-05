@@ -403,8 +403,12 @@ fn parse_options(node: &ComponentNode) -> Option<Vec<String>> {
         })
 }
 
-fn build_progress(_node: &ComponentNode) -> Box<dyn OxidXComponent> {
-    Box::new(ProgressBar::new())
+fn build_progress(node: &ComponentNode) -> Box<dyn OxidXComponent> {
+    let mut pb = ProgressBar::new();
+    if let Some(val) = node.props.get("value").and_then(|v| v.as_f64()) {
+        pb = pb.value(val as f32);
+    }
+    Box::new(pb)
 }
 
 fn build_splitview(_node: &ComponentNode) -> Box<dyn OxidXComponent> {

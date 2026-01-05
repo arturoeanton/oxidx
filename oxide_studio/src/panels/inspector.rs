@@ -124,6 +124,11 @@ impl InspectorPanel {
                                                 item.values = Some(s.to_string());
                                             }
                                         }
+                                        "value" => {
+                                            if let Some(n) = value.as_f64() {
+                                                item.value = Some(n as f32);
+                                            }
+                                        }
                                         _ => {}
                                     }
                                     return;
@@ -187,6 +192,9 @@ impl InspectorPanel {
             }
             if let Some(s) = &info.values {
                 obj.insert("values".to_string(), json!(s));
+            }
+            if let Some(v) = info.value {
+                obj.insert("value".to_string(), json!(v));
             }
         }
         props

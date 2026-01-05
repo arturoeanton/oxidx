@@ -65,6 +65,7 @@ pub struct CanvasItemInfo {
     pub align_h: Option<String>,
     pub align_v: Option<String>,
     pub values: Option<String>,
+    pub value: Option<f32>,
 }
 
 /// The central application state shared across all panels.
@@ -246,6 +247,10 @@ impl StudioState {
                             item.component_type, item.id, base_props, item.label, opts
                         )
                     },
+                    "Progress" | "ProgressBar" => format!(
+                        r#"{{ "type": "Progress", "id": "{}", "props": {{ {}, "value": {} }} }}"#,
+                        item.id, base_props, item.value.unwrap_or(0.5)
+                    ),
                     _ => format!(
                         r#"{{ "type": "VStack", "id": "{}", "props": {{ {} }}, "children": [] }}"#,
                         item.id, base_props
@@ -344,6 +349,7 @@ struct CanvasItem {
     height_percent: Option<f32>,
     parent_offset: Vec2,
     values: Option<Vec<String>>,
+    value: Option<f32>,
 }
 
 const HANDLE_SIZE: f32 = 10.0;
@@ -393,6 +399,10 @@ impl CanvasItem {
                     "ComboBox" | "RadioGroup" | "ListBox" => Some("Option 1, Option 2".to_string()),
                     _ => None
                 },
+                value: match component_type {
+                    "Progress" | "ProgressBar" => Some(0.5),
+                    _ => None
+                },
             });
         }
 
@@ -434,6 +444,10 @@ impl CanvasItem {
                     "ComboBox" | "RadioGroup" | "ListBox" => Some("Option 1, Option 2".to_string()),
                     _ => None
                 },
+                value: match component_type {
+                    "Progress" | "ProgressBar" => Some(0.5),
+                    _ => None
+                },
             },
             state,
         )
@@ -472,6 +486,7 @@ impl CanvasItem {
                    Some(v) 
                 }
             }),
+            value: info.value,
         }
     }
 
@@ -541,6 +556,7 @@ impl CanvasItem {
                    Some(v) 
                 }
             });
+            self.value = info.value;
         }
         
         // Recursively sync children
