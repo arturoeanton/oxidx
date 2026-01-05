@@ -263,7 +263,7 @@ fn main() {
 - [x] Asset Loading (Images)
 - [x] **Modern Styling System** (Style, InteractiveStyle, Theme)
 - [x] **Drag & Drop System** (Payload-based with ghost rendering)
-- [ ] Custom Font Support
+- [x] **Custom Font Support** (Load TTF/OTF, use with TextStyle)
 - [ ] Animation System
 - [ ] Accessibility (a11y)
 

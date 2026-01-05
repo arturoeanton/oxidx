@@ -112,6 +112,19 @@ impl TextStyle {
         self.font_size = size;
         self
     }
+
+    /// Set the font family name (must be loaded via `renderer.load_font()` first).
+    ///
+    /// # Example
+    /// ```ignore
+    /// TextStyle::default()
+    ///     .with_font("Fira Code")
+    ///     .with_size(14.0)
+    /// ```
+    pub fn with_font(mut self, family: impl Into<String>) -> Self {
+        self.font_family = Some(family.into());
+        self
+    }
 }
 
 use serde::{Deserialize, Serialize};

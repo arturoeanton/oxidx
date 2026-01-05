@@ -263,7 +263,7 @@ fn main() {
 - [x] Carga de Assets (Imágenes)
 - [x] **Sistema de Estilos Modernos** (Style, InteractiveStyle, Theme)
 - [x] **Sistema de Drag & Drop** (Basado en payload con ghost rendering)
-- [ ] Soporte de Fuentes Personalizadas
+- [x] Soporte de Fuentes Personalizadas
 - [ ] Sistema de Animaciones
 - [ ] Accesibilidad (a11y)
 

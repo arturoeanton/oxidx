@@ -492,6 +492,38 @@ impl Renderer {
         Vec2::new(self.screen_width, self.screen_height)
     }
 
+    /// Load a custom font from a file path (TTF/OTF).
+    ///
+    /// After loading, use `TextStyle::with_font("Font Name")` to use it.
+    ///
+    /// # Example
+    /// ```ignore
+    /// renderer.load_font("assets/fonts/FiraCode-Regular.ttf")?;
+    /// ```
+    pub fn load_font(&mut self, path: &str) -> Result<(), String> {
+        self.text_brush
+            .font_system
+            .db_mut()
+            .load_font_file(path)
+            .map_err(|e| format!("Failed to load font '{}': {}", path, e))
+    }
+
+    /// Load a custom font from raw bytes.
+    ///
+    /// Useful for embedding fonts in the binary.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let font_data = include_bytes!("../assets/fonts/FiraCode.ttf");
+    /// renderer.load_font_bytes(font_data);
+    /// ```
+    pub fn load_font_bytes(&mut self, bytes: &[u8]) {
+        self.text_brush
+            .font_system
+            .db_mut()
+            .load_font_data(bytes.to_vec());
+    }
+
     /// Set the current Z-Index for subsequent draw calls.
     pub fn set_z_index(&mut self, z_index: i32) {
         self.current_z_index = z_index;
@@ -1292,7 +1324,10 @@ impl Renderer {
                             buffer.set_text(
                                 &mut self.text_brush.font_system,
                                 text,
-                                Attrs::new().family(Family::SansSerif),
+                                Attrs::new().family(match &style.font_family {
+                                    Some(name) => Family::Name(name),
+                                    None => Family::SansSerif,
+                                }),
                                 Shaping::Advanced,
                             );
                             buffer.shape_until_scroll(&mut self.text_brush.font_system);
@@ -1319,7 +1354,7 @@ impl Renderer {
                             buffer.set_text(
                                 &mut self.text_brush.font_system,
                                 text,
-                                Attrs::new().family(Family::SansSerif),
+                                Attrs::new().family(Family::SansSerif), // Rich text uses attrs directly
                                 Shaping::Advanced,
                             );
                             if !buffer.lines.is_empty() {

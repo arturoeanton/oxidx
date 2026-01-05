@@ -154,6 +154,7 @@ Based on the audit, all capabilities are **READY**. No blocking gaps exist.
 
 - [x] **Asset Management**: Basic image loading via `Image` component and internal texture caching.
 - [x] **Drag & Drop**: Complete payload-based DnD system with visual feedback.
+- [x] **Custom Font Support**: Load TTF/OTF fonts via `renderer.load_font()` and use with `TextStyle::with_font()`.
 - [ ] **Animation System**: Tweening and keyframe animations for properties.
 - [ ] **Accessibility (A11y)**: Screen reader support integration.
 - [ ] **Data Binding**: Reactive data binding patterns (currently using immediate mode-like callbacks).
