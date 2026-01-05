@@ -323,6 +323,9 @@ struct CanvasItem {
     radius: Option<f32>,
     align_h: Option<String>,
     align_v: Option<String>,
+    width_percent: Option<f32>,
+    height_percent: Option<f32>,
+    parent_offset: Vec2,
 }
 
 const HANDLE_SIZE: f32 = 10.0;
@@ -426,6 +429,9 @@ impl CanvasItem {
             radius: info.radius,
             align_h: info.align_h.clone(),
             align_v: info.align_v.clone(),
+            width_percent: info.width_percent,
+            height_percent: info.height_percent,
+            parent_offset: Vec2::ZERO,
         }
     }
 
@@ -448,7 +454,8 @@ impl CanvasItem {
     /// Synchronizes visual properties (label, etc.) from the shared state.
     ///
     /// Call this before rendering to ensure the item reflects Inspector changes.
-    fn sync_from_state(&mut self) {
+    /// `parent_offset` is the absolute screen position of the parent container (or CanvasPanel origin).
+    fn sync_from_state(&mut self, offset: Vec2) {
         let state = self.state.lock().unwrap();
         
         // Helper to find info recursively
@@ -466,21 +473,57 @@ impl CanvasItem {
         
         if let Some(info) = find_info(&state.canvas_items, &self.id) {
             self.label = info.label.clone();
-            // Sync geometry
-            self.bounds.x = info.x;
-            self.bounds.y = info.y;
+            
+            // Store offset for later use (e.g. dragging)
+            self.parent_offset = offset;
+
+            // Sync geometry: Screen = Local (info) + Offset
+            self.bounds.x = info.x + offset.x;
+            self.bounds.y = info.y + offset.y;
             self.bounds.width = info.width;
             self.bounds.height = info.height;
+            
             // Sync new props
             self.color = info.color.clone();
             self.radius = info.radius;
             self.align_h = info.align_h.clone();
             self.align_v = info.align_v.clone();
+            self.width_percent = info.width_percent;
+            self.height_percent = info.height_percent;
         }
         
         // Recursively sync children
+        // Child offset = This item's screen position (self.bounds.top_left())
+        let child_offset = Vec2::new(self.bounds.x, self.bounds.y);
         for child in &mut self.children {
-            child.sync_from_state();
+            child.sync_from_state(child_offset);
+        }
+    }
+
+    /// Performs layout calculations, resolving percentages against parent bounds.
+    fn layout(&mut self, parent_bounds: Rect) {
+        if let Some(wp) = self.width_percent {
+            self.bounds.width = parent_bounds.width * (wp / 100.0);
+        }
+        if let Some(hp) = self.height_percent {
+            self.bounds.height = parent_bounds.height * (hp / 100.0);
+        }
+
+        // Recursively layout children
+        // Note: For now, children are relative to parent's position (x, y)
+        // If we had a true layout system (VStack/HStack), it would position them.
+        // For "Absolute" positioning style here, children use their own X/Y relative to...
+        // Actually CanvasItem x/y are absolute in this simple implementations? 
+        // Or relative to parent? 
+        // In render: renderer.draw_... self.bounds.
+        // If x/y are absolute, we pass visual bounds.
+        // If x/y are relative, we need to add parent.x/y.
+        // Current implementation treats x/y as absolute coordinates on the canvas.
+        
+        // HOWEVER, for percent size to work effectively in a hierarchy, we need to pass the *size* of THIS item to children.
+        let my_bounds = self.bounds;
+        for child in &mut self.children {
+            child.layout(my_bounds);
         }
     }
 
@@ -552,8 +595,9 @@ impl CanvasItem {
     fn update_state(&self) {
         if let Ok(mut st) = self.state.lock() {
             if let Some(info) = st.canvas_items.iter_mut().find(|i| i.id == self.id) {
-                info.x = self.bounds.x;
-                info.y = self.bounds.y;
+                // Bounds are Screen Coords. State expects Local Coords (relative to parent/canvas).
+                info.x = self.bounds.x - self.parent_offset.x;
+                info.y = self.bounds.y - self.parent_offset.y;
                 info.width = self.bounds.width;
                 info.height = self.bounds.height;
             }
@@ -1849,6 +1893,12 @@ impl OxidXComponent for CanvasPanel {
     /// Updates the panel bounds.
     fn layout(&mut self, available: Rect) -> Vec2 {
         self.bounds = available;
+        
+        // Resolve layouts (percentages)
+        for item in &mut self.items {
+            item.layout(self.bounds);
+        }
+
         available.size()
     }
 
@@ -1980,7 +2030,8 @@ impl OxidXComponent for CanvasPanel {
 
         // Sync items from state (for label updates from inspector)
         for item in &mut self.items {
-            item.sync_from_state();
+            item.sync_from_state(Vec2::new(self.bounds.x, self.bounds.y));
+            item.layout(self.bounds);
         }
 
         // Forward to items (reverse for z-order)

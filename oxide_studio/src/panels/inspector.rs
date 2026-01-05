@@ -48,23 +48,55 @@ impl InspectorPanel {
                                             }
                                         }
                                         "width" => {
-                                            if let Some(n) = value.as_f64() {
-                                                item.width = n as f32;
+                                            if let Some(s) = value.as_str() {
+                                                if s.ends_with('%') {
+                                                    if let Ok(n) =
+                                                        s.trim_end_matches('%').parse::<f32>()
+                                                    {
+                                                        item.width_percent =
+                                                            Some(n.clamp(0.0, 100.0));
+                                                    }
+                                                } else {
+                                                    let clean = s.trim_end_matches("px");
+                                                    if let Ok(n) = clean.parse::<f32>() {
+                                                        item.width = n.clamp(0.0, 50000.0);
+                                                        item.width_percent = None;
+                                                    }
+                                                }
+                                            } else if let Some(n) = value.as_f64() {
+                                                item.width = (n as f32).clamp(0.0, 50000.0);
+                                                item.width_percent = None;
                                             }
                                         }
                                         "height" => {
-                                            if let Some(n) = value.as_f64() {
-                                                item.height = n as f32;
+                                            if let Some(s) = value.as_str() {
+                                                if s.ends_with('%') {
+                                                    if let Ok(n) =
+                                                        s.trim_end_matches('%').parse::<f32>()
+                                                    {
+                                                        item.height_percent =
+                                                            Some(n.clamp(0.0, 100.0));
+                                                    }
+                                                } else {
+                                                    let clean = s.trim_end_matches("px");
+                                                    if let Ok(n) = clean.parse::<f32>() {
+                                                        item.height = n.clamp(0.0, 50000.0);
+                                                        item.height_percent = None;
+                                                    }
+                                                }
+                                            } else if let Some(n) = value.as_f64() {
+                                                item.height = (n as f32).clamp(0.0, 50000.0);
+                                                item.height_percent = None;
                                             }
                                         }
                                         "x" => {
                                             if let Some(n) = value.as_f64() {
-                                                item.x = n as f32;
+                                                item.x = (n as f32).clamp(-50000.0, 50000.0);
                                             }
                                         }
                                         "y" => {
                                             if let Some(n) = value.as_f64() {
-                                                item.y = n as f32;
+                                                item.y = (n as f32).clamp(-50000.0, 50000.0);
                                             }
                                         }
                                         "color" => {
@@ -112,14 +144,27 @@ impl InspectorPanel {
 
     /// Convert CanvasItemInfo to props for PropertyGrid
     fn get_item_props(info: &CanvasItemInfo) -> serde_json::Value {
+        // Format width/height: use percent if active, else px
+        let w_val = if let Some(p) = info.width_percent {
+            format!("{}%", p)
+        } else {
+            format!("{}", info.width)
+        };
+
+        let h_val = if let Some(p) = info.height_percent {
+            format!("{}%", p)
+        } else {
+            format!("{}", info.height)
+        };
+
         let mut props = json!({
             "id": info.id,
             "type": info.component_type,
             "label": info.label,
             "x": info.x,
             "y": info.y,
-            "width": info.width,
-            "height": info.height,
+            "width": w_val,
+            "height": h_val,
         });
 
         if let Some(obj) = props.as_object_mut() {
