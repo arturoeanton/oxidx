@@ -1,13 +1,16 @@
 [package]
-name = "oxidx_codegen"
+name = "oxidx_mcp"
 version = "0.1.0"
 edition = "2021"
+description = "MCP server exposing OxidX code generation tools"
+
+[[bin]]
+name = "oxidx-mcp"
+path = "src/main.rs"
 
 [dependencies]
 oxidx_core = { path = "../oxidx_core" }
+oxidx_codegen = { path = "../oxidx_codegen" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-schemars = "0.8"
 anyhow = "1.0"
-chrono = "0.4"
-heck = "0.4"

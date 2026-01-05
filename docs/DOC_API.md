@@ -982,3 +982,183 @@ impl OxidXContainerLogic for MyWidget {
 | `#[oxidx(bounds)]` | Marks the `bounds` field |
 | `#[oxidx(child)]` | Marks a child component for auto-propagation |
 
+---
+
+## Schema System (`oxidx_core::schema`)
+
+Serialization schema for UI components, used for code generation.
+
+### `ComponentNode`
+
+A serializable representation of a UI component.
+
+```rust
+pub struct ComponentNode {
+    pub type_name: String,           // "Button", "VStack", etc.
+    pub id: Option<String>,          // Optional component ID
+    pub props: HashMap<String, Value>, // Properties
+    pub events: Vec<String>,         // Event handler names
+    pub children: Vec<ComponentNode>, // Child components
+}
+```
+
+| Builder | Description |
+|---------|-------------|
+| `new(type_name)` | Create new node |
+| `with_id(id)` | Set component ID |
+| `with_prop(key, value)` | Add property |
+| `with_event(name)` | Add event handler |
+| `with_child(node)` | Add child component |
+| `with_children(vec)` | Add multiple children |
+
+### `ToSchema` Trait
+
+Implement this trait to export a component's structure to JSON.
+
+```rust
+pub trait ToSchema {
+    fn to_schema(&self) -> ComponentNode;
+}
+
+// Example implementation
+impl ToSchema for Button {
+    fn to_schema(&self) -> ComponentNode {
+        ComponentNode::new("Button")
+            .with_id(self.id.clone())
+            .with_prop("label", self.label.clone())
+    }
+}
+```
+
+---
+
+## Code Generation (`oxidx_codegen`)
+
+Generate Rust code from component schemas.
+
+### `generate_view(root, view_name) -> String`
+
+Takes a `ComponentNode` tree and generates a complete Rust struct.
+
+```rust
+use oxidx_codegen::generate_view;
+use oxidx_core::schema::ComponentNode;
+
+let schema = ComponentNode::new("VStack")
+    .with_child(ComponentNode::new("Button")
+        .with_id("btn_ok")
+        .with_prop("label", "OK"));
+
+let code = generate_view(&schema, "MyView");
+println!("{}", code);
+```
+
+**Output:**
+```rust
+pub struct MyView {
+    pub btn_ok: Button,
+    root: VStack,
+}
+
+impl MyView {
+    pub fn new() -> Self { ... }
+}
+
+impl OxidXComponent for MyView { ... }
+```
+
+---
+
+## MCP Server (`oxidx_mcp`)
+
+Exposes code generation to AI assistants via Model Context Protocol.
+
+### Build
+
+```bash
+cargo build --release -p oxidx_mcp
+```
+
+### Claude Desktop Config
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "oxidx": {
+      "command": "/path/to/oxidx/target/release/oxidx-mcp"
+    }
+  }
+}
+```
+
+### Available Tool
+
+- **`generate_oxid_ui`**: Takes `view_name` and `schema` (ComponentNode JSON), returns Rust code.
+
+### Dynamic Component Discovery
+
+The MCP server exposes all supported components via a JSON Schema enum in the `tools/list` response. AI clients can read `tools[0].inputSchema.properties.schema.properties.type_name.enum` to dynamically discover available widgets:
+
+**Supported Components (30+):**
+- **Containers**: `VStack`, `HStack`, `ZStack`, `ScrollView`, `SplitView`, `GroupBox`
+- **Widgets**: `Button`, `Label`, `Input`, `Image`, `Checkbox`, `Radio`, `Slider`, `Toggle`
+- **Charts**: `Chart`, `PieChart`, `BarChart`, `LineChart`
+- **Data Display**: `TreeView`, `Grid`, `ListBox`, `ComboBox`, `RadioGroup`
+- **Advanced**: `TextArea`, `CodeEditor`, `Calendar`, `ProgressBar`
+- **Dialogs**: `Modal`, `Alert`, `Confirm`
+
+### Live Preview
+
+When generating UI, the MCP server automatically launches `oxidx-viewer` to render the schema as a native preview window.
+
+---
+
+## Dynamic Component Loader (`oxidx_std::dynamic`)
+
+Runtime factory that instantiates UI components from `ComponentNode` schemas.
+
+### `build_component_tree(node: &ComponentNode) -> Box<dyn OxidXComponent>`
+
+Recursively builds a component tree from a JSON schema at runtime.
+
+```rust
+use oxidx_std::dynamic::{DynamicRoot, build_component_tree};
+use oxidx_core::schema::ComponentNode;
+
+let schema: ComponentNode = serde_json::from_str(json_str)?;
+let root = DynamicRoot::from_schema(&schema);
+run(root);
+```
+
+### Supported Components
+
+| Type | Variants |
+|------|----------|
+| Containers | `VStack`, `HStack`, `ZStack` |
+| Widgets | `Button`, `Label`, `Input`, `Image` |
+| Charts | `Chart`, `PieChart`, `BarChart`, `LineChart` |
+
+### Chart Schema Format
+
+```json
+{
+  "type_name": "Chart",
+  "props": {
+    "chart_type": "bar",
+    "width": 400,
+    "height": 300,
+    "data": [
+      {"label": "Q1", "value": 100},
+      {"label": "Q2", "value": 150}
+    ]
+  }
+}
+```
+
+**Chart Types**: `"pie"`, `"bar"`, `"line"` (default: `"bar"`)
+
+**Data Formats**:
+- Object: `[{"label": "...", "value": N}, ...]`
+- Tuple: `[["label", N], ...]`

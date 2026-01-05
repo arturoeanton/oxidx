@@ -536,3 +536,39 @@ impl OxidXComponent for Button {
         !self.is_disabled
     }
 }
+
+// === Schema Serialization ===
+
+impl oxidx_core::schema::ToSchema for Button {
+    fn to_schema(&self) -> oxidx_core::schema::ComponentNode {
+        let mut node = oxidx_core::schema::ComponentNode::new("Button");
+
+        // ID
+        if !self.id.is_empty() {
+            node.id = Some(self.id.clone());
+        }
+
+        // Properties
+        if let Some(ref label) = self.label {
+            node.props
+                .insert("label".to_string(), serde_json::json!(label));
+        }
+        if let Some(ref icon) = self.icon {
+            node.props
+                .insert("icon".to_string(), serde_json::json!(icon));
+        }
+        node.props.insert(
+            "variant".to_string(),
+            serde_json::json!(format!("{:?}", self.variant)),
+        );
+        node.props
+            .insert("disabled".to_string(), serde_json::json!(self.is_disabled));
+
+        // Events
+        if self.on_click.is_some() {
+            node.events.push("on_click".to_string());
+        }
+
+        node
+    }
+}

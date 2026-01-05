@@ -94,3 +94,79 @@ A collection of production-ready widgets and containers built on top of `oxidx_c
 6. **Layout**: If requested, a layout pass recalculates positions.
 7. **Render**: The engine calls `render()` on the root component, traversing the tree and building a render batch.
 8. **Draw**: `wgpu` executes the draw call.
+
+## 4. Code Generation Pipeline
+
+OxidX supports a design-to-code workflow via schema serialization and code generation.
+
+```mermaid
+graph LR
+    Design[UI Design] --> Schema[ComponentNode JSON]
+    Schema --> Codegen[generate_view]
+    Codegen --> Rust[Rust Code]
+    Rust --> App[Running App]
+```
+
+### Schema System (`oxidx_core::schema`)
+
+- **`ComponentNode`**: A serializable representation of a UI component with `type_name`, `id`, `props`, `events`, and `children`.
+- **`ToSchema` trait**: Components implement this to export their structure to JSON.
+
+### Code Generator (`oxidx_codegen`)
+
+- **`generate_view(root, view_name)`**: Takes a `ComponentNode` tree and generates a complete Rust struct with:
+  - Struct fields for named components
+  - Constructor method (`new()`) that builds the UI tree
+  - `OxidXComponent` implementation
+
+## 5. MCP Integration (`oxidx_mcp`)
+
+OxidX exposes code generation to AI assistants via Model Context Protocol (MCP).
+
+```mermaid
+graph LR
+    AI[AI Assistant] -->|JSON-RPC| MCP[oxidx-mcp]
+    MCP -->|ComponentNode| Codegen[generate_view]
+    Codegen -->|Rust Code| AI
+    MCP -->|Schema JSON| Viewer[oxidx-viewer]
+```
+
+- **Transport**: stdio JSON-RPC
+- **Tool**: `generate_oxid_ui` accepts a schema and returns Rust code
+- **Dynamic Component Enum**: The `tools/list` response includes a JSON Schema enum of all 30+ supported components, allowing AI clients to dynamically discover available widgets.
+- **Live Preview**: Automatically launches `oxidx-viewer` to render the generated UI.
+- **Clients**: Claude Desktop, Cursor, or any MCP-compatible assistant
+
+## 6. Dynamic Component Loader (`oxidx_std::dynamic`)
+
+OxidX supports runtime instantiation of UI components from JSON schemas.
+
+```mermaid
+graph LR
+    JSON[ComponentNode JSON] -->|Deserialize| Schema[ComponentNode]
+    Schema -->|build_component_tree| Tree[Component Tree]
+    Tree -->|render| UI[Rendered UI]
+```
+
+### `build_component_tree(node: &ComponentNode) -> Box<dyn OxidXComponent>`
+
+This factory function recursively builds a component tree at runtime:
+
+- **Containers**: `VStack`, `HStack`, `ZStack` (with recursive children)
+- **Widgets**: `Button`, `Label`, `Input`, `Image`
+- **Charts**: `Chart` (generic), `PieChart`, `BarChart`, `LineChart`
+- **Fallback**: Unknown types render as `Label` with an error message.
+
+### Chart Data Format
+
+Charts accept data in two formats via the `data` prop:
+
+```json
+// Object format
+{"data": [{"label": "Sales", "value": 100}, {"label": "Costs", "value": 75}]}
+
+// Tuple format
+{"data": [["Sales", 100], ["Costs", 75]]}
+```
+
+Use `chart_type` prop to select chart type: `"pie"`, `"bar"`, or `"line"` (default: `"bar"`).

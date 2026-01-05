@@ -43,7 +43,14 @@ This document tracks the current stability and implementation status of the Oxid
 |------|--------|-------|
 | `oxidx_derive` | 🟢 Stable | `OxidXComponent` macro reduces boilerplate significantly. |
 | `oxidx_cli` | 🟡 Beta | Watch mode and Schema working, CodeGen in active development. |
-| `Hot e-load` | 🟡 Beta | Layout reloading works, logic reloading requires recompile. |
+| `oxidx_codegen` | 🟢 Stable | `generate_view()` generates complete View structs from ComponentNode schema. |
+| `oxidx_mcp` | 🟢 Stable | MCP server for AI assistants with dynamic component enum discovery. |
+| `oxidx_ollama` | 🟢 Stable | Python bridge for local LLM code generation via Ollama with live preview. |
+| `oxidx_viewer` | 🟢 Stable | Runtime JSON viewer that renders ComponentNode schemas. |
+| `Dynamic Loader` | 🟢 Stable | Runtime factory (`build_component_tree`) supports all widgets including Charts. |
+| `Schema/ToSchema` | 🟢 Stable | Serialize UI components to JSON for code generation. |
+| `Hot-Reload` | 🟡 Beta | Layout reloading works, logic reloading requires recompile. |
+
 
 ## Roadmap / In Progress
 

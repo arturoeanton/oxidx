@@ -1,0 +1,15 @@
+[package]
+name = "oxidx_viewer"
+version = "0.1.0"
+edition = "2021"
+description = "OxidX JSON UI Viewer - Run UI layouts from JSON files"
+
+[[bin]]
+name = "oxidx-viewer"
+path = "src/main.rs"
+
+[dependencies]
+oxidx_core = { path = "../oxidx_core" }
+oxidx_std = { path = "../oxidx_std" }
+serde_json = "1.0"
+anyhow = "1.0"

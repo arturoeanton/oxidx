@@ -984,3 +984,184 @@ impl OxidXContainerLogic for MiWidget {
 | `#[oxidx(bounds)]` | Marca el campo `bounds` |
 | `#[oxidx(child)]` | Marca un componente hijo para auto-propagación |
 
+---
+
+## Sistema de Schema (`oxidx_core::schema`)
+
+Schema de serialización para componentes UI, utilizado para generación de código.
+
+### `ComponentNode`
+
+Representación serializable de un componente UI.
+
+```rust
+pub struct ComponentNode {
+    pub type_name: String,           // "Button", "VStack", etc.
+    pub id: Option<String>,          // ID opcional del componente
+    pub props: HashMap<String, Value>, // Propiedades
+    pub events: Vec<String>,         // Nombres de manejadores de eventos
+    pub children: Vec<ComponentNode>, // Componentes hijos
+}
+```
+
+| Builder | Descripción |
+|---------|-------------|
+| `new(type_name)` | Crear nuevo nodo |
+| `with_id(id)` | Establecer ID |
+| `with_prop(key, value)` | Añadir propiedad |
+| `with_event(name)` | Añadir manejador de evento |
+| `with_child(node)` | Añadir componente hijo |
+| `with_children(vec)` | Añadir múltiples hijos |
+
+### Trait `ToSchema`
+
+Implementa este trait para exportar la estructura de un componente a JSON.
+
+```rust
+pub trait ToSchema {
+    fn to_schema(&self) -> ComponentNode;
+}
+
+// Ejemplo de implementación
+impl ToSchema for Button {
+    fn to_schema(&self) -> ComponentNode {
+        ComponentNode::new("Button")
+            .with_id(self.id.clone())
+            .with_prop("label", self.label.clone())
+    }
+}
+```
+
+---
+
+## Generación de Código (`oxidx_codegen`)
+
+Genera código Rust desde schemas de componentes.
+
+### `generate_view(root, view_name) -> String`
+
+Toma un árbol `ComponentNode` y genera un struct Rust completo.
+
+```rust
+use oxidx_codegen::generate_view;
+use oxidx_core::schema::ComponentNode;
+
+let schema = ComponentNode::new("VStack")
+    .with_child(ComponentNode::new("Button")
+        .with_id("btn_ok")
+        .with_prop("label", "OK"));
+
+let codigo = generate_view(&schema, "MiVista");
+println!("{}", codigo);
+```
+
+**Salida:**
+```rust
+pub struct MiVista {
+    pub btn_ok: Button,
+    root: VStack,
+}
+
+impl MiVista {
+    pub fn new() -> Self { ... }
+}
+
+impl OxidXComponent for MiVista { ... }
+```
+
+---
+
+## Servidor MCP (`oxidx_mcp`)
+
+Expone la generación de código a asistentes IA vía Model Context Protocol.
+
+### Compilar
+
+```bash
+cargo build --release -p oxidx_mcp
+```
+
+### Configuración Claude Desktop
+
+Añadir a `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "oxidx": {
+      "command": "/ruta/a/oxidx/target/release/oxidx-mcp"
+    }
+  }
+}
+```
+
+### Herramienta Disponible
+
+- **`generate_oxid_ui`**: Recibe `view_name` y `schema` (JSON ComponentNode), retorna código Rust.
+
+### Descubrimiento Dinámico de Componentes
+
+El servidor MCP expone todos los componentes soportados via un enum JSON Schema en la respuesta `tools/list`. Los clientes IA pueden leer `tools[0].inputSchema.properties.schema.properties.type_name.enum` para descubrir dinámicamente los widgets disponibles:
+
+**Componentes Soportados (30+):**
+- **Contenedores**: `VStack`, `HStack`, `ZStack`, `ScrollView`, `SplitView`, `GroupBox`
+- **Widgets**: `Button`, `Label`, `Input`, `Image`, `Checkbox`, `Radio`, `Slider`, `Toggle`
+- **Gráficos**: `Chart`, `PieChart`, `BarChart`, `LineChart`
+- **Visualización de Datos**: `TreeView`, `Grid`, `ListBox`, `ComboBox`, `RadioGroup`
+- **Avanzados**: `TextArea`, `CodeEditor`, `Calendar`, `ProgressBar`
+- **Diálogos**: `Modal`, `Alert`, `Confirm`
+
+### Vista Previa en Vivo
+
+Al generar UI, el servidor MCP lanza automáticamente `oxidx-viewer` para renderizar el schema como una ventana de preview nativa.
+
+---
+
+## Cargador Dinámico de Componentes (`oxidx_std::dynamic`)
+
+Factory en tiempo de ejecución que instancia componentes UI desde schemas `ComponentNode`.
+
+### `build_component_tree(node: &ComponentNode) -> Box<dyn OxidXComponent>`
+
+Construye recursivamente un árbol de componentes desde un schema JSON en runtime.
+
+```rust
+use oxidx_std::dynamic::{DynamicRoot, build_component_tree};
+use oxidx_core::schema::ComponentNode;
+
+let schema: ComponentNode = serde_json::from_str(json_str)?;
+let root = DynamicRoot::from_schema(&schema);
+run(root);
+```
+
+### Componentes Soportados
+
+| Tipo | Variantes |
+|------|-----------|
+| Contenedores | `VStack`, `HStack`, `ZStack` |
+| Widgets | `Button`, `Label`, `Input`, `Image` |
+| Gráficos | `Chart`, `PieChart`, `BarChart`, `LineChart` |
+
+### Formato de Schema para Gráficos
+
+```json
+{
+  "type_name": "Chart",
+  "props": {
+    "chart_type": "bar",
+    "width": 400,
+    "height": 300,
+    "data": [
+      {"label": "Q1", "value": 100},
+      {"label": "Q2", "value": 150}
+    ]
+  }
+}
+```
+
+**Tipos de Gráficos**: `"pie"`, `"bar"`, `"line"` (por defecto: `"bar"`)
+
+**Formatos de Datos**:
+- Objeto: `[{"label": "...", "value": N}, ...]`
+- Tupla: `[["label", N], ...]`
+

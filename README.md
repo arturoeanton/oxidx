@@ -23,11 +23,14 @@ OxidX is a modern GUI framework for Rust designed for high performance and devel
 
 | Crate | Description |
 |-------|-------------|
-| **`oxidx_core`** | The engine heart: Render Loop, `OxidXContext`, `Renderer`, Events, Primitives |
+| **`oxidx_core`** | The engine heart: Render Loop, `OxidXContext`, `Renderer`, Events, Primitives, Schema |
 | **`oxidx_std`** | Standard library: Widgets (`Button`, `Input`, `Label`, `TextArea`) and Containers |
 | **`oxidx_derive`** | Procedural macros for builder patterns and boilerplate |
-| **`oxidx_codegen`** | Code generation for converting JSON layouts to Rust |
+| **`oxidx_codegen`** | Code generation for converting JSON/Schema layouts to Rust |
 | **`oxidx_cli`** | Command-line toolchain (`generate`, `schema`, `watch`) |
+| **`oxidx_mcp`** | MCP Server for AI assistant integration with dynamic component discovery |
+| **`oxidx_viewer`** | Runtime JSON viewer that renders ComponentNode schemas as native UI |
+| **`oxidx_ollama`** | Python bridge for local LLM code generation via Ollama |
 
 ## 🛠️ The OxidX Toolchain
 
@@ -52,6 +55,40 @@ Manually generate Rust code from a layout file.
 
 ```bash
 oxidx generate -i login.json -o src/generated_login.rs
+```
+
+## 🤖 AI Integration
+
+OxidX can generate UI code directly from natural language using AI assistants.
+
+### MCP Server (Claude Desktop, Cursor)
+
+Build and register the MCP server:
+
+```bash
+cargo build --release -p oxidx_mcp
+```
+
+Add to your `claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "oxidx": {
+      "command": "/path/to/oxidx/target/release/oxidx-mcp"
+    }
+  }
+}
+```
+
+Now Claude can generate OxidX UI code using the `generate_oxid_ui` tool. The MCP server dynamically exposes all 30+ supported components via a JSON Schema enum, and automatically launches a live preview window.
+
+### Ollama Bridge (Local LLM)
+
+```bash
+cd oxidx_ollama
+python3 oxidx_ollama.py
+
+🎨 Describe tu UI: Make a login form with username and password
 ```
 
 ## 🎮 Components (`oxidx_std`)

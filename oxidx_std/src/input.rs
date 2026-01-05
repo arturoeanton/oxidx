@@ -881,3 +881,37 @@ mod tests {
         assert_eq!(input.value(), "Hello World");
     }
 }
+
+// === Schema Serialization ===
+
+impl oxidx_core::schema::ToSchema for Input {
+    fn to_schema(&self) -> oxidx_core::schema::ComponentNode {
+        let mut node = oxidx_core::schema::ComponentNode::new("Input");
+
+        // ID
+        if !self.id.is_empty() {
+            node.id = Some(self.id.clone());
+        }
+
+        // Properties
+        node.props.insert(
+            "placeholder".to_string(),
+            serde_json::json!(self.placeholder),
+        );
+
+        if self.is_password {
+            node.props
+                .insert("password_mode".to_string(), serde_json::json!(true));
+        }
+
+        // Events
+        if self.on_change.is_some() {
+            node.events.push("on_change".to_string());
+        }
+        if self.on_blur.is_some() {
+            node.events.push("on_blur".to_string());
+        }
+
+        node
+    }
+}

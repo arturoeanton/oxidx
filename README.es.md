@@ -23,11 +23,14 @@ OxidX es un framework moderno de GUI para Rust diseñado para alto rendimiento y
 
 | Crate | Descripción |
 |-------|-------------|
-| **`oxidx_core`** | El corazón del motor: Bucle de Render, `OxidXContext`, `Renderer`, Eventos, Primitivas |
+| **`oxidx_core`** | El corazón del motor: Bucle de Render, `OxidXContext`, `Renderer`, Eventos, Primitivas, Schema |
 | **`oxidx_std`** | Librería estándar: Widgets (`Button`, `Input`, `Label`, `TextArea`) y Contenedores |
 | **`oxidx_derive`** | Macros procedurales para patrones builder y código repetitivo |
-| **`oxidx_codegen`** | Generación de código para convertir layouts JSON a Rust |
+| **`oxidx_codegen`** | Generación de código para convertir layouts JSON/Schema a Rust |
 | **`oxidx_cli`** | Toolchain de línea de comandos (`generate`, `schema`, `watch`) |
+| **`oxidx_mcp`** | Servidor MCP para integración con IA con descubrimiento dinámico de componentes |
+| **`oxidx_viewer`** | Visor JSON en runtime que renderiza schemas ComponentNode como UI nativa |
+| **`oxidx_ollama`** | Puente Python para generación de código con LLM local vía Ollama |
 
 ## 🛠️ El Toolchain de OxidX
 
@@ -52,6 +55,40 @@ Genera manualmente código Rust desde un archivo de layout.
 
 ```bash
 oxidx generate -i login.json -o src/generated_login.rs
+```
+
+## 🤖 Integración con IA
+
+OxidX puede generar código UI directamente desde lenguaje natural usando asistentes IA.
+
+### Servidor MCP (Claude Desktop, Cursor)
+
+Compila y registra el servidor MCP:
+
+```bash
+cargo build --release -p oxidx_mcp
+```
+
+Agrega a tu `claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "oxidx": {
+      "command": "/ruta/a/oxidx/target/release/oxidx-mcp"
+    }
+  }
+}
+```
+
+Ahora Claude puede generar código OxidX usando la herramienta `generate_oxid_ui`. El servidor MCP expone dinámicamente los 30+ componentes soportados via un enum JSON Schema, y lanza automáticamente una ventana de vista previa en vivo.
+
+### Puente Ollama (LLM Local)
+
+```bash
+cd oxidx_ollama
+python3 oxidx_ollama.py
+
+🎨 Describe tu UI: Hacer un formulario de login con usuario y contraseña
 ```
 
 ## 🎮 Componentes (`oxidx_std`)

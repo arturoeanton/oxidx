@@ -10,6 +10,7 @@ pub mod code_editor;
 pub mod combobox;
 pub mod containers;
 pub mod dialog;
+pub mod dynamic;
 pub mod grid;
 pub mod groupbox;
 pub mod image;
@@ -27,7 +28,7 @@ pub mod textarea;
 pub mod tree;
 
 // Re-export components
-pub use button::Button;
+pub use button::{Button, ButtonVariant};
 pub use calendar::*;
 pub use charts::*;
 pub use checkbox::Checkbox;

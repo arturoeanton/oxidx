@@ -593,3 +593,103 @@ impl OxidXComponent for ZStack {
         self.children.len()
     }
 }
+
+// === Schema Serialization ===
+
+impl oxidx_core::schema::ToSchema for VStack {
+    fn to_schema(&self) -> oxidx_core::schema::ComponentNode {
+        let mut node = oxidx_core::schema::ComponentNode::new("VStack");
+
+        // Properties
+        node.props
+            .insert("spacing".to_string(), serde_json::json!(self.spacing.gap));
+        node.props.insert(
+            "alignment".to_string(),
+            serde_json::json!(format!("{:?}", self.alignment)),
+        );
+
+        if let Some(bg) = &self.background {
+            node.props.insert(
+                "background".to_string(),
+                serde_json::json!(format!(
+                    "rgba({:.0},{:.0},{:.0},{:.2})",
+                    bg.r * 255.0,
+                    bg.g * 255.0,
+                    bg.b * 255.0,
+                    bg.a
+                )),
+            );
+        }
+
+        // Note: Children could implement ToSchema but we'd need trait object support
+        // For now, just record child count
+        node.props.insert(
+            "child_count".to_string(),
+            serde_json::json!(self.children.len()),
+        );
+
+        node
+    }
+}
+
+impl oxidx_core::schema::ToSchema for HStack {
+    fn to_schema(&self) -> oxidx_core::schema::ComponentNode {
+        let mut node = oxidx_core::schema::ComponentNode::new("HStack");
+
+        node.props
+            .insert("spacing".to_string(), serde_json::json!(self.spacing.gap));
+        node.props.insert(
+            "alignment".to_string(),
+            serde_json::json!(format!("{:?}", self.alignment)),
+        );
+
+        if let Some(bg) = &self.background {
+            node.props.insert(
+                "background".to_string(),
+                serde_json::json!(format!(
+                    "rgba({:.0},{:.0},{:.0},{:.2})",
+                    bg.r * 255.0,
+                    bg.g * 255.0,
+                    bg.b * 255.0,
+                    bg.a
+                )),
+            );
+        }
+
+        node.props.insert(
+            "child_count".to_string(),
+            serde_json::json!(self.children.len()),
+        );
+
+        node
+    }
+}
+
+impl oxidx_core::schema::ToSchema for ZStack {
+    fn to_schema(&self) -> oxidx_core::schema::ComponentNode {
+        let mut node = oxidx_core::schema::ComponentNode::new("ZStack");
+
+        node.props
+            .insert("padding".to_string(), serde_json::json!(self.padding));
+
+        if let Some(bg) = &self.background {
+            node.props.insert(
+                "background".to_string(),
+                serde_json::json!(format!(
+                    "rgba({:.0},{:.0},{:.0},{:.2})",
+                    bg.r * 255.0,
+                    bg.g * 255.0,
+                    bg.b * 255.0,
+                    bg.a
+                )),
+            );
+        }
+
+        node.props.insert(
+            "child_count".to_string(),
+            serde_json::json!(self.children.len()),
+        );
+
+        node
+    }
+}

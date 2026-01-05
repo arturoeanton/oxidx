@@ -568,3 +568,35 @@ impl OxidXComponent for Label {
         self.is_selectable
     }
 }
+
+// === Schema Serialization ===
+
+impl oxidx_core::schema::ToSchema for Label {
+    fn to_schema(&self) -> oxidx_core::schema::ComponentNode {
+        let mut node = oxidx_core::schema::ComponentNode::new("Label");
+
+        // ID
+        if !self.id.is_empty() {
+            node.id = Some(self.id.clone());
+        }
+
+        // Properties
+        node.props
+            .insert("text".to_string(), serde_json::json!(self.text));
+        node.props.insert(
+            "style".to_string(),
+            serde_json::json!(format!("{:?}", self.label_style)),
+        );
+        node.props.insert(
+            "font_size".to_string(),
+            serde_json::json!(self.style.font_size),
+        );
+
+        if self.is_selectable {
+            node.props
+                .insert("selectable".to_string(), serde_json::json!(true));
+        }
+
+        node
+    }
+}
