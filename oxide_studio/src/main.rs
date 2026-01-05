@@ -64,6 +64,7 @@ pub struct CanvasItemInfo {
     pub radius: Option<f32>,
     pub align_h: Option<String>,
     pub align_v: Option<String>,
+    pub values: Option<String>,
 }
 
 /// The central application state shared across all panels.
@@ -225,6 +226,26 @@ impl StudioState {
                         r#"{{ "type": "Checkbox", "id": "{}", "props": {{ {}, "label": "{}", "checked": false }} }}"#,
                         item.id, base_props, item.label
                     ),
+                    "ComboBox" | "RadioGroup" | "ListBox" => {
+                        let opts = if let Some(s) = &item.values {
+                            // If it's valid JSON, use it. Else convert comma list to JSON array
+                            if serde_json::from_str::<Vec<String>>(s).is_ok() {
+                                s.clone()
+                            } else {
+                                let v: Vec<String> = s.split(',')
+                                    .map(|part| part.trim().trim_matches('"').trim().to_string())
+                                    .filter(|part| !part.is_empty())
+                                    .collect();
+                                serde_json::to_string(&v).unwrap_or_else(|_| "[]".to_string())
+                            }
+                        } else {
+                            "[]".to_string()
+                        };
+                        format!(
+                            r#"{{ "type": "{}", "id": "{}", "props": {{ {}, "label": "{}", "options": {} }} }}"#,
+                            item.component_type, item.id, base_props, item.label, opts
+                        )
+                    },
                     _ => format!(
                         r#"{{ "type": "VStack", "id": "{}", "props": {{ {} }}, "children": [] }}"#,
                         item.id, base_props
@@ -249,12 +270,8 @@ impl StudioState {
 
     /// Writes the current state to a temp file and launches `oxidx_viewer`.
     fn launch_preview(&self) -> Result<(), String> {
-        // Use exported_json from CanvasPanel (set before calling this)
-        let json = if self.exported_json.is_empty() {
-            self.export_to_json() // Fallback to old method
-        } else {
-            self.exported_json.clone()
-        };
+        // Always regenerate JSON to ensure latest state
+        let json = self.export_to_json();
         
         let session_id = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -326,6 +343,7 @@ struct CanvasItem {
     width_percent: Option<f32>,
     height_percent: Option<f32>,
     parent_offset: Vec2,
+    values: Option<Vec<String>>,
 }
 
 const HANDLE_SIZE: f32 = 10.0;
@@ -370,6 +388,11 @@ impl CanvasItem {
                     "Button" | "Label" | "Input" => Some("Center".to_string()),
                     _ => None
                 },
+                // Defaults
+                values: match component_type {
+                    "ComboBox" | "RadioGroup" | "ListBox" => Some("Option 1, Option 2".to_string()),
+                    _ => None
+                },
             });
         }
 
@@ -407,6 +430,10 @@ impl CanvasItem {
                     "Button" | "Label" | "Input" => Some("Center".to_string()),
                     _ => None
                 },
+                values: match component_type {
+                    "ComboBox" | "RadioGroup" | "ListBox" => Some("Option 1, Option 2".to_string()),
+                    _ => None
+                },
             },
             state,
         )
@@ -432,6 +459,19 @@ impl CanvasItem {
             width_percent: info.width_percent,
             height_percent: info.height_percent,
             parent_offset: Vec2::ZERO,
+            values: info.values.as_ref().and_then(|s| {
+                // Try JSON, fallback to comma
+                if let Ok(v) = serde_json::from_str::<Vec<String>>(s) {
+                   Some(v)
+                } else {
+                   // Split by comma
+                   let v: Vec<String> = s.split(',')
+                       .map(|part| part.trim().trim_matches('"').trim().to_string())
+                       .filter(|part| !part.is_empty())
+                       .collect();
+                   Some(v) 
+                }
+            }),
         }
     }
 
@@ -490,6 +530,17 @@ impl CanvasItem {
             self.align_v = info.align_v.clone();
             self.width_percent = info.width_percent;
             self.height_percent = info.height_percent;
+            self.values = info.values.as_ref().and_then(|s| {
+                if let Ok(v) = serde_json::from_str::<Vec<String>>(s) {
+                   Some(v)
+                } else {
+                   let v: Vec<String> = s.split(',')
+                       .map(|part| part.trim().trim_matches('"').trim().to_string())
+                       .filter(|part| !part.is_empty())
+                       .collect();
+                   Some(v) 
+                }
+            });
         }
         
         // Recursively sync children
@@ -906,7 +957,8 @@ impl OxidXComponent for CanvasItem {
                         .with_color(Color::new(0.6, 0.7, 0.8, alpha)),
                 );
                 // Sample radio options
-                let options = ["Option A", "Option B"];
+                let default_opts = vec!["Option A".to_string(), "Option B".to_string()];
+                let options = self.values.as_ref().unwrap_or(&default_opts);
                 for (i, opt) in options.iter().enumerate() {
                     let y = self.bounds.y + 22.0 + (i as f32 * 22.0);
                     // Radio circle
@@ -919,7 +971,7 @@ impl OxidXComponent for CanvasItem {
                     );
                     // Option label
                     renderer.draw_text(
-                        *opt,
+                        opt,
                         Vec2::new(self.bounds.x + 28.0, y),
                         TextStyle::default()
                             .with_size(11.0)
@@ -1103,7 +1155,8 @@ impl OxidXComponent for CanvasItem {
                         .with_color(Color::new(0.6, 0.7, 0.8, alpha)),
                 );
                 // Sample list items
-                let items = ["Item 1", "Item 2", "Item 3"];
+                let default_items = vec!["Item 1".to_string(), "Item 2".to_string(), "Item 3".to_string()];
+                let items = self.values.as_ref().unwrap_or(&default_items);
                 for (i, item) in items.iter().enumerate() {
                     let y = self.bounds.y + 22.0 + (i as f32 * 20.0);
                     // Highlight first item
@@ -1114,7 +1167,7 @@ impl OxidXComponent for CanvasItem {
                         );
                     }
                     renderer.draw_text(
-                        *item,
+                        item,
                         Vec2::new(self.bounds.x + 10.0, y),
                         TextStyle::default()
                             .with_size(11.0)

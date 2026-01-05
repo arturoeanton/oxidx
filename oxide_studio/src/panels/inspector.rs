@@ -119,6 +119,11 @@ impl InspectorPanel {
                                                 item.align_v = Some(s.to_string());
                                             }
                                         }
+                                        "values" => {
+                                            if let Some(s) = value.as_str() {
+                                                item.values = Some(s.to_string());
+                                            }
+                                        }
                                         _ => {}
                                     }
                                     return;
@@ -179,6 +184,9 @@ impl InspectorPanel {
             }
             if let Some(v) = &info.align_v {
                 obj.insert("align_v".to_string(), json!(v));
+            }
+            if let Some(s) = &info.values {
+                obj.insert("values".to_string(), json!(s));
             }
         }
         props

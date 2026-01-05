@@ -200,12 +200,12 @@ fn build_absolute_canvas(node: &ComponentNode) -> Box<dyn OxidXComponent> {
     let mut canvas = AbsoluteCanvas::new();
 
     // Get canvas offset for coordinate translation
-    let canvas_offset_x = node
+    let _canvas_offset_x = node
         .props
         .get("offset_x")
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0) as f32;
-    let canvas_offset_y = node
+    let _canvas_offset_y = node
         .props
         .get("offset_y")
         .and_then(|v| v.as_f64())
@@ -228,8 +228,8 @@ fn build_absolute_canvas(node: &ComponentNode) -> Box<dyn OxidXComponent> {
             .and_then(|v| v.as_f64())
             .unwrap_or(36.0) as f32;
 
-        let final_x = x - canvas_offset_x;
-        let final_y = y - canvas_offset_y;
+        let final_x = x;
+        let final_y = y;
 
         eprintln!(
             "[dynamic] Positioning {} at ({}, {}) size {}x{}",
@@ -344,12 +344,28 @@ fn build_checkbox(node: &ComponentNode) -> Box<dyn OxidXComponent> {
 
 fn build_combobox(node: &ComponentNode) -> Box<dyn OxidXComponent> {
     let id = node.id.as_deref().unwrap_or("combobox");
-    Box::new(ComboBox::new(id))
+    let mut cb = ComboBox::new(id);
+
+    if let Some(opts) = parse_options(node) {
+        cb = cb.items(opts);
+    }
+
+    // Also handle label as placeholder if needed, though 'label' prop is usually separate
+    // for container label vs internal placeholder.
+    if let Some(_label) = node.props.get("label").and_then(|v| v.as_str()) {
+        // Some components use label as title, here ComboBox might use it as placeholder?
+        // Or if it's the selected text?
+        // ComboBox::new sets placeholder "Select...".
+        // Let's assume label is title if external, but ComboBox is self-contained.
+    }
+
+    Box::new(cb)
 }
 
 fn build_radiogroup(node: &ComponentNode) -> Box<dyn OxidXComponent> {
     let id = node.id.as_deref().unwrap_or("radiogroup");
-    let options = vec!["Option A".to_string(), "Option B".to_string()];
+    let options =
+        parse_options(node).unwrap_or(vec!["Option A".to_string(), "Option B".to_string()]);
     Box::new(RadioGroup::new(id, options))
 }
 
@@ -368,7 +384,23 @@ fn build_code_editor(_node: &ComponentNode) -> Box<dyn OxidXComponent> {
 
 fn build_listbox(node: &ComponentNode) -> Box<dyn OxidXComponent> {
     let id = node.id.as_deref().unwrap_or("listbox");
-    Box::new(ListBox::new(id))
+    let mut lb = ListBox::new(id);
+    if let Some(opts) = parse_options(node) {
+        lb = lb.items(opts);
+    }
+    Box::new(lb)
+}
+
+/// Helper to parse "options" prop
+fn parse_options(node: &ComponentNode) -> Option<Vec<String>> {
+    node.props
+        .get("options")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .map(|v| v.as_str().unwrap_or("").to_string())
+                .collect()
+        })
 }
 
 fn build_progress(_node: &ComponentNode) -> Box<dyn OxidXComponent> {
