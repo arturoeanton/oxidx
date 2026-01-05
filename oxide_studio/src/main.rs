@@ -732,7 +732,7 @@ impl ToolboxPanel {
             ("📦", "HStack"),
             ("�", "ZStack"),
             ("🎨", "AbsoluteCanvas"),
-            ("�🔘", "Button"),
+            ("🔠", "Button"),
             ("📝", "Input"),
             ("🔤", "Label"),
             ("✅", "Checkbox"),
