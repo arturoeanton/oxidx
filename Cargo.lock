@@ -2181,6 +2181,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxide_studio"
+version = "0.1.0"
+dependencies = [
+ "oxidx_core",
+ "oxidx_std",
+]
+
+[[package]]
 name = "oxidx_cli"
 version = "0.1.0"
 dependencies = [

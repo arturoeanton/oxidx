@@ -9,6 +9,7 @@ members = [
     "oxidx_editor",
     "oxidx_mcp",
     "oxidx_viewer",
+    "oxide_studio",
     "examples/showcase",
 ]
 
