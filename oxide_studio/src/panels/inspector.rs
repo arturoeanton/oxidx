@@ -129,6 +129,11 @@ impl InspectorPanel {
                                                 item.value = Some(n as f32);
                                             }
                                         }
+                                        "syntax" => {
+                                            if let Some(s) = value.as_str() {
+                                                item.syntax = Some(s.to_string());
+                                            }
+                                        }
                                         _ => {}
                                     }
                                     return;
@@ -195,6 +200,9 @@ impl InspectorPanel {
             }
             if let Some(v) = info.value {
                 obj.insert("value".to_string(), json!(v));
+            }
+            if let Some(s) = &info.syntax {
+                obj.insert("syntax".to_string(), json!(s));
             }
         }
         props

@@ -102,6 +102,50 @@ const RUST_KEYWORDS: &[&str] = &[
     "unsafe", "extern", "true", "false", "Some", "None", "Ok", "Err",
 ];
 
+/// JS keywords for syntax highlighting
+const JS_KEYWORDS: &[&str] = &[
+    "function",
+    "const",
+    "let",
+    "var",
+    "if",
+    "else",
+    "for",
+    "while",
+    "do",
+    "switch",
+    "case",
+    "break",
+    "continue",
+    "return",
+    "try",
+    "catch",
+    "finally",
+    "throw",
+    "new",
+    "this",
+    "super",
+    "class",
+    "extends",
+    "import",
+    "export",
+    "default",
+    "from",
+    "async",
+    "await",
+    "typeof",
+    "instanceof",
+    "in",
+    "of",
+    "void",
+    "delete",
+    "true",
+    "false",
+    "null",
+    "undefined",
+    "NaN",
+];
+
 /// Cursor position in a text document (line, column)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct CursorPosition {
@@ -147,6 +191,7 @@ pub struct CodeEditor {
     word_wrap: bool,
     tab_size: usize,
     read_only: bool,
+    language: String,
 
     // === State ===
     is_focused: bool,
@@ -264,10 +309,11 @@ impl CodeEditor {
             text_style: TextStyle::new(14.0).with_color(Color::WHITE),
             line_number_color: Color::new(0.5, 0.5, 0.55, 1.0),
             id: String::new(),
-            show_line_numbers: false,
+            show_line_numbers: true,
             word_wrap: false,
             tab_size: 4,
             read_only: false,
+            language: "rust".to_string(),
             is_focused: false,
             is_hovered: false,
             cursor: CursorPosition::default(),
@@ -339,6 +385,14 @@ impl CodeEditor {
     /// Enables syntax highlighting with the default Rust theme.
     pub fn with_syntax_highlighting(mut self, enabled: bool) -> Self {
         self.syntax_theme.enabled = enabled;
+        self
+    }
+
+    /// Sets the syntax language (e.g. "rust", "js").
+    pub fn syntax(mut self, lang: &str) -> Self {
+        self.language = lang.to_string();
+        self.syntax_theme.enabled = true;
+        self.tokens_dirty = true;
         self
     }
 
@@ -668,7 +722,10 @@ impl CodeEditor {
                 let is_keyword = if let Some(ref def) = self.syntax_definition {
                     def.is_keyword(&word)
                 } else {
-                    RUST_KEYWORDS.contains(&word.as_str())
+                    match self.language.as_str() {
+                        "js" | "javascript" => JS_KEYWORDS.contains(&word.as_str()),
+                        _ => RUST_KEYWORDS.contains(&word.as_str()),
+                    }
                 };
 
                 // Check if type using dynamic definition

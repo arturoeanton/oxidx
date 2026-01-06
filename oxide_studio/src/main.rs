@@ -7,9 +7,12 @@ use oxidx_core::{
     run_with_config, AppConfig, Color, OxidXComponent, OxidXContext, OxidXEvent, Rect, Renderer,
     TextStyle, Vec2,
 };
+use std::env;
 use std::fs;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 
 pub mod panels;
 use panels::inspector::InspectorPanel;
@@ -46,7 +49,7 @@ mod colors {
 /// 1. Saving/Loading project state (JSON serialization).
 /// 2. Tracking component hierarchy (children, parent).
 /// 3. Providing a disconnected data model separate from the visual `CanvasItem`.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct CanvasItemInfo {
     pub id: String,
     pub component_type: String,
@@ -55,17 +58,17 @@ pub struct CanvasItemInfo {
     pub y: f32,
     pub width: f32,
     pub height: f32,
-    pub parent_id: Option<String>,        // For nested containers
-    pub children: Vec<CanvasItemInfo>,    // Child components (for VStack/HStack)
-    pub width_percent: Option<f32>,       // None = absolute, Some = % of parent (0.0-100.0)
-    pub height_percent: Option<f32>,      // None = absolute, Some = % of parent (0.0-100.0)
-    // New Props
+    pub parent_id: Option<String>,
+    pub children: Vec<CanvasItemInfo>,
+    pub width_percent: Option<f32>,
+    pub height_percent: Option<f32>,
     pub color: Option<String>,
     pub radius: Option<f32>,
     pub align_h: Option<String>,
     pub align_v: Option<String>,
     pub values: Option<String>,
     pub value: Option<f32>,
+    pub syntax: Option<String>,
 }
 
 /// The central application state shared across all panels.
@@ -76,17 +79,21 @@ pub struct StudioState {
     pub selected_id: Option<String>,
     pub canvas_items: Vec<CanvasItemInfo>,
     pub preview_mode: bool,
-    pub exported_json: String,  // JSON from CanvasPanel for preview
+    pub exported_json: String,
+    pub json_path: Option<String>,
+    pub rs_path: Option<String>,
 }
 
 impl StudioState {
     /// Creates a new, empty application state.
-    pub fn new() -> Self {
+    pub fn new(json_path: Option<String>, rs_path: Option<String>) -> Self {
         Self {
             selected_id: None,
             canvas_items: Vec::new(),
             preview_mode: false,
             exported_json: String::new(),
+            json_path,
+            rs_path,
         }
     }
 
@@ -251,6 +258,14 @@ impl StudioState {
                         r#"{{ "type": "Progress", "id": "{}", "props": {{ {}, "value": {} }} }}"#,
                         item.id, base_props, item.value.unwrap_or(0.5)
                     ),
+                    "TextArea" => format!(
+                        r#"{{ "type": "TextArea", "id": "{}", "props": {{ {}, "text": "{}" }} }}"#,
+                        item.id, base_props, item.label // Use label as initial text? Or maybe empty?
+                    ),
+                    "CodeEditor" => format!(
+                        r#"{{ "type": "CodeEditor", "id": "{}", "props": {{ {}, "text": "{}", "syntax": "{}" }} }}"#,
+                        item.id, base_props, item.label, item.syntax.as_deref().unwrap_or("rust")
+                    ),
                     _ => format!(
                         r#"{{ "type": "VStack", "id": "{}", "props": {{ {} }}, "children": [] }}"#,
                         item.id, base_props
@@ -271,6 +286,117 @@ impl StudioState {
 }}"#,
             children.join(",\n        ")
         )
+    }
+
+    pub fn save_project(&self) {
+        if let Some(path) = &self.json_path {
+            let json = self.export_to_json();
+            if let Err(e) = fs::write(path, &json) {
+                eprintln!("Failed to save JSON to {}: {}", path, e);
+            } else {
+                println!("💾 Saved to: {}", path);
+            }
+        }
+    }
+
+    pub fn generate_rust(&self) {
+        if let Some(rs_path) = &self.rs_path {
+             if let Some(json_path) = &self.json_path {
+                 let output = Command::new("cargo")
+                     .arg("run")
+                     .arg("-p")
+                     .arg("oxidx_cli")
+                     .arg("--")
+                     .arg("generate")
+                     .arg("-i")
+                     .arg(json_path)
+                     .arg("-o")
+                     .arg(rs_path)
+                     .output();
+                 
+                 match output {
+                     Ok(o) => {
+                         if o.status.success() {
+                             println!("🦀 Generated Rust code to: {}", rs_path);
+                         } else {
+                             eprintln!("Failed to run codegen: {}", String::from_utf8_lossy(&o.stderr));
+                         }
+                     },
+                     Err(e) => eprintln!("Failed to execute oxidx-codegen: {}", e),
+                 }
+             } else {
+                 eprintln!("Cannot generate Rust code: No JSON path specified (save first)");
+             }
+        }
+    }
+
+    pub fn load_from_file(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let path = if let Some(p) = &self.json_path { p } else { return Ok(()); };
+        if !std::path::Path::new(path).exists() { return Ok(()); }
+
+        let content = fs::read_to_string(path)?;
+        let root: Value = serde_json::from_str(&content)?;
+
+        // Flatten the hierarchical JSON back into canvas_items
+        self.canvas_items.clear();
+        
+        // Helper to recursively parse items
+        fn parse_item(node: &Value, items: &mut Vec<CanvasItemInfo>) {
+            if let Some(obj) = node.as_object() {
+                let msg_type = obj.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                if msg_type == "AbsoluteCanvas" {
+                    // Only process children of root
+                    if let Some(children) = obj.get("children").and_then(|v| v.as_array()) {
+                        for child in children {
+                            parse_item(child, items);
+                        }
+                    }
+                    return;
+                }
+
+                let id = obj.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let props = obj.get("props");
+                
+                let x = props.and_then(|p| p.get("x")).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                let y = props.and_then(|p| p.get("y")).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                let w = props.and_then(|p| p.get("width")).and_then(|v| v.as_f64()).unwrap_or(100.0) as f32;
+                let h = props.and_then(|p| p.get("height")).and_then(|v| v.as_f64()).unwrap_or(40.0) as f32;
+                
+                let label_prop = match msg_type {
+                    "Input" => "placeholder",
+                    "TextArea" | "CodeEditor" | "Button" | "Label" => "text",
+                    _ => "label",
+                };
+                let label = props.and_then(|p| p.get(label_prop)).and_then(|v| v.as_str()).unwrap_or(&id).to_string();
+                
+                let color = props.and_then(|p| p.get("color")).and_then(|v| v.as_str()).map(|s| s.to_string());
+                let syntax = props.and_then(|p| p.get("syntax")).and_then(|v| v.as_str()).map(|s| s.to_string());
+                let value = props.and_then(|p| p.get("value")).and_then(|v| v.as_f64()).map(|v| v as f32);
+
+                let info = CanvasItemInfo {
+                    id,
+                    component_type: msg_type.to_string(),
+                    label,
+                    x, y, width: w, height: h,
+                    parent_id: None,
+                    children: Vec::new(),
+                    width_percent: None,
+                    height_percent: None,
+                    color,
+                    radius: None,
+                    align_h: None,
+                    align_v: None,
+                    values: None,
+                    value,
+                    syntax,
+                };
+                items.push(info);
+            }
+        }
+        
+        parse_item(&root, &mut self.canvas_items);
+        println!("📂 Loaded configuration from {}", path);
+        Ok(())
     }
 
     /// Writes the current state to a temp file and launches `oxidx_viewer`.
@@ -350,6 +476,7 @@ struct CanvasItem {
     parent_offset: Vec2,
     values: Option<Vec<String>>,
     value: Option<f32>,
+    syntax: Option<String>,
 }
 
 const HANDLE_SIZE: f32 = 10.0;
@@ -403,6 +530,10 @@ impl CanvasItem {
                     "Progress" | "ProgressBar" => Some(0.5),
                     _ => None
                 },
+                syntax: match component_type {
+                    "CodeEditor" => Some("rust".to_string()),
+                    _ => None
+                },
             });
         }
 
@@ -448,6 +579,10 @@ impl CanvasItem {
                     "Progress" | "ProgressBar" => Some(0.5),
                     _ => None
                 },
+                syntax: match component_type {
+                    "CodeEditor" => Some("rust".to_string()),
+                    _ => None
+                },
             },
             state,
         )
@@ -487,6 +622,7 @@ impl CanvasItem {
                 }
             }),
             value: info.value,
+            syntax: info.syntax.clone(),
         }
     }
 
@@ -557,6 +693,7 @@ impl CanvasItem {
                 }
             });
             self.value = info.value;
+            self.syntax = info.syntax.clone();
         }
         
         // Recursively sync children
@@ -2208,6 +2345,8 @@ struct StudioStatusBar {
     bounds: Rect,
     state: SharedState,
     preview_btn: Rect,
+    save_btn: Rect,
+    export_btn: Rect,
 }
 
 impl StudioStatusBar {
@@ -2217,6 +2356,8 @@ impl StudioStatusBar {
             bounds: Rect::ZERO,
             state,
             preview_btn: Rect::ZERO,
+            save_btn: Rect::ZERO,
+            export_btn: Rect::ZERO,
         }
     }
 
@@ -2229,12 +2370,14 @@ impl OxidXComponent for StudioStatusBar {
     fn layout(&mut self, available: Rect) -> Vec2 {
         self.bounds = available;
         // Preview button - larger and centered
-        self.preview_btn = Rect::new(
-            available.x + available.width / 2.0 - 60.0,
-            available.y + 2.0,
-            120.0,
-            18.0,
-        );
+        // Center buttons
+        let center_x = available.x + available.width / 2.0;
+        
+        // Save | Preview | Export
+        self.save_btn = Rect::new(center_x - 130.0, available.y + 2.0, 70.0, 18.0);
+        self.preview_btn = Rect::new(center_x - 50.0, available.y + 2.0, 100.0, 18.0);
+        self.export_btn = Rect::new(center_x + 60.0, available.y + 2.0, 80.0, 18.0);
+
         available.size()
     }
 
@@ -2264,13 +2407,22 @@ impl OxidXComponent for StudioStatusBar {
         );
 
         // Preview/Edit button - using theme colors
-        let btn_bg = if is_preview {
-            colors::STOP_BTN
-        } else {
-            colors::PREVIEW_BTN
-        };
+        // Save Button
+        renderer.draw_rounded_rect(
+            self.save_btn,
+            colors::ACCENT,
+            6.0,
+            Some(colors::BORDER),
+            Some(1.5),
+        );
+        renderer.draw_text(
+            "💾 SAVE",
+            Vec2::new(self.save_btn.x + 15.0, self.save_btn.y + 2.0),
+            TextStyle::default().with_size(12.0).with_color(Color::WHITE),
+        );
 
-        // Draw button with subtle dark border
+        // Preview
+        let btn_bg = if is_preview { colors::STOP_BTN } else { colors::PREVIEW_BTN };
         renderer.draw_rounded_rect(
             self.preview_btn,
             btn_bg,
@@ -2279,17 +2431,25 @@ impl OxidXComponent for StudioStatusBar {
             Some(1.5),
         );
 
-        let btn_text = if is_preview {
-            "⏹ STOP"
-        } else {
-            "▶ PREVIEW"
-        };
+        let btn_text = if is_preview { "⏹ STOP" } else { "▶ PREVIEW" };
         renderer.draw_text(
             btn_text,
-            Vec2::new(self.preview_btn.x + 25.0, self.preview_btn.y + 2.0),
-            TextStyle::default()
-                .with_size(12.0)
-                .with_color(Color::WHITE),
+            Vec2::new(self.preview_btn.x + 20.0, self.preview_btn.y + 2.0),
+            TextStyle::default().with_size(12.0).with_color(Color::WHITE),
+        );
+        
+        // Export Button (Only valid if we have rs_path, but show it anyway)
+        renderer.draw_rounded_rect(
+            self.export_btn,
+            Color::new(0.6, 0.4, 0.8, 1.0), // Purple for Export
+            6.0,
+            Some(colors::BORDER),
+            Some(1.5),
+        );
+        renderer.draw_text(
+            "🦀 EXPORT",
+            Vec2::new(self.export_btn.x + 10.0, self.export_btn.y + 2.0),
+            TextStyle::default().with_size(12.0).with_color(Color::WHITE),
         );
 
         // Right version
@@ -2308,22 +2468,42 @@ impl OxidXComponent for StudioStatusBar {
     fn on_event(&mut self, event: &OxidXEvent, _ctx: &mut OxidXContext) -> bool {
         match event {
             OxidXEvent::Click { position, .. } => {
-                if self.preview_btn.contains(*position) {
+                if self.save_btn.contains(*position) {
                     if let Ok(state) = self.state.lock() {
+                        state.save_project();
+                    }
+                    return true;
+                }
+                
+                if self.preview_btn.contains(*position) {
+                     if let Ok(state) = self.state.lock() {
                         if state.preview_mode {
-                            // Stop preview - just toggle
+                            // Stop preview
                             drop(state);
                             if let Ok(mut state) = self.state.lock() {
                                 state.toggle_preview();
                             }
                         } else {
-                            // Start preview - export and launch viewer
+                            // Temporary preview only - no save/export required, but saves to temp
                             let _ = state.launch_preview();
                             drop(state);
                             if let Ok(mut state) = self.state.lock() {
                                 state.toggle_preview();
                             }
                         }
+                    }
+                    return true;
+                }
+                
+                if self.export_btn.contains(*position) {
+                    if let Ok(state) = self.state.lock() {
+                        state.save_project();
+                        state.generate_rust();
+                        // Optional: Launch preview too? User said "when export, save json and generate rs".
+                        // Logic implies just that. But maybe nice to preview?
+                        // I'll leave preview out for explicit "Export" action, unless requested.
+                        // Wait, user said "para que un developer pueda seguir en la ide de su preferencia".
+                        // So no viewer launch needed for Export button, just file generation.
                     }
                     return true;
                 }
@@ -2370,8 +2550,15 @@ struct OxideStudio {
 
 impl OxideStudio {
     /// Initializes the complete application with shared state.
-    fn new() -> Self {
-        let state = Arc::new(Mutex::new(StudioState::new()));
+    fn new(json_path: Option<String>, rs_path: Option<String>) -> Self {
+        let state = Arc::new(Mutex::new(StudioState::new(json_path, rs_path)));
+        
+        // Try loading initial state
+        if let Ok(mut s) = state.lock() {
+            if let Err(e) = s.load_from_file() {
+                eprintln!("Warning: Failed to load state: {}", e);
+            }
+        }
 
         Self {
             bounds: Rect::ZERO,
@@ -2526,7 +2713,31 @@ fn main() {
     println!("🎯 Drag components • Click to select • Edit properties");
     println!();
 
-    let app = OxideStudio::new();
+    let args: Vec<String> = env::args().collect();
+    let mut json_path = None;
+    let mut rs_path = None;
+    
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-json" => {
+                if i + 1 < args.len() {
+                    json_path = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
+            "-rs" => {
+                if i + 1 < args.len() {
+                    rs_path = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let app = OxideStudio::new(json_path, rs_path);
 
     let config = AppConfig::new("Oxide Studio")
         .with_size(1400, 900)

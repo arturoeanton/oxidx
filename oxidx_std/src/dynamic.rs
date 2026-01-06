@@ -374,12 +374,24 @@ fn build_grid(node: &ComponentNode) -> Box<dyn OxidXComponent> {
     Box::new(Grid::new(id))
 }
 
-fn build_textarea(_node: &ComponentNode) -> Box<dyn OxidXComponent> {
-    Box::new(TextArea::new())
+fn build_textarea(node: &ComponentNode) -> Box<dyn OxidXComponent> {
+    let id = node.id.as_deref().unwrap_or("textarea");
+    Box::new(TextArea::new().with_id(id))
 }
 
-fn build_code_editor(_node: &ComponentNode) -> Box<dyn OxidXComponent> {
-    Box::new(CodeEditor::new())
+fn build_code_editor(node: &ComponentNode) -> Box<dyn OxidXComponent> {
+    let id = node.id.as_deref().unwrap_or("code_editor");
+    let mut editor = CodeEditor::new().with_id(id);
+    if let Some(syntax) = node.props.get("syntax").and_then(|v| v.as_str()) {
+        editor = editor.syntax(syntax);
+    }
+    if let Some(show) = node.props.get("line_numbers").and_then(|v| v.as_bool()) {
+        editor = editor.with_line_numbers(show);
+    }
+    if let Some(show) = node.props.get("minimap").and_then(|v| v.as_bool()) {
+        editor = editor.with_minimap(show);
+    }
+    Box::new(editor)
 }
 
 fn build_listbox(node: &ComponentNode) -> Box<dyn OxidXComponent> {

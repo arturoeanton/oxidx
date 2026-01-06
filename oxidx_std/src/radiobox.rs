@@ -255,6 +255,11 @@ impl RadioGroup {
         }
     }
 
+    pub fn with_id(mut self, id: impl Into<String>) -> Self {
+        self.id = id.into();
+        self
+    }
+
     pub fn selected_index(mut self, index: Option<usize>) -> Self {
         self.selected_index = index;
         self

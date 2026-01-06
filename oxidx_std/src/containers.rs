@@ -723,6 +723,7 @@ pub struct AbsoluteCanvas {
     bounds: Rect,
     children: Vec<Box<dyn OxidXComponent>>,
     background: Option<Color>,
+    id: String,
 }
 
 impl AbsoluteCanvas {
@@ -732,7 +733,14 @@ impl AbsoluteCanvas {
             bounds: Rect::default(),
             children: Vec::new(),
             background: None,
+            id: String::new(),
         }
+    }
+
+    /// Sets the component ID.
+    pub fn with_id(mut self, id: impl Into<String>) -> Self {
+        self.id = id.into();
+        self
     }
 
     /// Sets the background color.

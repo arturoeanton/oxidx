@@ -87,6 +87,61 @@ fn generate_node(node: &ComponentNode, ctx: &mut GenContext) -> Result<(String, 
             "Button" => {
                 format!("let mut {} = {}::new();\n", var_name, node.component_type)
             }
+            "ListBox" => {
+                let id = if !node.id.is_empty() {
+                    node.id.as_str()
+                } else {
+                    node.props
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("listbox")
+                };
+                format!("let mut {} = ListBox::new(\"{}\");\n", var_name, id)
+            }
+            "ComboBox" => {
+                let id = if !node.id.is_empty() {
+                    node.id.as_str()
+                } else {
+                    node.props
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("combobox")
+                };
+                format!("let mut {} = ComboBox::new(\"{}\");\n", var_name, id)
+            }
+            "ProgressBar" | "Progress" => {
+                format!("let mut {} = ProgressBar::default();\n", var_name)
+            }
+            "RadioGroup" => {
+                let id = if !node.id.is_empty() {
+                    node.id.as_str()
+                } else {
+                    node.props
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("radiogroup")
+                };
+
+                let options_code = if let Some(Value::Array(arr)) = node.props.get("options") {
+                    let items: Vec<String> = arr
+                        .iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect();
+                    let code = items
+                        .iter()
+                        .map(|s| format!("\"{}\".to_string()", s))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!("vec![{}]", code)
+                } else {
+                    "Vec::new()".to_string()
+                };
+
+                format!(
+                    "let mut {} = RadioGroup::new(\"{}\", {});\n",
+                    var_name, id, options_code
+                )
+            }
             "VStack" => format!("let mut {} = VStack::new();\n", var_name),
             "HStack" => format!("let mut {} = HStack::new();\n", var_name),
             "ZStack" => format!("let mut {} = ZStack::new();\n", var_name),
@@ -99,15 +154,71 @@ fn generate_node(node: &ComponentNode, ctx: &mut GenContext) -> Result<(String, 
     let mut sorted_props: Vec<_> = node.props.iter().collect();
     sorted_props.sort_by_key(|(k, _)| *k);
 
+    // Handle Geometry First (x, y, width, height)
+    let mut x = 0.0;
+    let mut y = 0.0;
+    let mut w = 0.0;
+    let mut h = 0.0;
+    let mut has_pos = false;
+    let mut has_size = false;
+
+    if let Some(v) = node.props.get("x").and_then(|v| v.as_f64()) {
+        x = v;
+        has_pos = true;
+    }
+    if let Some(v) = node.props.get("y").and_then(|v| v.as_f64()) {
+        y = v;
+        has_pos = true;
+    }
+    if let Some(v) = node.props.get("width").and_then(|v| v.as_f64()) {
+        w = v;
+        has_size = true;
+    }
+    if let Some(v) = node.props.get("height").and_then(|v| v.as_f64()) {
+        h = v;
+        has_size = true;
+    }
+
+    if has_pos {
+        code_block.push_str(&format!("{}.set_position({:.1}, {:.1});\n", var_name, x, y));
+    }
+    if has_size {
+        code_block.push_str(&format!("{}.set_size({:.1}, {:.1});\n", var_name, w, h));
+    }
+
     for (key, value) in sorted_props {
-        // Skip props handled in constructor
-        if (node.component_type == "Label" && key == "text")
-            || (node.component_type == "Input" && (key == "placeholder" || key == "text"))
+        // Skip geometry, internal props, and constructor handled props
+        if key == "x" || key == "y" || key == "width" || key == "height"
+           || key == "offset_x" || key == "offset_y" 
+           || key == "align_h" || key == "align_v"
+           || key == "width_percent" || key == "height_percent"
+           || key == "value" // Often internal for input
+           || key == "syntax"
+        // CodeEditor internal
         {
             continue;
         }
 
-        let prop_code = map_prop(&node.component_type, var_name.as_str(), key, value);
+        // Explicitly filter props that shouldn't be mapped
+        let skip = match (node.component_type.as_str(), key.as_str()) {
+            ("Label", "text") => true,
+            ("Input", "placeholder" | "text") => true,
+            ("ListBox", "id" | "text" | "label") => true,
+            ("ComboBox", "id" | "text" | "label") => true,
+            ("RadioGroup", "id" | "text" | "label" | "options") => true,
+            _ => false,
+        };
+
+        if skip {
+            continue;
+        }
+
+        let mut comp_type_fixed = node.component_type.as_str();
+        if comp_type_fixed == "Progress" {
+            comp_type_fixed = "ProgressBar";
+        }
+
+        let prop_code = map_prop(comp_type_fixed, var_name.as_str(), key, value);
         if !prop_code.is_empty() {
             code_block.push_str(&prop_code);
             code_block.push('\n');
@@ -266,9 +377,47 @@ fn map_prop(comp_type: &str, var_name: &str, key: &str, value: &Value) -> String
         }
     }
 
+    // Handle "options" for ListBox (JSON array -> Vec<String>)
+    if key == "options" && comp_type == "ListBox" {
+        if let Value::Array(arr) = value {
+            let items: Vec<String> = arr
+                .iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect();
+            // Generate vec!["a".to_string(), "b".to_string()]
+            let items_code = items
+                .iter()
+                .map(|s| format!("\"{}\".to_string()", s))
+                .collect::<Vec<_>>()
+                .join(", ");
+            return format!("{} = {}.items(vec![{}]);", var_name, var_name, items_code);
+        }
+    }
+
+    // ComboBox: Handle options -> items
+    if key == "options" && comp_type == "ComboBox" {
+        if let Value::Array(arr) = value {
+            let items: Vec<String> = arr
+                .iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect();
+            let items_code = items
+                .iter()
+                .map(|s| format!("\"{}\".to_string()", s))
+                .collect::<Vec<_>>()
+                .join(", ");
+            return format!("{} = {}.items(vec![{}]);", var_name, var_name, items_code);
+        }
+    }
+
+    // ListBox: Explicitly skip text/id/label again to be safe
+    if comp_type == "ListBox" && (key == "text" || key == "id" || key == "label") {
+        return String::new();
+    }
+
     // Default builder pattern
     let method = match key {
-        "text" => "label",
+        "text" if comp_type == "Button" || comp_type == "Label" => "label",
         _ => key,
     };
 
@@ -287,6 +436,11 @@ fn val_to_str(value: &Value) -> String {
         Value::Bool(b) => b.to_string(),
         Value::Number(n) => n.to_string(),
         Value::Null => "None".to_string(),
+        Value::Array(arr) => {
+            // Basic array handling - mapped to vec
+            let items: Vec<String> = arr.iter().map(|v| val_to_str(v)).collect();
+            format!("vec![{}]", items.join(", "))
+        }
         _ => format!("{:?}", value),
     }
 }

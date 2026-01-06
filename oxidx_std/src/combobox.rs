@@ -284,6 +284,11 @@ impl ComboBox {
         }
     }
 
+    pub fn with_id(mut self, id: impl Into<String>) -> Self {
+        self.id = id.into();
+        self
+    }
+
     pub fn items(mut self, items: Vec<String>) -> Self {
         self.items = Arc::new(items);
         self

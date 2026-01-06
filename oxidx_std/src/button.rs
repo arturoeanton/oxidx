@@ -211,6 +211,33 @@ impl Button {
         self
     }
 
+    /// Sets the button background color from a hex string.
+    pub fn color(mut self, hex: impl Into<String>) -> Self {
+        if let Some(c) = Color::from_hex(&hex.into()) {
+            // Create a custom style based on this color
+            use oxidx_core::style::Style;
+            self.style = InteractiveStyle {
+                idle: Style::new()
+                    .bg_solid(c)
+                    .rounded(6.0)
+                    .text_color(Color::WHITE),
+                hover: Style::new()
+                    .bg_solid(c.with_alpha(0.9))
+                    .rounded(6.0)
+                    .text_color(Color::WHITE),
+                pressed: Style::new()
+                    .bg_solid(c.with_alpha(0.8))
+                    .rounded(6.0)
+                    .text_color(Color::WHITE),
+                disabled: Style::new() // Keep default disabled
+                    .bg_solid(Color::new(0.2, 0.2, 0.2, 0.5))
+                    .rounded(6.0)
+                    .text_color(Color::new(0.5, 0.5, 0.5, 1.0)),
+            };
+        }
+        self
+    }
+
     // === Mutable Setters ===
 
     /// Sets the label (mutable reference).

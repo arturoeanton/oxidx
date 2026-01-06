@@ -18,6 +18,14 @@ pub struct ProgressBar {
 
     // Animation state for indeterminate
     animation_time: f32,
+
+    id: String,
+}
+
+impl Default for ProgressBar {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ProgressBar {
@@ -29,7 +37,13 @@ impl ProgressBar {
             color: None,
             width: None,
             animation_time: 0.0,
+            id: String::new(),
         }
+    }
+
+    pub fn with_id(mut self, id: impl Into<String>) -> Self {
+        self.id = id.into();
+        self
     }
 
     pub fn value(mut self, value: f32) -> Self {
@@ -58,6 +72,10 @@ impl ProgressBar {
 }
 
 impl OxidXComponent for ProgressBar {
+    fn id(&self) -> &str {
+        &self.id
+    }
+
     fn update(&mut self, delta_time: f32) {
         if self.indeterminate {
             self.animation_time += delta_time;

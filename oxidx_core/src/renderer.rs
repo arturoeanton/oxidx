@@ -1463,6 +1463,34 @@ impl Renderer {
             let mut runtime_clip_stack: Vec<Rect> = Vec::new();
             let mut first_pass = true;
 
+            // Helper for robust scissor rects
+            let max_w = self.physical_width as f32;
+            let max_h = self.physical_height as f32;
+            let sf = self.scale_factor as f32;
+
+            let get_clamped_scissor = |rect: Rect| -> (u32, u32, u32, u32) {
+                let x_min = (rect.x * sf).clamp(0.0, max_w);
+                let y_min = (rect.y * sf).clamp(0.0, max_h);
+                let x_max = ((rect.x + rect.width) * sf).clamp(0.0, max_w);
+                let y_max = ((rect.y + rect.height) * sf).clamp(0.0, max_h);
+
+                let w = (x_max - x_min).max(0.0) as u32;
+                let h = (y_max - y_min).max(0.0) as u32;
+
+                if w == 0 || h == 0 {
+                    // WGPU requires w,h > 0.
+                    // If clipped away, we set a 1x1 rect at a safe spot, or handled by logic?
+                    // But effectively we want to draw nothing.
+                    // Setting it to a disjoint 1x1 rect that is likely empty is tricky.
+                    // But since we are clamping to screen, we can set it to (0,0,1,1) if nothing else works.
+                    // However, if we really shouldn't draw, we can't easily skip draw commands here.
+                    // (0,0,1,1) is safe for validation.
+                    (0, 0, 1, 1)
+                } else {
+                    (x_min as u32, y_min as u32, w, h)
+                }
+            };
+
             while let Some(peek_step) = step_iter.peek() {
                 // Determine step type without consuming
                 let is_text = matches!(peek_step, ExecStep::DrawText(_));
@@ -1541,11 +1569,7 @@ impl Renderer {
 
                         // Apply Scissor
                         if let Some(rect) = runtime_clip_stack.last() {
-                            let sf = self.scale_factor as f32;
-                            let x = (rect.x * sf).max(0.0) as u32;
-                            let y = (rect.y * sf).max(0.0) as u32;
-                            let w = (rect.width * sf).max(1.0) as u32;
-                            let h = (rect.height * sf).max(1.0) as u32;
+                            let (x, y, w, h) = get_clamped_scissor(*rect);
                             pass.set_scissor_rect(x, y, w, h);
                         } else {
                             pass.set_scissor_rect(0, 0, self.physical_width, self.physical_height);
@@ -1590,11 +1614,7 @@ impl Renderer {
 
                     // Apply Scissor (Initial)
                     if let Some(rect) = runtime_clip_stack.last() {
-                        let sf = self.scale_factor as f32;
-                        let x = (rect.x * sf).max(0.0) as u32;
-                        let y = (rect.y * sf).max(0.0) as u32;
-                        let w = (rect.width * sf).max(1.0) as u32;
-                        let h = (rect.height * sf).max(1.0) as u32;
+                        let (x, y, w, h) = get_clamped_scissor(*rect);
                         pass.set_scissor_rect(x, y, w, h);
                     } else {
                         pass.set_scissor_rect(0, 0, self.physical_width, self.physical_height);
@@ -1620,21 +1640,13 @@ impl Renderer {
                             }
                             ExecStep::SetClip(rect) => {
                                 runtime_clip_stack.push(rect);
-                                let sf = self.scale_factor as f32;
-                                let x = (rect.x * sf).max(0.0) as u32;
-                                let y = (rect.y * sf).max(0.0) as u32;
-                                let w = (rect.width * sf).max(1.0) as u32;
-                                let h = (rect.height * sf).max(1.0) as u32;
+                                let (x, y, w, h) = get_clamped_scissor(rect);
                                 pass.set_scissor_rect(x, y, w, h);
                             }
                             ExecStep::ClearClip => {
                                 runtime_clip_stack.pop();
                                 if let Some(rect) = runtime_clip_stack.last() {
-                                    let sf = self.scale_factor as f32;
-                                    let x = (rect.x * sf).max(0.0) as u32;
-                                    let y = (rect.y * sf).max(0.0) as u32;
-                                    let w = (rect.width * sf).max(1.0) as u32;
-                                    let h = (rect.height * sf).max(1.0) as u32;
+                                    let (x, y, w, h) = get_clamped_scissor(*rect);
                                     pass.set_scissor_rect(x, y, w, h);
                                 } else {
                                     pass.set_scissor_rect(
