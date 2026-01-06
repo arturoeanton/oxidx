@@ -767,9 +767,11 @@ Grid::new("data")
 |---------|-------------|
 | `columns(vec)` | Define columns |
 | `rows(vec)` | Set data rows |
+| `header_rows(n)` | Set number of header rows |
 | `sortable(bool)` | Enable column sorting |
 | `resizable_columns(b)` | Enable column resizing |
 | `selection_mode(m)` | `SingleRow`, `MultiRow`, `Cell`... |
+| `with_id(id)` | Set ID |
 
 ---
 
@@ -799,18 +801,39 @@ Image::new("assets/logo.png")
 ### ProgressBar
 
 ```rust
-ProgressBar::new()
+ProgressBar::default()
     .value(0.7)
-    .indeterminate(false)
-    .color(Color::BLUE);
+    .show_percentage(true)
+    .with_height(24.0)
+    .with_id("progress")
 ```
 
 | Builder | Description |
 |---------|-------------|
-| `value(f32)` | Set progress (0.0 - 1.0) |
-| `indeterminate(bool)` | Enable animated loading state |
-| `color(Color)` | Set fill color |
-| `set_progress(f32)` | Update progress value |
+| `value(f32)` | Progress (0.0 - 1.0) |
+| `show_percentage(b)` | Show text % |
+| `with_height(h)` | Set height |
+| `with_color(c)` | Bar color |
+| `indeterminate(b)` | Loading animation mode |
+
+---
+
+### CodeEditor
+
+```rust
+CodeEditor::new()
+    .text("fn main() {}")
+    .syntax("rust")
+    .with_ids("editor")
+```
+
+| Builder | Description |
+|---------|-------------|
+| `text(t)` | Initial content |
+| `syntax(lang)` | Syntax highlight (`rust`, `json`, `js`) |
+| `with_minimap(b)` | Show minimap |
+| `with_line_numbers(b)` | Show line numbers |
+
 
 ---
 

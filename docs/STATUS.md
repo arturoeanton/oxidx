@@ -139,8 +139,8 @@ Based on the audit, all capabilities are **READY**. No blocking gaps exist.
 
 | Tool | Status | Notes |
 |------|--------|-------|
-| `oxidx_derive` | 🟢 Stable | `OxidXComponent` macro reduces boilerplate significantly. |
-| `oxidx_cli` | 🟡 Beta | Watch mode and Schema working, CodeGen in active development. |
+|| `oxidx_derive` | 🟢 Stable | `OxidXComponent` macro reduces boilerplate significantly. |
+| `oxidx_cli` | 🟢 Stable | Watch mode, Schema, and CodeGen fully functional. |
 | `oxidx_codegen` | 🟢 Stable | `generate_view()` generates complete View structs from ComponentNode schema. |
 | `oxidx_mcp` | 🟢 Stable | MCP server for AI assistants with dynamic component enum discovery. |
 | `oxidx_ollama` | 🟢 Stable | Python bridge for local LLM code generation via Ollama with live preview. |

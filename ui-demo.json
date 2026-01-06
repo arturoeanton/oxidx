@@ -8,9 +8,9 @@
         { "type": "CodeEditor", "id": "canvas_codeeditor_3", "props": { "x": 315.91797, "y": 102.296875, "width": 298.57422, "height": 260.1875, "text": "CodeEditor 3", "syntax": "rust" } },
         { "type": "Button", "id": "canvas_button_4", "props": { "x": 45.515625, "y": 380.21484, "width": 567.0781, "height": 36.859375, "text": "Button 4", "color": "#4d66b3" } },
         { "type": "ListBox", "id": "canvas_listbox_2", "props": { "x": 623.7344, "y": 105.15625, "width": 141.65234, "height": 145.9961, "label": "ListBox 2", "options": [] } },
-        { "type": "Progress", "id": "canvas_progress_2", "props": { "x": 61.410156, "y": 428.3789, "width": 200, "height": 24, "value": 0.5 } },
+        { "type": "Progress", "id": "canvas_progress_2", "props": { "x": 356.6914, "y": 457.76953, "width": 200, "height": 24, "value": 0.5 } },
         { "type": "RadioGroup", "id": "canvas_radiogroup_1", "props": { "x": 609.8711, "y": 455.79688, "width": 120, "height": 80, "label": "RadioGroup 1", "options": [] } },
-        { "type": "VStack", "id": "canvas_grid_1", "props": { "x": 270.8203, "y": 468.85938, "width": 300, "height": 150 }, "children": [] },
-        { "type": "ComboBox", "id": "canvas_combobox_2", "props": { "x": 625.75, "y": 277.35938, "width": 150, "height": 32, "label": "ComboBox 2", "options": [] } }
+        { "type": "ComboBox", "id": "canvas_combobox_2", "props": { "x": 625.75, "y": 277.35938, "width": 150, "height": 32, "label": "ComboBox 2", "options": [] } },
+        { "type": "Grid", "id": "canvas_grid_1", "props": { "x": 47.61328, "y": 429.2422, "width": 300, "height": 150, "columns": 3, "rows": 5, "header_rows": 1, "titles": "Name, Age, Role" } }
     ]
 }

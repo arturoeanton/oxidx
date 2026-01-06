@@ -1,0 +1,23 @@
+{
+    "id": "root",
+    "type": "VStack",
+    "props": {
+      "spacing": 10.0,
+      "width": 800.0,
+      "height": 600.0
+    },
+    "children": [
+      {
+        "id": "my_grid",
+        "type": "Grid",
+        "props": {
+          "width": 700.0,
+          "height": 400.0,
+          "columns": 3,
+          "rows": 10,
+          "header_rows": 2,
+          "titles": "ID, Name, Status"
+        }
+      }
+    ]
+}

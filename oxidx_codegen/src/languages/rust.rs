@@ -145,6 +145,17 @@ fn generate_node(node: &ComponentNode, ctx: &mut GenContext) -> Result<(String, 
             "VStack" => format!("let mut {} = VStack::new();\n", var_name),
             "HStack" => format!("let mut {} = HStack::new();\n", var_name),
             "ZStack" => format!("let mut {} = ZStack::new();\n", var_name),
+            "Grid" => {
+                let id = if !node.id.is_empty() {
+                    node.id.as_str()
+                } else {
+                    node.props
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("grid")
+                };
+                format!("let mut {} = Grid::new(\"{}\");\n", var_name, id)
+            }
             _ => format!("let mut {} = {}::new();\n", var_name, node.component_type),
         };
 
@@ -206,6 +217,7 @@ fn generate_node(node: &ComponentNode, ctx: &mut GenContext) -> Result<(String, 
             ("ListBox", "id" | "text" | "label") => true,
             ("ComboBox", "id" | "text" | "label") => true,
             ("RadioGroup", "id" | "text" | "label" | "options") => true,
+            ("Grid", "titles" | "rows" | "columns") => true, // We handle these manually
             _ => false,
         };
 
@@ -235,6 +247,50 @@ fn generate_node(node: &ComponentNode, ctx: &mut GenContext) -> Result<(String, 
                 "{} = {}.with_id(\"{}\");\n",
                 var_name, var_name, id
             ));
+        }
+    }
+
+    // Grid specific generation for titles -> columns and rows
+    if node.component_type == "Grid" {
+        // Handle Columns & Titles
+        let titles: Vec<String> = node
+            .props
+            .get("titles")
+            .and_then(|v| v.as_str())
+            .map(|s| s.split(',').map(|t| t.trim().to_string()).collect())
+            .unwrap_or_default();
+
+        // Columns count override
+        let col_count = node
+            .props
+            .get("columns")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(titles.len().max(3)); // Default 3 if no info
+
+        for i in 0..col_count {
+            let title = if let Some(t) = titles.get(i) {
+                t.to_string()
+            } else {
+                format!("Column {}", i + 1)
+            };
+
+            // Generate columns: grid.add_column(Column::new("col_i", "Title").width(100.0));
+            code_block.push_str(&format!(
+                "{}.add_column(Column::new(\"col_{}\", \"{}\").width(100.0));\n",
+                var_name, i, title
+            ));
+        }
+
+        // Handle Rows prop for dummy data
+        if let Some(rows) = node.props.get("rows").and_then(|v| v.as_u64()) {
+            for i in 0..rows {
+                let mut row_code = format!("Row::new(\"row_{}\")", i);
+                for c in 0..col_count {
+                    row_code.push_str(&format!(".cell(\"col_{}\", \"Cell {}-{}\")", c, i, c));
+                }
+                code_block.push_str(&format!("{}.add_row({});\n", var_name, row_code));
+            }
         }
     }
 

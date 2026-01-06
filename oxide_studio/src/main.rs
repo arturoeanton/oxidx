@@ -69,6 +69,10 @@ pub struct CanvasItemInfo {
     pub values: Option<String>,
     pub value: Option<f32>,
     pub syntax: Option<String>,
+    pub columns: Option<usize>,
+    pub rows: Option<usize>,
+    pub header_rows: Option<usize>,
+    pub titles: Option<String>,
 }
 
 /// The central application state shared across all panels.
@@ -254,6 +258,18 @@ impl StudioState {
                             item.component_type, item.id, base_props, item.label, opts
                         )
                     },
+                    "Grid" => {
+                        let mut extra = String::new();
+                        if let Some(c) = item.columns { extra.push_str(&format!(", \"columns\": {}", c)); }
+                        if let Some(r) = item.rows { extra.push_str(&format!(", \"rows\": {}", r)); }
+                        if let Some(hr) = item.header_rows { extra.push_str(&format!(", \"header_rows\": {}", hr)); }
+                        if let Some(t) = &item.titles { extra.push_str(&format!(", \"titles\": \"{}\"", t)); }
+                        
+                        format!(
+                            r#"{{ "type": "Grid", "id": "{}", "props": {{ {}{} }} }}"#,
+                            item.id, base_props, extra
+                        )
+                    },
                     "Progress" | "ProgressBar" => format!(
                         r#"{{ "type": "Progress", "id": "{}", "props": {{ {}, "value": {} }} }}"#,
                         item.id, base_props, item.value.unwrap_or(0.5)
@@ -372,6 +388,10 @@ impl StudioState {
                 let color = props.and_then(|p| p.get("color")).and_then(|v| v.as_str()).map(|s| s.to_string());
                 let syntax = props.and_then(|p| p.get("syntax")).and_then(|v| v.as_str()).map(|s| s.to_string());
                 let value = props.and_then(|p| p.get("value")).and_then(|v| v.as_f64()).map(|v| v as f32);
+                let columns = props.and_then(|p| p.get("columns")).and_then(|v| v.as_u64()).map(|v| v as usize);
+                let rows = props.and_then(|p| p.get("rows")).and_then(|v| v.as_u64()).map(|v| v as usize);
+                let header_rows = props.and_then(|p| p.get("header_rows")).and_then(|v| v.as_u64()).map(|v| v as usize);
+                let titles = props.and_then(|p| p.get("titles")).and_then(|v| v.as_str()).map(|s| s.to_string());
 
                 let info = CanvasItemInfo {
                     id,
@@ -389,6 +409,10 @@ impl StudioState {
                     values: None,
                     value,
                     syntax,
+                    columns,
+                    rows,
+                    header_rows,
+                    titles,
                 };
                 items.push(info);
             }
@@ -477,6 +501,10 @@ struct CanvasItem {
     values: Option<Vec<String>>,
     value: Option<f32>,
     syntax: Option<String>,
+    columns: Option<usize>,
+    rows: Option<usize>,
+    header_rows: Option<usize>,
+    titles: Option<String>,
 }
 
 const HANDLE_SIZE: f32 = 10.0;
@@ -534,6 +562,22 @@ impl CanvasItem {
                     "CodeEditor" => Some("rust".to_string()),
                     _ => None
                 },
+                columns: match component_type {
+                    "Grid" => Some(3),
+                    _ => None
+                },
+                rows: match component_type {
+                    "Grid" => Some(5),
+                    _ => None
+                },
+                header_rows: match component_type {
+                    "Grid" => Some(1),
+                    _ => None
+                },
+                titles: match component_type {
+                    "Grid" => Some("Name, Age, Role".to_string()),
+                    _ => None
+                },
             });
         }
 
@@ -583,6 +627,22 @@ impl CanvasItem {
                     "CodeEditor" => Some("rust".to_string()),
                     _ => None
                 },
+                columns: match component_type {
+                    "Grid" => Some(3),
+                    _ => None
+                },
+                rows: match component_type {
+                    "Grid" => Some(5),
+                    _ => None
+                },
+                header_rows: match component_type {
+                    "Grid" => Some(1),
+                    _ => None
+                },
+                titles: match component_type {
+                    "Grid" => Some("Name, Age, Role".to_string()),
+                    _ => None
+                },
             },
             state,
         )
@@ -623,6 +683,10 @@ impl CanvasItem {
             }),
             value: info.value,
             syntax: info.syntax.clone(),
+            columns: info.columns,
+            rows: info.rows,
+            header_rows: info.header_rows,
+            titles: info.titles.clone(),
         }
     }
 
@@ -694,6 +758,10 @@ impl CanvasItem {
             });
             self.value = info.value;
             self.syntax = info.syntax.clone();
+            self.columns = info.columns;
+            self.rows = info.rows;
+            self.header_rows = info.header_rows;
+            self.titles = info.titles.clone();
         }
         
         // Recursively sync children

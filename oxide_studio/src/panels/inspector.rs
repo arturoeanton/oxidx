@@ -134,6 +134,44 @@ impl InspectorPanel {
                                                 item.syntax = Some(s.to_string());
                                             }
                                         }
+                                        "columns" => {
+                                            if let Some(n) = value.as_u64() {
+                                                item.columns = Some(n as usize);
+                                            } else if let Some(n) = value.as_f64() {
+                                                item.columns = Some(n as usize);
+                                            } else if let Some(s) = value.as_str() {
+                                                if let Ok(n) = s.parse::<usize>() {
+                                                    item.columns = Some(n);
+                                                }
+                                            }
+                                        }
+                                        "rows" => {
+                                            if let Some(n) = value.as_u64() {
+                                                item.rows = Some(n as usize);
+                                            } else if let Some(n) = value.as_f64() {
+                                                item.rows = Some(n as usize);
+                                            } else if let Some(s) = value.as_str() {
+                                                if let Ok(n) = s.parse::<usize>() {
+                                                    item.rows = Some(n);
+                                                }
+                                            }
+                                        }
+                                        "header_rows" => {
+                                            if let Some(n) = value.as_u64() {
+                                                item.header_rows = Some(n as usize);
+                                            } else if let Some(n) = value.as_f64() {
+                                                item.header_rows = Some(n as usize);
+                                            } else if let Some(s) = value.as_str() {
+                                                if let Ok(n) = s.parse::<usize>() {
+                                                    item.header_rows = Some(n);
+                                                }
+                                            }
+                                        }
+                                        "titles" => {
+                                            if let Some(s) = value.as_str() {
+                                                item.titles = Some(s.to_string());
+                                            }
+                                        }
                                         _ => {}
                                     }
                                     return;
@@ -203,6 +241,18 @@ impl InspectorPanel {
             }
             if let Some(s) = &info.syntax {
                 obj.insert("syntax".to_string(), json!(s));
+            }
+            if let Some(c) = info.columns {
+                obj.insert("columns".to_string(), json!(c));
+            }
+            if let Some(r) = info.rows {
+                obj.insert("rows".to_string(), json!(r));
+            }
+            if let Some(hr) = info.header_rows {
+                obj.insert("header_rows".to_string(), json!(hr));
+            }
+            if let Some(t) = &info.titles {
+                obj.insert("titles".to_string(), json!(t));
             }
         }
         props

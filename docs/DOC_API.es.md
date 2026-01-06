@@ -766,10 +766,12 @@ Grid::new("datos")
 | Builder | Descripción |
 |---------|-------------|
 | `columns(vec)` | Definir columnas |
-| `rows(vec)` | Establecer datos |
-| `sortable(bool)` | Habilitar ordenamiento |
-| `resizable_columns(b)` | Habilitar redimensionamiento |
+| `rows(vec)` | Establecer filas de datos |
+| `header_rows(n)` | Establecer filas de encabezado |
+| `sortable(bool)` | Habilitar ordenación |
+| `resizable_columns(b)` | Habilitar redimensionado |
 | `selection_mode(m)` | `SingleRow`, `MultiRow`, `Cell`... |
+| `with_id(id)` | Establecer ID |
 
 ---
 
@@ -799,18 +801,39 @@ Image::new("assets/logo.png")
 ### ProgressBar
 
 ```rust
-ProgressBar::new()
+ProgressBar::default()
     .value(0.7)
-    .indeterminate(false)
-    .color(Color::BLUE);
+    .show_percentage(true)
+    .with_height(24.0)
+    .with_id("progreso")
 ```
 
 | Builder | Descripción |
 |---------|-------------|
-| `value(f32)` | Establecer progreso (0.0 - 1.0) |
-| `indeterminate(bool)` | Habilitar estado de carga animado |
-| `color(Color)` | Establecer color de relleno |
-| `set_progress(f32)` | Actualizar valor de progreso |
+| `value(f32)` | Progreso (0.0 - 1.0) |
+| `show_percentage(b)` | Mostrar texto % |
+| `with_height(h)` | Establecer altura |
+| `with_color(c)` | Color de la barra |
+| `indeterminate(b)` | Modo animación de carga |
+
+---
+
+### CodeEditor
+
+```rust
+CodeEditor::new()
+    .text("fn main() {}")
+    .syntax("rust")
+    .with_ids("editor")
+```
+
+| Builder | Descripción |
+|---------|-------------|
+| `text(t)` | Contenido inicial |
+| `syntax(lang)` | Resaltado de sintaxis (`rust`, `json`, `js`) |
+| `with_minimap(b)` | Mostrar minimapa |
+| `with_line_numbers(b)` | Mostrar números de línea |
+
 
 ---
 

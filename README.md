@@ -199,8 +199,10 @@ fn main() {
 
 ## 📚 Documentation
 
+- **[Oxide Studio Tutorial](docs/STUDIO_TUTORIAL.md)** — Guide to visual UI building
 - **[Tutorial (English)](docs/TUTORIAL.md)** — Step-by-step guide to building apps
 - **[Tutorial (Español)](docs/TUTORIAL.es.md)** — Guía paso a paso en español
+- **[Oxide Studio Tutorial (Español)](docs/STUDIO_TUTORIAL.es.md)** — Guía del editor visual
 - **[API Reference (English)](docs/DOC_API.md)** — Complete public API documentation
 - **[API Reference (Español)](docs/DOC_API.es.md)** — Documentación completa en español
 - **[Architecture Guide](docs/ARCHITECTURE.md)** — System design and internals

@@ -302,6 +302,7 @@ pub struct Grid {
     edit_mode: GridEditMode,
     size: GridSize,
     show_header: bool,
+    header_rows: usize,
     show_row_numbers: bool,
     show_grid_lines: bool,
     show_border: bool,
@@ -362,6 +363,7 @@ impl Grid {
             edit_mode: GridEditMode::DoubleClick,
             size: GridSize::default(),
             show_header: true,
+            header_rows: 0,
             show_row_numbers: false,
             show_grid_lines: true,
             show_border: true,
@@ -400,6 +402,11 @@ impl Grid {
         self
     }
 
+    pub fn with_id(mut self, id: impl Into<String>) -> Self {
+        self.id = id.into();
+        self
+    }
+
     pub fn rows(mut self, rows: Vec<Row>) -> Self {
         self.rows = rows;
         self.rebuild_indices();
@@ -413,6 +420,11 @@ impl Grid {
 
     pub fn editable(mut self, editable: bool) -> Self {
         self.editable = editable;
+        self
+    }
+
+    pub fn header_rows(mut self, count: usize) -> Self {
+        self.header_rows = count;
         self
     }
 
@@ -811,13 +823,27 @@ impl OxidXComponent for Grid {
             let row = &self.rows[row_idx];
             let row_rect = Rect::new(self.body_rect.x, y, self.body_rect.width, row_h);
 
-            // Row Highlight
-            if self.selected_rows.contains(&row.id) {
-                renderer.fill_rect(row_rect, renderer.theme.colors.primary.with_alpha(0.15));
-            // Subtle selection
+            // Row background
+            let is_header_row = row_idx < self.header_rows;
+
+            // Row background
+            let mut bg_color = if self.selected_rows.contains(&row.id) {
+                renderer.theme.colors.primary.with_alpha(0.15)
+            } else if is_header_row {
+                renderer.theme.colors.surface_alt
             } else if self.striped_rows && i % 2 == 1 {
-                renderer.fill_rect(row_rect, renderer.theme.colors.surface_alt);
+                renderer.theme.colors.surface_alt
+            } else {
+                renderer.theme.colors.surface
+            };
+
+            if self.hovered_cell.map(|c| c.row == row_idx).unwrap_or(false)
+                && !self.selected_rows.contains(&row.id)
+            {
+                bg_color = renderer.theme.colors.surface_hover;
             }
+
+            renderer.fill_rect(row_rect, bg_color);
 
             let mut x = self.body_rect.x - self.scroll.offset_x;
 
@@ -844,15 +870,23 @@ impl OxidXComponent for Grid {
                 let val = row.get(&col.id);
                 let text = self.format_cell_value(val, col);
 
+                let is_header_row = row_idx < self.header_rows;
+                let text_style = TextStyle {
+                    font_size: self.size.font_size,
+                    color: if is_header_row {
+                        renderer.theme.colors.text_main // Using available color
+                    } else {
+                        renderer.theme.colors.text_main
+                    },
+                    bold: is_header_row,
+                    ..Default::default()
+                };
+
                 renderer.draw_text_bounded(
                     &text,
                     Vec2::new(x + self.size.padding, y + 4.0),
                     col.width - self.size.padding * 2.0,
-                    TextStyle {
-                        font_size: self.size.font_size,
-                        color: renderer.theme.colors.text_main,
-                        ..Default::default()
-                    },
+                    text_style,
                 );
 
                 if self.show_grid_lines {

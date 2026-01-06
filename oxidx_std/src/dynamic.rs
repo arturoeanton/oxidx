@@ -371,7 +371,68 @@ fn build_radiogroup(node: &ComponentNode) -> Box<dyn OxidXComponent> {
 
 fn build_grid(node: &ComponentNode) -> Box<dyn OxidXComponent> {
     let id = node.id.as_deref().unwrap_or("grid");
-    Box::new(Grid::new(id))
+    let mut grid = Grid::new(id);
+
+    // Columns & Titles
+    let mut columns_vec = Vec::new();
+    let mut col_count = node
+        .props
+        .get("columns")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as usize)
+        .unwrap_or(0);
+
+    if let Some(titles_str) = node.props.get("titles").and_then(|v| v.as_str()) {
+        let titles: Vec<&str> = titles_str.split(',').map(|s| s.trim()).collect();
+        if titles.len() > col_count {
+            col_count = titles.len();
+        }
+        for (i, title) in titles.iter().enumerate() {
+            columns_vec.push(crate::Column::new(format!("col_{}", i), *title).width(100.0));
+        }
+    }
+
+    // If titles didn't cover all columns, add defaults
+    while columns_vec.len() < col_count {
+        let i = columns_vec.len();
+        columns_vec.push(
+            crate::Column::new(format!("col_{}", i), format!("Column {}", i + 1)).width(100.0),
+        );
+    }
+
+    if !columns_vec.is_empty() {
+        grid = grid.columns(columns_vec.clone());
+    }
+
+    // Rows
+    if let Some(row_count) = node
+        .props
+        .get("rows")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as usize)
+    {
+        let mut rows_vec = Vec::new();
+        for i in 0..row_count {
+            let mut row = crate::Row::new(format!("row_{}", i));
+            for col in &columns_vec {
+                row = row.cell(&col.id, format!("Cell {}-{}", i, col.id));
+            }
+            rows_vec.push(row);
+        }
+        grid = grid.rows(rows_vec);
+    }
+
+    // Header Rows
+    if let Some(headers) = node
+        .props
+        .get("header_rows")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as usize)
+    {
+        grid = grid.header_rows(headers);
+    }
+
+    Box::new(grid)
 }
 
 fn build_textarea(node: &ComponentNode) -> Box<dyn OxidXComponent> {
