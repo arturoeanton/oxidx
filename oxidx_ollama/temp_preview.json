@@ -1,0 +1,35 @@
+{
+  "children": [
+    {
+      "type_name": "Label",
+      "props": {
+        "text": "Welcome Back",
+        "font_size": 24
+      }
+    },
+    {
+      "type_name": "Input",
+      "props": {
+        "placeholder": "Username"
+      }
+    },
+    {
+      "type_name": "Chart",
+      "props": {
+        "title": "Sales Data"
+      }
+    },
+    {
+      "type_name": "Button",
+      "props": {
+        "label": "Sign In",
+        "variant": "primary"
+      }
+    }
+  ],
+  "props": {
+    "padding": 20,
+    "spacing": 20
+  },
+  "type_name": "VStack"
+}
