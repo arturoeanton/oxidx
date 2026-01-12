@@ -205,8 +205,27 @@ fn main() {
 - **[Oxide Studio Tutorial (Español)](docs/STUDIO_TUTORIAL.es.md)** — Guía del editor visual
 - **[API Reference (English)](docs/DOC_API.md)** — Complete public API documentation
 - **[API Reference (Español)](docs/DOC_API.es.md)** — Documentación completa en español
+- **[Making Games](docs/MAKE_GAMES.md)** — Build games with OxidX (platformers, raycasters)
+- **[Creando Juegos](docs/MAKE_GAMES.es.md)** — Guía de desarrollo de juegos
 - **[Architecture Guide](docs/ARCHITECTURE.md)** — System design and internals
 - **[Component Status](docs/STATUS.md)** — Stability tracking for standard components
+
+## 🎮 Game Demos
+
+OxidX includes complete game demos showcasing its capabilities as a game engine:
+
+```bash
+# Mario-style platformer
+cargo run -p showcase --bin demo_game
+
+# FedeBros - Pixel art platformer with rideable dragon
+cargo run -p showcase --bin demo_game_v5
+
+# FedeDoom - 3D raycaster (Doom/Wolfenstein style)
+cargo run -p showcase --bin demo_doom
+```
+
+See **[Making Games Guide](docs/MAKE_GAMES.md)** for detailed documentation on building games.
 
 ## 🎨 Example: Login Form
 

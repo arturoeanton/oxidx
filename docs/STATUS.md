@@ -150,6 +150,26 @@ Based on the audit, all capabilities are **READY**. No blocking gaps exist.
 | `Hot-Reload` | 🟡 Beta | Layout reloading works, logic reloading requires recompile. |
 | `Oxide Studio` | 🟡 Beta | Visual editor V1. Drag & drop construction, property editing, JSON export. |
 
+## 🎮 Game Demos
+
+OxidX includes complete game demos showcasing the engine's capabilities:
+
+| Demo | Type | Features | Run Command |
+|------|------|----------|-------------|
+| **Super OxidX Bros** | Platformer | Mario-style physics, enemies, coins, levels | `cargo run -p showcase --bin demo_game` |
+| **FedeBros V5** | Platformer | Pixel art sprites, rideable dragon, plasma shooting | `cargo run -p showcase --bin demo_game_v5` |
+| **FedeDoom** | Raycaster | 3D walls, enemy sprites, minimap, HUD | `cargo run -p showcase --bin demo_doom` |
+
+### Game Engine Features
+
+- **Physics**: Gravity, collision detection, jump mechanics
+- **Raycasting**: Real-time pseudo-3D rendering (Doom/Wolfenstein style)
+- **Sprites**: Depth-buffered billboard rendering
+- **Pixel Art**: Scalable procedural sprite system
+- **Input**: Full keyboard controls via `on_keyboard_input()`
+
+See **[Making Games Guide](MAKE_GAMES.md)** for detailed documentation.
+
 
 ## Roadmap / In Progress
 

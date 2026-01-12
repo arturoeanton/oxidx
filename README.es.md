@@ -205,8 +205,27 @@ fn main() {
 - **[Tutorial (English)](docs/TUTORIAL.md)** — Step-by-step guide in English
 - **[Referencia API (Español)](docs/DOC_API.es.md)** — Documentación completa de la API pública
 - **[API Reference (English)](docs/DOC_API.md)** — Complete public API documentation
+- **[Creando Juegos](docs/MAKE_GAMES.es.md)** — Guía de desarrollo de juegos (plataformas, raycaster)
+- **[Making Games](docs/MAKE_GAMES.md)** — Build games with OxidX
 - **[Guía de Arquitectura](docs/ARCHITECTURE.md)** — Diseño del sistema e internos
 - **[Estado de Componentes](docs/STATUS.md)** — Seguimiento de estabilidad de componentes
+
+## 🎮 Demos de Juegos
+
+OxidX incluye demos de juegos completos mostrando sus capacidades como motor de juegos:
+
+```bash
+# Plataformas estilo Mario
+cargo run -p showcase --bin demo_game
+
+# FedeBros - Plataformas pixel art con dragón montable
+cargo run -p showcase --bin demo_game_v5
+
+# FedeDoom - Raycaster 3D estilo Doom
+cargo run -p showcase --bin demo_doom
+```
+
+Ver **[Guía de Creación de Juegos](docs/MAKE_GAMES.es.md)** para documentación detallada.
 
 ## 🎨 Ejemplo: Formulario de Login
 
