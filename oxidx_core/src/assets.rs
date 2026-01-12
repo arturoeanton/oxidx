@@ -2,12 +2,17 @@
 //!
 //! Provides non-blocking asset loading (images, fonts) using a thread pool.
 //! Loaded assets are cached to avoid duplicate loading.
+//!
+//! Note: AssetLoader (thread pool) is only available on native platforms.
+//! For WASM, use AssetManager for synchronous loading.
 
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use crate::renderer::{Renderer, TextureId};
+
+#[cfg(not(target_arch = "wasm32"))]
 use rayon::ThreadPool;
 
 /// Result of an async image load operation.
@@ -58,6 +63,9 @@ pub struct PendingAsset {
 ///     }
 /// }
 /// ```
+/// 
+/// Note: Only available on native platforms (not WASM).
+#[cfg(not(target_arch = "wasm32"))]
 pub struct AssetLoader {
     thread_pool: ThreadPool,
     pending: Arc<Mutex<Vec<PendingAsset>>>,
@@ -67,6 +75,7 @@ pub struct AssetLoader {
     texture_cache: HashMap<String, bool>, // path -> loaded flag
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl AssetLoader {
     /// Creates a new AssetLoader with a thread pool.
     pub fn new() -> Self {
@@ -161,6 +170,7 @@ impl AssetLoader {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Default for AssetLoader {
     fn default() -> Self {
         Self::new()

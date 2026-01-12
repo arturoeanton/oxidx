@@ -151,7 +151,8 @@ pub fn run<C: OxidXComponent + 'static>(component: C) {
 /// 5. Call `component.render(renderer)` for drawing
 /// 6. Present frame
 pub fn run_with_config<C: OxidXComponent + 'static>(mut component: C, config: AppConfig) {
-    // Initialize logging
+    // Initialize logging (native only)
+    #[cfg(not(target_arch = "wasm32"))]
     let _ = env_logger::try_init();
 
     // Create the event loop
@@ -714,7 +715,7 @@ fn process_window_event<C: OxidXComponent>(
 }
 
 /// Renders a single frame using the batched renderer.
-fn render_frame<C: OxidXComponent>(
+pub(crate) fn render_frame<C: OxidXComponent>(
     ctx: &mut OxidXContext,
     component: &C,
     clear_color: Color,

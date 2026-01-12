@@ -47,7 +47,8 @@ pub struct OxidXContext {
     pub time: f32,
     /// Window handle for cursor changes (optional for headless)
     window: Option<Arc<Window>>,
-    /// Clipboard instance (lazy initialized)
+    /// Clipboard instance (lazy initialized) - native only
+    #[cfg(not(target_arch = "wasm32"))]
     clipboard: Option<arboard::Clipboard>,
     /// Display scale factor (1.0 = normal, 2.0 = Retina)
     scale_factor: f64,
@@ -292,12 +293,18 @@ impl OxidXContext {
             .ok_or(ContextError::NoAdapter)?;
 
         // Step 4: Request a Device and Queue
+        // Use downlevel defaults for maximum WebGPU compatibility
+        #[cfg(target_arch = "wasm32")]
+        let limits = wgpu::Limits::downlevel_webgl2_defaults();
+        #[cfg(not(target_arch = "wasm32"))]
+        let limits = wgpu::Limits::default();
+        
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: Some("OxidX Device"),
                     required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::default(),
+                    required_limits: limits,
                 },
                 None,
             )
@@ -349,6 +356,7 @@ impl OxidXContext {
             focus: FocusManager::new(),
             time: 0.0,
             window: Some(window),
+            #[cfg(not(target_arch = "wasm32"))]
             clipboard: None,
             scale_factor,
             theme: Theme::default(),
@@ -380,6 +388,7 @@ impl OxidXContext {
             focus: FocusManager::new(),
             time: 0.0,
             window: None,
+            #[cfg(not(target_arch = "wasm32"))]
             clipboard: None,
             scale_factor: 1.0,
             theme: Theme::default(),
@@ -490,6 +499,7 @@ impl OxidXContext {
     /// Copies text to the system clipboard.
     ///
     /// Returns `true` if successful.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn copy_to_clipboard(&mut self, text: &str) -> bool {
         self.ensure_clipboard();
         if let Some(ref mut clipboard) = self.clipboard {
@@ -499,9 +509,16 @@ impl OxidXContext {
         }
     }
 
+    /// Copies text to clipboard - WASM stub (not supported)
+    #[cfg(target_arch = "wasm32")]
+    pub fn copy_to_clipboard(&mut self, _text: &str) -> bool {
+        false // Clipboard not available in WASM
+    }
+
     /// Pastes text from the system clipboard.
     ///
     /// Returns `None` if clipboard is empty or unavailable.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn paste_from_clipboard(&mut self) -> Option<String> {
         self.ensure_clipboard();
         if let Some(ref mut clipboard) = self.clipboard {
@@ -511,7 +528,14 @@ impl OxidXContext {
         }
     }
 
+    /// Pastes from clipboard - WASM stub (not supported)
+    #[cfg(target_arch = "wasm32")]
+    pub fn paste_from_clipboard(&mut self) -> Option<String> {
+        None // Clipboard not available in WASM
+    }
+
     /// Lazily initializes the clipboard.
+    #[cfg(not(target_arch = "wasm32"))]
     fn ensure_clipboard(&mut self) {
         if self.clipboard.is_none() {
             self.clipboard = arboard::Clipboard::new().ok();

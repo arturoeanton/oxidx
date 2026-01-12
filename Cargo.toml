@@ -10,6 +10,7 @@ members = [
     "oxidx_mcp",
     "oxidx_viewer",
     "oxide_studio",
+    "oxide_studio_web",
     "examples/showcase",
 ]
 

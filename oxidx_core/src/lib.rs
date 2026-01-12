@@ -64,12 +64,19 @@ pub mod syntax;
 pub mod testing;
 /// Theme system for consistent styling.
 pub mod theme;
+/// Web-specific engine for WASM builds.
+#[cfg(target_arch = "wasm32")]
+pub mod web_engine;
 
 // Re-export primary types
-pub use assets::{AssetError, AssetLoader, LoadedImage};
+pub use assets::{AssetError, LoadedImage};
+#[cfg(not(target_arch = "wasm32"))]
+pub use assets::AssetLoader;
 pub use component::{OxidXComponent, OxidXContainerLogic};
 pub use context::{ContextError, DragState, OxidXContext};
 pub use engine::{run, run_with_config, AppConfig};
+#[cfg(target_arch = "wasm32")]
+pub use web_engine::{run_web, run_web_with_config};
 pub use events::{KeyCode, Modifiers, MouseButton, OxidXEvent};
 pub use layout::{Alignment, Anchor, LayoutProps, SizeConstraint, Spacing, StackAlignment};
 pub use primitives::{Color, Rect, TextAlign, TextStyle};

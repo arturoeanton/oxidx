@@ -1,0 +1,35 @@
+[package]
+name = "oxide_studio_web"
+version = "0.1.0"
+edition = "2021"
+description = "Oxide Studio for the Web (WASM)"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+oxidx_core = { path = "../oxidx_core" }
+oxidx_std = { path = "../oxidx_std" }
+serde = { workspace = true, features = ["derive"] }
+serde_json = "1.0"
+
+# WASM specific
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+console_log = "1.0"
+console_error_panic_hook = "0.1"
+log = "0.4"
+getrandom = { version = "0.3", features = ["wasm_js"] }
+web-sys = { version = "0.3", features = [
+    "Window",
+    "Document", 
+    "Element",
+    "HtmlCanvasElement",
+    "CanvasRenderingContext2d",
+    "MouseEvent",
+    "console"
+]}
+
+[profile.release]
+opt-level = "z"
+lto = true

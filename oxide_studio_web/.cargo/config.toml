@@ -1,0 +1,5 @@
+# Configuration for WASM build
+# Required for getrandom and other crates that need special WASM handling
+
+[target.wasm32-unknown-unknown]
+rustflags = ['--cfg', 'getrandom_backend="wasm_js"']

@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 description = "The official IDE for the OxidX Framework"
 
+[lib]
+name = "oxide_studio"
+path = "src/lib.rs"
+
 [[bin]]
 name = "oxide-studio"
 path = "src/main.rs"

@@ -15,21 +15,36 @@ glam = { workspace = true }
 # Text Rendering
 glyphon = "0.5"
 
-# Clipboard
-arboard = "3.2"
-
 # Utilities
 pollster = "0.3"
 log = "0.4"
-env_logger = "0.10"
 thiserror = "1.0"
 bytemuck = { version = "1.14", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-# Async Assets
-rayon = "1.8"
+# Image loading
 image = "0.25"
+
+# Native-only dependencies (not available for WASM)
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+arboard = "3.2"
+env_logger = "0.10"
+rayon = "1.8"
+
+# WASM-only dependencies
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = [
+    "Window",
+    "Document",
+    "Element", 
+    "HtmlCanvasElement",
+    "console"
+]}
+console_log = "1.0"
+console_error_panic_hook = "0.1"
 
 [dev-dependencies]
 futures = "0.3"

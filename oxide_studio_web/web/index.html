@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oxide Studio Web</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
+        }
+
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, #1e1e1e 0%, #252526 100%);
+            z-index: 1000;
+        }
+
+        #loading h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            color: #007acc;
+        }
+
+        #loading p {
+            color: #808080;
+            font-size: 1rem;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #333;
+            border-top-color: #007acc;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        #oxide-canvas {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+
+        .error {
+            background: #3c1f1f;
+            border: 1px solid #ff5555;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+            max-width: 600px;
+            text-align: center;
+        }
+
+        .error h2 {
+            color: #ff5555;
+            margin-bottom: 0.5rem;
+        }
+
+        .webgpu-warning {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="loading">
+        <div class="spinner"></div>
+        <h1>🎨 Oxide Studio</h1>
+        <p>Loading WebGPU application...</p>
+
+        <div class="webgpu-warning error" id="webgpu-error">
+            <h2>⚠️ WebGPU Not Available</h2>
+            <p>Your browser doesn't support WebGPU. Please use:</p>
+            <ul style="text-align: left; margin-top: 0.5rem;">
+                <li>Chrome 113+ or Edge 113+</li>
+                <li>Firefox Nightly (with flags)</li>
+                <li>Safari Technology Preview</li>
+            </ul>
+        </div>
+    </div>
+
+    <canvas id="oxide-canvas"></canvas>
+
+    <script type="module">
+        // Check WebGPU support
+        async function checkWebGPU() {
+            if (!navigator.gpu) {
+                document.getElementById('webgpu-error').style.display = 'block';
+                return false;
+            }
+
+            const adapter = await navigator.gpu.requestAdapter();
+            if (!adapter) {
+                document.getElementById('webgpu-error').style.display = 'block';
+                return false;
+            }
+
+            return true;
+        }
+
+        async function init() {
+            const hasWebGPU = await checkWebGPU();
+            if (!hasWebGPU) {
+                console.error('WebGPU not available');
+                return;
+            }
+
+            try {
+                // Import the WASM module
+                const wasm = await import('./oxide_studio_web.js');
+                await wasm.default();
+
+                // Hide loading screen
+                document.getElementById('loading').style.display = 'none';
+
+                // Log version
+                console.log('Oxide Studio Web:', wasm.version());
+
+            } catch (e) {
+                console.error('Failed to load WASM:', e);
+                document.querySelector('#loading p').textContent = 'Error: ' + e.message;
+                document.querySelector('#loading p').style.color = '#ff5555';
+            }
+        }
+
+        init();
+    </script>
+</body>
+
+</html>
